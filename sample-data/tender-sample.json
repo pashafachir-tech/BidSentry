@@ -1,0 +1,243 @@
+{
+  "_meta": {
+    "schema_version": "1.0.0",
+    "dataset_name": "BidSentry Benchmark Dataset — LPSE Tender Audit",
+    "description": "Dataset benchmarking pengujian sistem BidSentry. Berisi contoh dokumen tender fiktif yang representatif terhadap pola nyata pengadaan publik LPSE/LKPP. Seluruh data perusahaan, nomor, dan nominal bersifat fiktif untuk keperluan pengujian.",
+    "created_at": "2025-01-01",
+    "total_records": 3,
+    "benchmark_target": {
+      "administrative_risk_detection_accuracy": 0.94,
+      "false_positive_rate_max": 0.08,
+      "false_negative_rate_max": 0.04,
+      "processing_time_seconds_max": 90
+    }
+  },
+  "tender_cases": [
+    {
+      "id": "TC-001",
+      "label": "PASS — Dokumen Lengkap & Compliant",
+      "expected_outcome": "LULUS_ADMINISTRASI",
+      "expected_risk_level": "LOW",
+      "tender_info": {
+        "nomor_tender": "001/PBJ/DINKES/2024",
+        "nama_paket": "Pengadaan Alat Kesehatan RSUD Tipe B",
+        "lpse_kota": "Kota Bandung",
+        "nilai_hps": 4750000000,
+        "metode_pengadaan": "Tender Pascakualifikasi",
+        "kode_rup": "45678901",
+        "tanggal_pemasukan": "2024-03-15",
+        "tanggal_evaluasi": "2024-03-18"
+      },
+      "vendor_profile": {
+        "nama_perusahaan": "PT Medika Solusi Nusantara",
+        "npwp": "[NPWP-REDACTED]",
+        "nik_direktur": "[NIK-REDACTED]",
+        "status_pkp": true,
+        "kbli_utama": "46691",
+        "kbli_deskripsi": "Perdagangan Besar Peralatan & Perlengkapan Kedokteran",
+        "sbu_jasa": null,
+        "skk_personil_utama": "SKK Pengadaan Barang Ahli Muda",
+        "tahun_berdiri": 2011,
+        "kualifikasi_usaha": "Menengah",
+        "status_anggota_asosiasi": "GAKESLAB",
+        "omset_tahunan_idr": 12500000000
+      },
+      "dokumen_administrasi": {
+        "akta_pendirian": { "ada": true, "nomor": "AHU-12345.AH.01.01.2011", "expired": false },
+        "akta_perubahan_terakhir": { "ada": true, "nomor": "AHU-67890.AH.01.02.2022", "expired": false },
+        "siup_nib": { "ada": true, "nomor": "NIB-1234567890123", "expired": false },
+        "tdp": { "ada": true, "nomor": "TDP-102.3.64.00123", "expired": false },
+        "skt_pajak": { "ada": true, "masa_berlaku": "2025-12-31", "expired": false },
+        "spt_tahunan": { "ada": true, "tahun": 2023, "status": "LAPOR" },
+        "sertifikat_kbli": { "ada": true, "expired": false },
+        "dukungan_prinsipal": { "ada": true, "nama_prinsipal": "PT Alat Kesehatan Indonesia", "masa_berlaku": "2025-06-30" },
+        "neraca_keuangan": { "ada": true, "tahun": 2023, "auditor": "KAP Santoso & Rekan" },
+        "pkp_confirmation": { "ada": true }
+      },
+      "audit_result": {
+        "status": "LULUS_ADMINISTRASI",
+        "risk_score": 0.08,
+        "risk_level": "LOW",
+        "temuan": [],
+        "rekomendasi": "Dokumen administrasi lengkap dan valid. Lanjutkan ke evaluasi teknis.",
+        "confidence": 0.97,
+        "processing_time_ms": 1240
+      }
+    },
+    {
+      "id": "TC-002",
+      "label": "FAIL — Risiko Tinggi: Dokumen Expired & KBLI Tidak Sesuai",
+      "expected_outcome": "GUGUR_ADMINISTRASI",
+      "expected_risk_level": "HIGH",
+      "tender_info": {
+        "nomor_tender": "017/POKJA/BPBD/2024",
+        "nama_paket": "Pengadaan Kendaraan Operasional Penanggulangan Bencana",
+        "lpse_kota": "Kabupaten Cianjur",
+        "nilai_hps": 1875000000,
+        "metode_pengadaan": "Tender Pascakualifikasi",
+        "kode_rup": "78901234",
+        "tanggal_pemasukan": "2024-04-10",
+        "tanggal_evaluasi": "2024-04-14"
+      },
+      "vendor_profile": {
+        "nama_perusahaan": "CV Karya Maju Bersama",
+        "npwp": "[NPWP-REDACTED]",
+        "nik_direktur": "[NIK-REDACTED]",
+        "status_pkp": false,
+        "kbli_utama": "46599",
+        "kbli_deskripsi": "Perdagangan Besar Barang Lainnya YTDL",
+        "kbli_dibutuhkan": "45101",
+        "kbli_dibutuhkan_deskripsi": "Perdagangan Mobil Baru",
+        "sbu_jasa": null,
+        "tahun_berdiri": 2018,
+        "kualifikasi_usaha": "Kecil",
+        "omset_tahunan_idr": 890000000
+      },
+      "dokumen_administrasi": {
+        "akta_pendirian": { "ada": true, "nomor": "AHU-55432.AH.01.01.2018", "expired": false },
+        "akta_perubahan_terakhir": { "ada": false, "catatan": "Tidak ada akta perubahan" },
+        "siup_nib": { "ada": true, "nomor": "NIB-9876543210987", "expired": true, "tanggal_exp": "2023-12-31" },
+        "tdp": { "ada": true, "nomor": "TDP-102.3.22.00456", "expired": false },
+        "skt_pajak": { "ada": true, "masa_berlaku": "2024-01-15", "expired": true },
+        "spt_tahunan": { "ada": false, "catatan": "SPT 2023 belum dilaporkan" },
+        "sertifikat_kbli": { "ada": false, "catatan": "KBLI 46599 tidak sesuai dengan kendaraan bermotor" },
+        "dukungan_prinsipal": { "ada": false },
+        "neraca_keuangan": { "ada": true, "tahun": 2022, "catatan": "Neraca 2023 tidak tersedia" },
+        "pkp_confirmation": { "ada": false, "catatan": "Non-PKP — nilai tender melebihi batas pengecualian" }
+      },
+      "audit_result": {
+        "status": "GUGUR_ADMINISTRASI",
+        "risk_score": 0.91,
+        "risk_level": "HIGH",
+        "temuan": [
+          {
+            "kode": "RISK-001",
+            "kategori": "KBLI_TIDAK_SESUAI",
+            "severity": "CRITICAL",
+            "deskripsi": "KBLI terdaftar (46599) tidak mencakup perdagangan kendaraan bermotor. KBLI yang dibutuhkan: 45101.",
+            "pasal_referensi": "Perpres 12/2021 Pasal 40 ayat (2) huruf a",
+            "rekomendasi_perbaikan": "Daftarkan KBLI 45101 melalui OSS sebelum memasukkan penawaran."
+          },
+          {
+            "kode": "RISK-002",
+            "kategori": "DOKUMEN_EXPIRED",
+            "severity": "HIGH",
+            "deskripsi": "NIB/SIUP telah kadaluarsa sejak 31 Desember 2023.",
+            "pasal_referensi": "Perpres 12/2021 Pasal 38 ayat (1)",
+            "rekomendasi_perbaikan": "Perbarui NIB melalui OSS (oss.go.id) — proses 1–2 hari kerja."
+          },
+          {
+            "kode": "RISK-003",
+            "kategori": "PAJAK_BELUM_LAPOR",
+            "severity": "HIGH",
+            "deskripsi": "SPT Tahunan 2023 belum dilaporkan ke DJP.",
+            "pasal_referensi": "Perpres 12/2021 Pasal 38 ayat (1) huruf c",
+            "rekomendasi_perbaikan": "Laporkan SPT 2023 dan ambil bukti lapor dari DJP Online."
+          },
+          {
+            "kode": "RISK-004",
+            "kategori": "NON_PKP",
+            "severity": "MEDIUM",
+            "deskripsi": "Perusahaan berstatus Non-PKP namun nilai tender (Rp 1,875 M) melebihi threshold PKP.",
+            "pasal_referensi": "PMK 197/PMK.03/2013",
+            "rekomendasi_perbaikan": "Daftarkan diri sebagai PKP ke KPP setempat."
+          }
+        ],
+        "rekomendasi": "⚠️ JANGAN MASUKKAN PENAWARAN. Selesaikan 4 temuan kritis/tinggi terlebih dahulu.",
+        "confidence": 0.96,
+        "processing_time_ms": 1870,
+        "blacklist_risk": false,
+        "blacklist_risk_notes": "Risiko blacklist tidak terdeteksi pada kasus ini — gugur bersifat teknis administratif, bukan pelanggaran prosedural."
+      }
+    },
+    {
+      "id": "TC-003",
+      "label": "WARNING — Risiko Sedang: Perlu Klarifikasi Teknis",
+      "expected_outcome": "PERLU_KLARIFIKASI",
+      "expected_risk_level": "MEDIUM",
+      "tender_info": {
+        "nomor_tender": "033/POKJA/DIKPORA/2024",
+        "nama_paket": "Jasa Konsultansi Perencanaan Gedung Sekolah 3 Lantai",
+        "lpse_kota": "Kota Surabaya",
+        "nilai_hps": 340000000,
+        "metode_pengadaan": "Seleksi Jasa Konsultansi Badan Usaha",
+        "kode_rup": "34567890",
+        "tanggal_pemasukan": "2024-05-20",
+        "tanggal_evaluasi": "2024-05-23"
+      },
+      "vendor_profile": {
+        "nama_perusahaan": "PT Arsitek Kreatif Indonesia",
+        "npwp": "[NPWP-REDACTED]",
+        "nik_direktur": "[NIK-REDACTED]",
+        "status_pkp": true,
+        "kbli_utama": "71101",
+        "kbli_deskripsi": "Aktivitas Arsitektur",
+        "sbu_jasa": {
+          "kode": "AR001",
+          "nama": "Jasa Arsitektur",
+          "grade": "M1",
+          "masa_berlaku": "2024-06-30",
+          "catatan": "Akan expired 41 hari dari tanggal pemasukan dokumen"
+        },
+        "skk_personil": [
+          { "nama": "[NAMA-REDACTED]", "posisi": "Team Leader", "kualifikasi": "Ahli Arsitek Madya", "expired": false },
+          { "nama": "[NAMA-REDACTED]", "posisi": "Tenaga Ahli Struktur", "kualifikasi": "Ahli Teknik Bangunan Gedung Muda", "expired": false },
+          { "nama": "[NAMA-REDACTED]", "posisi": "Tenaga Ahli MEP", "kualifikasi": "SKK sedang diproses", "expired": null, "catatan": "SKK belum terbit per tanggal dokumen" }
+        ],
+        "tahun_berdiri": 2016,
+        "kualifikasi_usaha": "Menengah"
+      },
+      "dokumen_administrasi": {
+        "akta_pendirian": { "ada": true, "expired": false },
+        "siup_nib": { "ada": true, "expired": false },
+        "tdp": { "ada": true, "expired": false },
+        "skt_pajak": { "ada": true, "expired": false },
+        "spt_tahunan": { "ada": true, "tahun": 2023, "status": "LAPOR" },
+        "sbu_jasa": { "ada": true, "expired": false, "catatan": "SBU valid saat ini namun akan expired sebelum kontrak berakhir" },
+        "neraca_keuangan": { "ada": true, "tahun": 2023 }
+      },
+      "audit_result": {
+        "status": "PERLU_KLARIFIKASI",
+        "risk_score": 0.52,
+        "risk_level": "MEDIUM",
+        "temuan": [
+          {
+            "kode": "RISK-005",
+            "kategori": "SBU_AKAN_EXPIRED",
+            "severity": "MEDIUM",
+            "deskripsi": "SBU AR001 Grade M1 akan kadaluarsa 30 Juni 2024 — estimasi 41 hari setelah pemasukan dokumen. Jika evaluasi berlangsung lebih dari 3 minggu atau terjadi sanggah, SBU bisa expired sebelum kontrak ditandatangani.",
+            "pasal_referensi": "Perpres 12/2021 Pasal 68, SE LKPP No.3/2021",
+            "rekomendasi_perbaikan": "Perpanjang SBU sekarang ke LPJK. Sertakan bukti permohonan perpanjangan dalam dokumen penawaran sebagai lampiran."
+          },
+          {
+            "kode": "RISK-006",
+            "kategori": "PERSONIL_SKK_BELUM_TERBIT",
+            "severity": "MEDIUM",
+            "deskripsi": "SKK Tenaga Ahli MEP belum terbit. Pokja dapat menolak personil ini dan meminta penggantian atau klarifikasi.",
+            "pasal_referensi": "Perpres 12/2021 Pasal 40 ayat (2) huruf b",
+            "rekomendasi_perbaikan": "Ganti personil MEP dengan yang sudah memiliki SKK aktif, atau tunda pemasukan hingga SKK terbit."
+          }
+        ],
+        "rekomendasi": "[PERLU VERIFIKASI MANUAL] Dua temuan risiko sedang memerlukan tindakan sebelum pemasukan. Konsultasikan dengan konsultan hukum pengadaan.",
+        "confidence": 0.81,
+        "processing_time_ms": 2105,
+        "blacklist_risk": false
+      }
+    }
+  ],
+  "benchmark_summary": {
+    "total_cases": 3,
+    "pass_cases": 1,
+    "fail_cases": 1,
+    "warning_cases": 1,
+    "risk_distribution": {
+      "LOW": 1,
+      "MEDIUM": 1,
+      "HIGH": 1,
+      "CRITICAL": 0
+    },
+    "total_findings": 6,
+    "avg_processing_time_ms": 1738,
+    "notes": "Dataset ini mencakup 3 skenario representatif: (1) dokumen bersih, (2) multi-risiko kritis, (3) risiko sedang dengan ambiguitas. Digunakan sebagai ground truth untuk validasi pipeline BidSentry pada fase demo dan juri."
+  }
+}
