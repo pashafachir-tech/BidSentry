@@ -1,59 +1,28 @@
-# ─── BidSentry — Containerised Bridge Server ──────────────────────────────────
-# Build:   docker build -t bidsentry .
-# Run:     docker run -p 8000:8000 --env-file .env bidsentry
-#
-# The container serves index.html and proxies /api/* to Langflow.
-# Langflow itself is expected to run on the host or a separate container;
-# set LANGFLOW_HOST accordingly (e.g. http://host-gateway:7860 on Linux,
-# or http://host.docker.internal:7860 on Docker Desktop Mac/Windows).
-# ──────────────────────────────────────────────────────────────────────────────
-
 FROM python:3.11-slim
 
-# ── Metadata ──────────────────────────────────────────────────────────────────
-LABEL maintainer="BidSentry Team"
-LABEL description="BidSentry Bridge Server — REST proxy + Composio dispatcher"
-LABEL version="1.0.0"
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-eng tesseract-ocr-ind \
+    && rm -rf /var/lib/apt/lists/*
 
-# ── OS hardening: no root at runtime ──────────────────────────────────────────
-RUN addgroup --system bidsentry \
- && adduser  --system --ingroup bidsentry --no-create-home bidsentry
-
-# ── Working directory ─────────────────────────────────────────────────────────
+RUN addgroup --system bidsentry && adduser --system --ingroup bidsentry --no-create-home bidsentry
 WORKDIR /app
 
-# ── Copy only necessary files (no .env, no node_modules, no __pycache__) ──────
-COPY server.py               ./server.py
-COPY composio_dispatcher.py  ./composio_dispatcher.py
-COPY verify_system.py        ./verify_system.py
-COPY index.html              ./index.html
-COPY sample-data/            ./sample-data/
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
 
-# ── No third-party pip deps — stdlib only ─────────────────────────────────────
-# (If you later add requirements.txt, uncomment the two lines below)
-# COPY requirements.txt ./requirements.txt
-# RUN pip install --no-cache-dir -r requirements.txt
+COPY bidsentry/ ./bidsentry/
+COPY web/ ./web/
+COPY langflow/ ./langflow/
+COPY index.html server.py composio_dispatcher.py ./
+COPY bob/ ./bob/
+COPY .env.example ./
 
-# ── Ensure audit log directory is writable by the service user ────────────────
-RUN touch /app/audit_log.jsonl \
- && chown bidsentry:bidsentry /app/audit_log.jsonl \
- && chown -R bidsentry:bidsentry /app
-
-# ── Drop privileges ───────────────────────────────────────────────────────────
+RUN touch /app/audit_log.jsonl && chown -R bidsentry:bidsentry /app
 USER bidsentry
 
-# ── Runtime environment defaults (override via --env-file .env or -e) ─────────
-ENV BRIDGE_PORT=8000
-ENV LANGFLOW_HOST=http://host.docker.internal:7860
-
-# ── Expose bridge port ────────────────────────────────────────────────────────
+ENV HOST=0.0.0.0
+ENV PORT=8000
+ENV LANGFLOW_URL=http://host.docker.internal:7860
 EXPOSE 8000
-
-# ── Health check: verify bridge is responding ─────────────────────────────────
-HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/')" \
-  || exit 1
-
-# ── Entrypoint ────────────────────────────────────────────────────────────────
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
 ENTRYPOINT ["python", "server.py"]
-CMD ["--port", "8000"]
