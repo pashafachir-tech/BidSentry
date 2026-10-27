@@ -102,7 +102,7 @@ async function openSettingsDialog() {
     set("langflow_api_key", "");
     set("langflow_timeout_seconds", settings.langflow.timeout_seconds);
     set("composio_api_key", "");
-    set("composio_entity_id", settings.composio.entity_id);
+    set("composio_user_id", settings.composio.user_id);
     set("composio_base_url", settings.composio.base_url);
     set("composio_timeout_seconds", settings.composio.timeout_seconds);
     form.elements.namedItem("clear_langflow_api_key").checked = false;
@@ -129,7 +129,7 @@ async function saveSettings(form) {
     langflow_timeout_seconds: Number(values.get("langflow_timeout_seconds")),
     composio_api_key: String(values.get("composio_api_key") || ""),
     clear_composio_api_key: values.get("clear_composio_api_key") === "on",
-    composio_entity_id: String(values.get("composio_entity_id") || "").trim(),
+    composio_user_id: String(values.get("composio_user_id") || "").trim(),
     composio_base_url: String(values.get("composio_base_url") || "").trim(),
     composio_timeout_seconds: Number(values.get("composio_timeout_seconds")),
   };
@@ -144,6 +144,31 @@ async function saveSettings(form) {
     toast(error.message || "Pengaturan gagal disimpan.", "error");
   } finally {
     if (button) { button.disabled = false; button.textContent = "Simpan koneksi"; }
+  }
+}
+
+async function testIntegrations() {
+  const button = document.getElementById("test-integrations");
+  const output = document.getElementById("integrations-test-results");
+  if (!button || !output) return;
+  button.disabled = true;
+  button.textContent = "Menguji…";
+  output.hidden = false;
+  output.textContent = "Menguji akses Langflow dan Composio tanpa menjalankan aksi.";
+  try {
+    const result = await api.testIntegrations();
+    const langflow = result?.langflow || {};
+    const composio = result?.composio || {};
+    output.textContent = [
+      `Langflow: ${langflow.status || "unknown"} — ${langflow.message || "Tidak ada detail."}`,
+      `Composio: ${composio.status || "unknown"} — ${composio.message || "Tidak ada detail."}`,
+      composio.linked_toolkits?.length ? `Toolkit aktif: ${composio.linked_toolkits.join(", ")}` : "",
+    ].filter(Boolean).join("\n");
+  } catch (error) {
+    output.textContent = error.message || "Tes koneksi gagal.";
+  } finally {
+    button.disabled = false;
+    button.textContent = "Tes koneksi";
   }
 }
 
@@ -475,6 +500,10 @@ root.addEventListener("click", async (event) => {
     return;
   }
   const target = event.target.closest("[data-action]");
+  if (event.target.closest("#test-integrations")) {
+    await testIntegrations();
+    return;
+  }
   if (!target) return;
   const action = target.dataset.action;
   if (action === "new-audit") openAuditDialog();

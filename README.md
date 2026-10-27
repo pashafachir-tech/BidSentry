@@ -59,6 +59,8 @@ External processing is disabled unless the reviewer checks the consent box. When
 
 Import `langflow/tender_extraction_flow.json` into Langflow and configure its Language Model component with an authorized provider. Then set `LANGFLOW_ENABLED=true`, `LANGFLOW_URL`, `LANGFLOW_FLOW_ID`, and the application token/API key if required. The flow extracts scope, addendum changes, personnel qualifications, and SLA text; it does not decide eligibility.
 
+The local **Koneksi layanan** settings panel has a read-only **Tes koneksi** action. It checks access to the selected Langflow flow and lists Composio connected-account metadata; it does not run the flow or create Google Docs, calendar events, or Gmail drafts. Configure `COMPOSIO_API_KEY` and `COMPOSIO_USER_ID` for the Composio project, then connect the required Google toolkits to that user in Composio. BidSentry uses the Composio v3.1 tool execution API; live actions run only after the reviewer checks the confirmation box. An optional Gmail draft is created only when an email address is provided; messages are never sent.
+
 ## Penalty assumptions and regulation
 
 The calculator reads the rate and cap from the supplied contract clause. It compares scenarios with 1‰ per day and displays a 5% capped scenario as an explicitly illustrative assumption, not a universal statutory cap. Verify the applicable procurement regulation and contract wording for the tender date. The LKPP consolidated text lists a 1‰ per-day delay fine in the relevant provision; the implementation does not infer a 5% legal cap.
@@ -71,10 +73,10 @@ Run the benchmark and its assertions with:
 python -m pytest tests/benchmark_eval.py -v -s
 ```
 
-The real-source slice below uses one publicly indexed [LPSE package listing](https://spse.inaproc.id/kemkes/nontender/10261197000/pengumumanpl), captured as a short text excerpt in `data/public_lpse/`. The labels cover only two supported local checks explicitly present in that listing: SBU and confirmation of taxpayer status. A maintainer mapped those two labels from the source text; there is no bidder response, no compliance verdict, and no independent second annotation. The attached detailed-work description was not included in this sample.
+The real-source slice below uses one publicly indexed [LPSE package listing](https://spse.inaproc.id/kemkes/nontender/10261197000/pengumumanpl), captured as a short text excerpt in `data/public_lpse/`. The labels cover only two supported local checks explicitly present in that listing: SBU and confirmation of taxpayer status. A maintainer mapped those two labels from the source text; there is no bidder response, no compliance verdict, and no independent second annotation. The attached detailed-work description was not included in this sample. Latency is the mean of 25 evaluator runs after one warm-up per fixture.
 
 | Dataset | Source pages | Supported labels | TP / FP / FN | Precision | Recall | F1 | Measured latency/page |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| Public LPSE listing, package 10261197000 | 1 | 2 | 2 / 0 / 0 | 100% | 100% | 100% | 0.207 ms |
+| Public LPSE listing, package 10261197000 | 1 | 2 | 2 / 0 / 0 | 100% | 100% | 100% | 0.050 ms |
 
 These are measured results for one short portal page and two labels, not a representative procurement benchmark. They do not support a general accuracy claim such as “over 94%.” The synthetic regression figures are reported separately by the same command and must not be combined with the LPSE row. Latency covers the local text evaluator only, not PDF extraction, OCR, network transfer, or AI-provider calls.

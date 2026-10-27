@@ -59,6 +59,9 @@ class BidSentryHandler(BaseHTTPRequestHandler):
             if method in {"GET", "PUT"} and path == "/api/settings/integrations" and not self._is_local_settings_request():
                 self._send_json(ApiResponse(403, failure("LOCAL_ONLY", "Pengaturan integrasi hanya dapat diakses dari browser lokal.", request_id)))
                 return
+            if method == "GET" and path == "/api/settings/integrations/test" and not self._is_local_settings_request():
+                self._send_json(ApiResponse(403, failure("LOCAL_ONLY", "Tes integrasi hanya dapat dijalankan dari browser lokal.", request_id)))
+                return
             if method == "POST" and path == "/api/dispatch" and not self._is_local_settings_request():
                 self._send_json(ApiResponse(403, failure("LOCAL_ONLY", "Tindakan workspace hanya dapat dikirim dari browser lokal.", request_id)))
                 return

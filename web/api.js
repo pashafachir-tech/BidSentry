@@ -31,6 +31,7 @@ export const api = {
   }),
   dispatch: (input) => request("/dispatch", { method: "POST", body: JSON.stringify(input), timeout: 60000 }),
   integrationSettings: () => request("/settings/integrations"),
+  testIntegrations: () => request("/settings/integrations/test", { timeout: 60000 }),
   saveIntegrationSettings: (input) => request("/settings/integrations", { method: "PUT", body: JSON.stringify(input) }),
   exportWorkbook: (input) => request("/export/workbook", { method: "POST", body: JSON.stringify(input), timeout: 60000 }),
 };

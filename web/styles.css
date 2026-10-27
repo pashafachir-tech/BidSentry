@@ -231,6 +231,7 @@ td { height: 59px; padding: 9px 11px; border-bottom: 1px solid #f0f0ec; color: #
 .integration-list em { font-size: 10px; font-style: normal; font-weight: 750; letter-spacing: .08em; }
 .connection-ready { color: #47815d; }
 .connection-idle { color: #a09f94; }
+.integration-test-results { white-space: pre-line; margin: 12px 0; padding: 11px 13px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-soft); color: var(--text); font-size: 11px; line-height: 1.6; }
 .page-footer { display: flex; justify-content: space-between; gap: 10px; margin-top: 21px; padding: 13px 2px 0; border-top: 1px solid var(--line-strong); color: #96988e; font-size: 10px; }
 .page-footer b { padding: 0 5px; color: #c0c1b9; }
 

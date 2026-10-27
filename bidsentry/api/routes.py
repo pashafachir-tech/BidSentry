@@ -58,6 +58,12 @@ class ApiRouter:
                 data = self._integrations()
             elif method == "GET" and path == "/api/settings/integrations":
                 data = self.app.settings_service.public_settings(self.app.settings, self.app.settings_service.env_path.is_file())
+            elif method == "GET" and path == "/api/settings/integrations/test":
+                from composio_dispatcher import test_composio_connection
+                data = {
+                    "langflow": self.app.langflow.test_connection(),
+                    "composio": test_composio_connection(self.app.settings),
+                }
             elif method == "PUT" and path == "/api/settings/integrations":
                 self.app.settings = self.app.settings_service.save(payload)
                 self.app.langflow.settings = self.app.settings
@@ -120,7 +126,7 @@ class ApiRouter:
                 data = self.app.documents.extract(payload.get("filename", ""), payload.get("content", b""))
             elif method == "POST" and path == "/api/dispatch":
                 data = self.app.dispatch.create(payload, require_external_consent=self.app.settings.composio_configured)
-            elif path in {"/api/health", "/api/integrations", "/api/settings/integrations", "/api/overview", "/api/audits", "/api/export/workbook", "/api/audit", "/api/v1/audit/evaluate", "/api/v1/audit/sanggahan-doc", "/api/v1/audit/comprehensive", "/api/v1/audit/clarification-doc", "/api/v1/audit/minutes-eval-doc", "/api/review-feedback", "/api/documents/extract", "/api/dispatch"}:
+            elif path in {"/api/health", "/api/integrations", "/api/settings/integrations", "/api/settings/integrations/test", "/api/overview", "/api/audits", "/api/export/workbook", "/api/audit", "/api/v1/audit/evaluate", "/api/v1/audit/sanggahan-doc", "/api/v1/audit/comprehensive", "/api/v1/audit/clarification-doc", "/api/v1/audit/minutes-eval-doc", "/api/review-feedback", "/api/documents/extract", "/api/dispatch"}:
                 return ApiResponse(405, failure("METHOD_NOT_ALLOWED", "HTTP method is not supported for this route.", request_id))
             else:
                 return ApiResponse(404, failure("NOT_FOUND", "API route was not found.", request_id))

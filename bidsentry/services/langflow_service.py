@@ -42,6 +42,40 @@ class LangflowService:
             },
         }
 
+    def test_connection(self) -> dict[str, Any]:
+        """Verify access to the configured flow without executing it."""
+        flow_id = self.settings.langflow_flow_id.strip()
+        if not flow_id:
+            return {"status": "not_configured", "message": "Flow ID Langflow belum diatur."}
+
+        endpoint = self.settings.langflow_url + "/api/v1/flows/" + urllib.parse.quote(flow_id, safe="")
+        headers = {"Accept": "application/json"}
+        if self.settings.langflow_api_key:
+            headers["x-api-key"] = self.settings.langflow_api_key
+        request = urllib.request.Request(endpoint, headers=headers, method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=self.settings.langflow_timeout_seconds) as response:
+                body = response.read(64 * 1024 + 1)
+            if len(body) > 64 * 1024:
+                return {"status": "invalid_response", "message": "Respons detail flow melebihi batas 64 KB."}
+            data = json.loads(body.decode("utf-8")) if body else {}
+            if not isinstance(data, dict):
+                return {"status": "invalid_response", "message": "Langflow mengembalikan data flow yang tidak valid."}
+            return {
+                "status": "connected",
+                "flow_id": flow_id,
+                "flow_name": data.get("name") if isinstance(data.get("name"), str) else None,
+                "message": "API key memiliki akses baca ke flow Langflow yang dipilih.",
+            }
+        except urllib.error.HTTPError as exc:
+            status = "auth_failed" if exc.code in {401, 403} else "flow_not_found" if exc.code == 404 else "provider_error"
+            message = "API key Langflow ditolak." if status == "auth_failed" else "Flow ID tidak ditemukan." if status == "flow_not_found" else f"Langflow merespons HTTP {exc.code}."
+            return {"status": status, "message": message}
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            return {"status": "unreachable", "error_type": type(exc).__name__, "message": "Server Langflow tidak dapat dijangkau."}
+        except (ValueError, json.JSONDecodeError):
+            return {"status": "invalid_response", "message": "Respons Langflow bukan JSON yang valid."}
+
     def advise(self, request: AuditRequest, local_result: dict[str, Any]) -> dict[str, Any]:
         if not request.allow_external_processing:
             return {"status": "not_requested", "advisory": None, "review_role": request.review_role}

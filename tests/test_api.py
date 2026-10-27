@@ -28,6 +28,12 @@ class ApiContractTests(unittest.TestCase):
         self.assertFalse(response.body["data"]["integrations"]["langflow"]["configured"])
         self.assertFalse(response.body["data"]["integrations"]["ibm_bob"]["verified_end_to_end"])
 
+    def test_integration_connection_check_is_read_only_when_services_are_unconfigured(self) -> None:
+        response = self.router.dispatch("GET", "/api/settings/integrations/test")
+        self.assertEqual(response.status, 200)
+        self.assertEqual(response.body["data"]["langflow"]["status"], "not_configured")
+        self.assertEqual(response.body["data"]["composio"]["status"], "not_configured")
+
     def test_audit_requires_at_least_one_document(self) -> None:
         response = self.router.dispatch("POST", "/api/audit", payload={"package_name": "Empty"})
         self.assertEqual(response.status, 400)

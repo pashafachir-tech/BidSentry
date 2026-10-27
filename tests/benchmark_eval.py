@@ -11,7 +11,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -23,6 +23,7 @@ from bidsentry.evaluators.engine import EvaluationEngine, EvaluationRequest
 
 SYNTHETIC_ROOT = ROOT / "data" / "sample_tenders"
 PUBLIC_LPSE_ROOT = ROOT / "data" / "public_lpse"
+LATENCY_REPETITIONS = 25
 
 
 def _read(path: Path) -> str:
@@ -55,6 +56,18 @@ def _metrics(predicted: set[str], expected: set[str]) -> dict[str, Any]:
     )
 
 
+def _measure_evaluation(engine: EvaluationEngine, request_factory: Callable[[], EvaluationRequest]) -> tuple[dict[str, Any], float]:
+    """Return the final deterministic output and mean latency after one warm-up."""
+    engine.evaluate(request_factory())
+    durations: list[float] = []
+    result: dict[str, Any] = {}
+    for _ in range(LATENCY_REPETITIONS):
+        started = time.perf_counter()
+        result = engine.evaluate(request_factory())
+        durations.append((time.perf_counter() - started) * 1000)
+    return result, sum(durations) / len(durations)
+
+
 def _run_synthetic_regression(engine: EvaluationEngine) -> dict[str, Any]:
     totals = {"tp": 0, "fp": 0, "fn": 0}
     reports: list[dict[str, Any]] = []
@@ -69,14 +82,12 @@ def _run_synthetic_regression(engine: EvaluationEngine) -> dict[str, Any]:
         tender_text = _read(folder / "dok_pemilihan.txt")
         evidence_text = _read(folder / "bukti_penyedia.txt")
         pages = _page_count([tender_text, evidence_text])
-        started = time.perf_counter()
-        result = engine.evaluate(EvaluationRequest(
+        result, duration_ms = _measure_evaluation(engine, lambda: EvaluationRequest(
             package_name=truth["fixture_id"],
             contract_value_idr=1_000_000_000,
             dok_pemilihan=tender_text,
             pustaka=evidence_text,
         ))
-        duration_ms = (time.perf_counter() - started) * 1000
         predicted = {
             item["id"] for item in result["findings"]
             if item.get("status") in {"GAP", "EXPIRING", "SUPERSEDED"}
@@ -124,13 +135,11 @@ def _run_public_lpse(engine: EvaluationEngine) -> dict[str, Any]:
         if not isinstance(expected_ids, list) or not expected_ids or not isinstance(pages, int) or pages < 1:
             raise ValueError(f"Public LPSE fixture has invalid labels or page count: {truth_path}")
         tender_text = _read(folder / "procurement_requirements.txt")
-        started = time.perf_counter()
-        result = engine.evaluate(EvaluationRequest(
+        result, duration_ms = _measure_evaluation(engine, lambda: EvaluationRequest(
             package_name=truth["fixture_id"],
             dok_pemilihan=tender_text,
             allow_external_processing=False,
         ))
-        duration_ms = (time.perf_counter() - started) * 1000
         predicted = {
             item["id"] for item in result["findings"]
             if item.get("requirement_evidence")
@@ -178,7 +187,7 @@ def run_benchmark() -> dict[str, Any]:
 def _print_metrics(label: str, report: dict[str, Any]) -> None:
     print(f"{label}: {report['dataset']}")
     print(f"Fixtures={report['fixture_count']} precision={report['precision']:.4f} recall={report['recall']:.4f} F1={report['f1']:.4f}")
-    print(f"Measured latency/page={report['latency_ms_per_page']:.3f} ms")
+    print(f"Mean latency/page={report['latency_ms_per_page']:.3f} ms ({LATENCY_REPETITIONS} runs after warm-up)")
     for row in report["cases"]:
         print(
             f"  {row['fixture_id']}: pages={row['pages']} TP={row['true_positive']} "

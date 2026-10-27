@@ -4,7 +4,7 @@ BidSentry — Composio Dispatcher
 =================================
 Prepares 3 workspace follow-up artifacts through the Composio REST API:
 
-  1. GOOGLEDOCS_CREATE_DOCUMENT  — Review summary for human verification
+  1. GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN  — Review summary for human verification
   2. GOOGLECALENDAR_CREATE_EVENT — Provisional internal reminder (H+7)
   3. GMAIL_CREATE_EMAIL_DRAFT    — Unaddressed internal review draft
 
@@ -20,6 +20,7 @@ Environment:
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from bidsentry.config import Settings, load_env_file
@@ -44,12 +45,11 @@ def _post_composio(action: str, api_key: str, params: dict) -> dict:
     Raises urllib.error.URLError / urllib.error.HTTPError on network failure.
     """
     settings = Settings.from_environment()
-    url     = settings.composio_base_url.format(action=action)
+    url     = settings.composio_base_url.format(action=urllib.parse.quote(action, safe=""))
     payload = json.dumps({
-        "entityId":    settings.composio_entity_id,
-        "appName":     action.split("_")[0].upper(),
-        "actionName":  action,
-        "input":       params,
+        "user_id": settings.composio_entity_id,
+        "version": "latest",
+        "arguments": params,
     }).encode("utf-8")
 
     req = urllib.request.Request(
@@ -72,10 +72,71 @@ def _post_composio(action: str, api_key: str, params: dict) -> dict:
     return response_data
 
 
+def test_composio_connection(settings: Settings | None = None) -> dict:
+    """Read connected-account metadata only; this never creates external artifacts."""
+    config = settings or Settings.from_environment()
+    if not config.composio_api_key:
+        return {"status": "not_configured", "message": "COMPOSIO_API_KEY belum diatur."}
+
+    marker = "/tools/execute/"
+    base = config.composio_base_url
+    if marker not in base:
+        return {"status": "invalid_configuration", "message": "URL Composio harus memakai endpoint tools/execute v3.1."}
+    api_root = base.split(marker, 1)[0]
+    query = urllib.parse.urlencode({"user_ids": config.composio_entity_id, "limit": "50"})
+    request = urllib.request.Request(
+        f"{api_root}/connected_accounts?{query}",
+        headers={"Accept": "application/json", "x-api-key": config.composio_api_key},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=config.composio_timeout_seconds) as response:
+            body = response.read(256 * 1024 + 1)
+        if len(body) > 256 * 1024:
+            return {"status": "invalid_response", "message": "Daftar akun Composio melebihi batas 256 KB."}
+        data = json.loads(body.decode("utf-8")) if body else {}
+        if not isinstance(data, dict):
+            return {"status": "invalid_response", "message": "Daftar akun Composio tidak memiliki format yang dikenal."}
+        accounts = data.get("items")
+        if not isinstance(accounts, list):
+            nested = data.get("data")
+            accounts = nested.get("items") if isinstance(nested, dict) else nested if isinstance(nested, list) else None
+        if not isinstance(accounts, list):
+            return {"status": "invalid_response", "message": "Daftar akun Composio tidak memiliki format yang dikenal."}
+        toolkits: set[str] = set()
+        active_accounts = 0
+        for account in accounts:
+            if not isinstance(account, dict):
+                continue
+            status = str(account.get("status", "")).upper()
+            if status == "ACTIVE":
+                active_accounts += 1
+                toolkit = account.get("toolkit")
+                slug = toolkit.get("slug") if isinstance(toolkit, dict) else account.get("toolkit_slug")
+                if isinstance(slug, str) and slug.strip():
+                    toolkits.add(slug.strip().upper())
+        connection_status = "connected" if active_accounts else "authenticated_no_active_accounts" if accounts else "authenticated_no_accounts"
+        return {
+            "status": connection_status,
+            "api_key_valid": True,
+            "active_account_count": active_accounts,
+            "linked_toolkits": sorted(toolkits),
+            "message": "API Composio terhubung; metadata akun dibaca tanpa menjalankan aksi." if active_accounts else "API key valid, tetapi belum ada connected account aktif untuk User ID ini.",
+        }
+    except urllib.error.HTTPError as exc:
+        status = "auth_failed" if exc.code in {401, 403} else "provider_error"
+        message = "API key Composio ditolak." if status == "auth_failed" else f"Composio merespons HTTP {exc.code}."
+        return {"status": status, "message": message}
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        return {"status": "unreachable", "error_type": type(exc).__name__, "message": "Composio tidak dapat dijangkau."}
+    except (ValueError, json.JSONDecodeError):
+        return {"status": "invalid_response", "message": "Respons Composio bukan JSON yang valid."}
+
+
 # ─── Action builders ──────────────────────────────────────────────────────────
 
 def _build_docs_params(audit_data: dict) -> dict:
-    """Build the input dict for GOOGLEDOCS_CREATE_DOCUMENT."""
+    """Build the input dict for GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN."""
     package_name   = audit_data.get("nama_paket", "Audit pengadaan")
     verdict        = audit_data.get("verdict", "GO-WITH-CAUTION")
     risk_score     = audit_data.get("risk_score", "—")
@@ -101,8 +162,8 @@ def _build_docs_params(audit_data: dict) -> dict:
     ])
 
     return {
-        "title":   f"BidSentry Audit Dossier - {package_name}",
-        "content": body,
+        "title": f"BidSentry Audit Dossier - {package_name}",
+        "markdown_text": body,
     }
 
 
@@ -123,18 +184,13 @@ def _build_calendar_params(audit_data: dict) -> dict:
         "Waktu H+7 ini adalah pengingat default, bukan tenggat resmi tender. "
         "Periksa dan ubah tanggal berdasarkan jadwal resmi sebelum mengandalkannya."
     )
+    start_utc = start.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
     return {
         "summary": f"[BidSentry] Pengingat review internal — {package_name}",
         "description": description,
-        "start": {"dateTime": start.isoformat(), "timeZone": "Asia/Jakarta"},
-        "end": {"dateTime": end.isoformat(), "timeZone": "Asia/Jakarta"},
-        "reminders": {
-            "useDefault": False,
-            "overrides": [
-                {"method": "email", "minutes": 1440},
-                {"method": "popup", "minutes": 60},
-            ],
-        },
+        "start_datetime": start_utc,
+        "event_duration_minutes": 30,
+        "timezone": "Asia/Jakarta",
     }
 
 def _build_gmail_params(audit_data: dict) -> dict:
@@ -153,7 +209,7 @@ def _build_gmail_params(audit_data: dict) -> dict:
         "Hormat kami,\n[Nama dan jabatan]"
     )
     return {
-        "to": audit_data.get("email_penerima", ""),
+        "recipient_email": audit_data.get("email_penerima", ""),
         "subject": f"[Draf BidSentry] Review internal — {package_name}",
         "body": body,
     }
@@ -172,7 +228,7 @@ def dispatch_tender_workspace(audit_data: dict) -> dict:
     """
     api_key = _get_api_key()
     action_plan = [
-        ("GOOGLEDOCS_CREATE_DOCUMENT", _build_docs_params(audit_data)),
+        ("GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN", _build_docs_params(audit_data)),
         ("GOOGLECALENDAR_CREATE_EVENT", _build_calendar_params(audit_data)),
     ]
     if audit_data.get("email_penerima"):
@@ -195,14 +251,22 @@ def dispatch_tender_workspace(audit_data: dict) -> dict:
     for action_name, params in action_plan:
         try:
             response = _post_composio(action_name, api_key, params)
-            results["actions"][action_name] = {
-                "success": True,
-                "data": response,
-            }
-            success_count += 1
+            succeeded = response.get("successful") is True
+            data = response.get("data", response.get("response_data", {}))
+            if not isinstance(data, dict):
+                data = {"result": data}
+            if succeeded:
+                results["actions"][action_name] = {"success": True, "data": data}
+                success_count += 1
+            else:
+                error_value = response.get("error")
+                error_code = error_value.get("code") or error_value.get("slug") if isinstance(error_value, dict) else None
+                suffix = f" (kode {str(error_code)[:80]})" if error_code else ""
+                err_msg = f"{action_name}: Composio melaporkan aksi gagal{suffix}."
+                results["errors"].append(err_msg)
+                results["actions"][action_name] = {"success": False, "error": err_msg, "data": {}}
         except urllib.error.HTTPError as exc:
-            error_body = exc.read().decode("utf-8", errors="replace") if exc.fp else str(exc)
-            err_msg = f"{action_name}: HTTP {exc.code} — {error_body[:300]}"
+            err_msg = f"{action_name}: HTTP {exc.code} dari Composio."
             results["errors"].append(err_msg)
             results["actions"][action_name] = {
                 "success":   False,
@@ -218,7 +282,7 @@ def dispatch_tender_workspace(audit_data: dict) -> dict:
                 "data":      {},
             }
         except Exception as exc:  # noqa: BLE001
-            err_msg = f"{action_name}: Unexpected error — {exc}"
+            err_msg = f"{action_name}: kegagalan tak terduga ({type(exc).__name__})."
             results["errors"].append(err_msg)
             results["actions"][action_name] = {
                 "success":   False,
@@ -235,14 +299,17 @@ def dispatch_tender_workspace(audit_data: dict) -> dict:
         results["status"] = "error"
 
     # Convenience top-level URLs
-    doc_data   = results["actions"].get("GOOGLEDOCS_CREATE_DOCUMENT",  {}).get("data", {})
+    doc_data   = results["actions"].get("GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN",  {}).get("data", {})
     cal_data   = results["actions"].get("GOOGLECALENDAR_CREATE_EVENT", {}).get("data", {})
     gmail_data = results["actions"].get("GMAIL_CREATE_EMAIL_DRAFT",    {}).get("data", {})
 
     # Composio may nest under "response_data" or return directly — handle both
     results["doc_url"]   = (
         doc_data.get("documentUrl")
+        or doc_data.get("document_url")
+        or doc_data.get("url")
         or doc_data.get("response_data", {}).get("documentUrl")
+        or (f"https://docs.google.com/document/d/{doc_data.get('documentId') or doc_data.get('document_id')}/edit" if doc_data.get("documentId") or doc_data.get("document_id") else None)
     )
     results["event_url"] = (
         cal_data.get("eventUrl")

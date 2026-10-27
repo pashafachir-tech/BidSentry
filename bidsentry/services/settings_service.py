@@ -21,8 +21,8 @@ MANAGED_DEFAULTS = {
     "LANGFLOW_API_KEY": "",
     "LANGFLOW_TIMEOUT_SECONDS": "30",
     "COMPOSIO_API_KEY": "",
-    "COMPOSIO_BASE_URL": "https://backend.composio.dev/api/v1/actions/{action}/execute",
-    "COMPOSIO_ENTITY_ID": "default",
+    "COMPOSIO_BASE_URL": "https://backend.composio.dev/api/v3.1/tools/execute/{action}",
+    "COMPOSIO_USER_ID": "default",
     "COMPOSIO_TIMEOUT_SECONDS": "30",
 }
 
@@ -51,7 +51,7 @@ class SettingsService:
                 "configured": settings.composio_configured,
                 "api_key_saved": bool(settings.composio_api_key),
                 "base_url": settings.composio_base_url,
-                "entity_id": settings.composio_entity_id,
+                "user_id": settings.composio_user_id,
                 "timeout_seconds": settings.composio_timeout_seconds,
             },
         }
@@ -66,7 +66,7 @@ class SettingsService:
 
         allowed = {
             "langflow_enabled", "langflow_url", "langflow_flow_id", "langflow_api_key", "clear_langflow_api_key",
-            "langflow_timeout_seconds", "composio_base_url", "composio_entity_id", "composio_api_key",
+            "langflow_timeout_seconds", "composio_base_url", "composio_user_id", "composio_entity_id", "composio_api_key",
             "clear_composio_api_key", "composio_timeout_seconds",
         }
         unknown = sorted(set(payload) - allowed)
@@ -84,7 +84,8 @@ class SettingsService:
             "langflow_flow_id": ("LANGFLOW_FLOW_ID", 240),
             "langflow_api_key": ("LANGFLOW_API_KEY", 4096),
             "composio_base_url": ("COMPOSIO_BASE_URL", 2048),
-            "composio_entity_id": ("COMPOSIO_ENTITY_ID", 200),
+            "composio_user_id": ("COMPOSIO_USER_ID", 200),
+            "composio_entity_id": ("COMPOSIO_USER_ID", 200),
             "composio_api_key": ("COMPOSIO_API_KEY", 4096),
         }
         for field, (key, maximum) in string_fields.items():
@@ -130,8 +131,8 @@ class SettingsService:
         self._validate_url(base_url, "composio_base_url")
         if "{action}" not in base_url:
             raise ValidationError("URL Composio harus memuat penanda {action}.", [{"field": "composio_base_url", "issue": "action_placeholder_required"}])
-        if not values["COMPOSIO_ENTITY_ID"]:
-            raise ValidationError("Entity ID Composio tidak boleh kosong.", [{"field": "composio_entity_id", "issue": "required"}])
+        if not values["COMPOSIO_USER_ID"]:
+            raise ValidationError("User ID Composio tidak boleh kosong.", [{"field": "composio_user_id", "issue": "required"}])
 
         self._write_env(values)
         # A .env editor must supersede process values for managed fields;

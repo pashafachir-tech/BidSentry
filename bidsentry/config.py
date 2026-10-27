@@ -85,9 +85,14 @@ class Settings:
     watsonx_url: str
     composio_api_key: str
     composio_base_url: str
-    composio_entity_id: str
+    composio_user_id: str
     composio_timeout_seconds: float
     bob_mcp_config_path: Path
+
+    @property
+    def composio_entity_id(self) -> str:
+        """Backward-compatible alias; Composio v3 calls this identifier user_id."""
+        return self.composio_user_id
 
     @property
     def langflow_configured(self) -> bool:
@@ -122,7 +127,7 @@ class Settings:
 
         langflow_url = os.environ.get("LANGFLOW_URL", os.environ.get("LANGFLOW_HOST", "http://localhost:7860")).rstrip("/")
         _validate_service_url(langflow_url, "LANGFLOW_URL")
-        composio_base_url = os.environ.get("COMPOSIO_BASE_URL", "https://backend.composio.dev/api/v1/actions/{action}/execute").rstrip("/")
+        composio_base_url = os.environ.get("COMPOSIO_BASE_URL", "https://backend.composio.dev/api/v3.1/tools/execute/{action}").rstrip("/")
         _validate_service_url(composio_base_url, "COMPOSIO_BASE_URL")
         if "{action}" not in composio_base_url:
             raise ValueError("COMPOSIO_BASE_URL must include the {action} placeholder.")
@@ -152,7 +157,7 @@ class Settings:
             watsonx_url=os.environ.get("WATSONX_URL", "https://us-south.ml.cloud.ibm.com").strip().rstrip("/"),
             composio_api_key=os.environ.get("COMPOSIO_API_KEY", "").strip(),
             composio_base_url=composio_base_url,
-            composio_entity_id=os.environ.get("COMPOSIO_ENTITY_ID", "default").strip() or "default",
+            composio_user_id=os.environ.get("COMPOSIO_USER_ID", os.environ.get("COMPOSIO_ENTITY_ID", "default")).strip() or "default",
             composio_timeout_seconds=composio_timeout,
             bob_mcp_config_path=WORKSPACE_ROOT / "bob" / "mcp.json",
         )
