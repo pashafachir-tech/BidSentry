@@ -65,9 +65,8 @@ bidsentry_jobs.db
 .turbo/
 out/
 
-# Output archives and external template references
-output/template-reference/
-output/*.zip
+# Outputs & build artifacts
+output/
 
 # Langflow runtime
 langflow/*.db
