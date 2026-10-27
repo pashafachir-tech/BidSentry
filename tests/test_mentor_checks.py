@@ -174,3 +174,54 @@ def test_deepseek_erp_financial_fatal_flaws_detection() -> None:
     assert result["verdict"] == "NO-GO"
     assert result["risk_level"] == "CRITICAL"
     assert result["risk_score"] >= 70
+
+
+def test_modular_data_center_regional_and_incumbent_lockin() -> None:
+    text = (
+        "Persyaratan: Sertifikat Keanggotaan Asosiasi Data Center Regional Jawa Barat (ADCR-Jabar) status Gold Partner minimal 3 tahun terakhir.\n"
+        "Pengalaman kerja serupa: Pembangunan Modular Data Center Tier 3 dengan kapasitas tepat 50 rack dan menggunakan sistem pendinginan in-row chilled water merek tertentu (sebutkan merek inkumben) di Jawa Barat.\n"
+        "Catatan: Hanya pengalaman yang memenuhi SEMUA kriteria di atas yang akan dianggap valid. Pengalaman dengan kapasitas 40 atau 60 rack tidak akan diterima.\n"
+    )
+    result = EvaluationEngine().evaluate(EvaluationRequest(package_name="Data Center Tier 3", dok_pemilihan=text))
+    finding_ids = {f["id"] for f in result["findings"]}
+
+    assert "SPEC-REGIONAL-LOCKIN" in finding_ids
+    assert "SPEC-INCUMBENT-LOCKIN" in finding_ids
+
+    reg = next(f for f in result["findings"] if f["id"] == "SPEC-REGIONAL-LOCKIN")
+    assert reg["status"] == "GAP"
+    assert reg["severity"] == "HIGH"
+    assert "ADCR-Jabar" in reg["review_note"]
+
+    inc = next(f for f in result["findings"] if f["id"] == "SPEC-INCUMBENT-LOCKIN")
+    assert inc["status"] == "GAP"
+    assert inc["severity"] == "HIGH"
+    assert "Pasal 19" in inc["review_note"]
+
+    assert result["verdict"] == "NO-GO"
+
+
+def test_managed_soc_conflict_of_interest_and_unrealistic_timeline() -> None:
+    text = (
+        "Kriteria: Surat rekomendasi dari Ir. [Nama], mantan Kepala Divisi TI Bank periode 2019–2023.\n"
+        "Fase 4: Implementasi Arsitektur Zero-Trust Seluruh Komponen SOC dalam 7 hari kalender.\n"
+        "Kualifikasi Personel: SOC Manager CISSP/CISM, Tier-3 GCIH/GCFA/OSCP, Tier-2 CEH/CySA+.\n"
+    )
+    result = EvaluationEngine().evaluate(EvaluationRequest(package_name="Managed SOC", dok_pemilihan=text))
+    finding_ids = {f["id"] for f in result["findings"]}
+
+    assert "GOV-CONFLICT-INTEREST" in finding_ids
+    assert "PROC-UNREALISTIC-TIMELINE" in finding_ids
+    assert "ADM-EXPERTS" in finding_ids
+
+    coi = next(f for f in result["findings"] if f["id"] == "GOV-CONFLICT-INTEREST")
+    assert coi["status"] == "GAP"
+    assert coi["severity"] == "HIGH"
+    assert "benturan kepentingan" in coi["review_note"]
+
+    unr = next(f for f in result["findings"] if f["id"] == "PROC-UNREALISTIC-TIMELINE")
+    assert unr["status"] == "GAP"
+    assert unr["severity"] == "HIGH"
+    assert "Zero-Trust" in unr["review_note"]
+
+    assert result["verdict"] == "NO-GO"

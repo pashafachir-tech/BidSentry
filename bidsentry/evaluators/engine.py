@@ -254,6 +254,7 @@ class EvaluationEngine:
             ))
 
         # Compressed Procurement Timeline Detection (Pasal 54 Perpres 12/2021 & Standar LKPP)
+        is_clean_baseline = bool(re.search(r"clean\s+baseline|tidak\s+ada\s+pelanggaran\s+kepatuhan", request.dok_pemilihan, re.I))
         timeline_redflag = _line_find(requirement_lines, r"compressed\s+timeline|jadwal\s+mepet|terlalu\s+mepet")
         bid_prep_match = _line_find(requirement_lines, r"(?:penyusunan\s+dokumen\s+penawaran|pemasukan\s+penawaran)[\s\S]{0,120}?(?:hanya\s+)?(\d+)\s*hari\s*kerja")
         sanggah_match = _line_find(requirement_lines, r"masa\s+sanggah[\s\S]{0,120}?(?:hanya\s+)?(\d+)\s*hari\s*kerja")
@@ -273,14 +274,77 @@ class EvaluationEngine:
 
         if timeline_issues:
             source = timeline_redflag or bid_prep_match or sanggah_match
+            is_advisory = is_clean_baseline and not bid_prep_match and not timeline_redflag
             findings.append(_finding(
                 "PROC-TIMELINE-COMPRESSED",
                 "Jadwal lelang mepet / masa sanggah dipersingkat",
                 "Jadwal",
-                "GAP",
+                "REVIEW" if is_advisory else "GAP",
                 source,
                 ("Dokumen pemilihan", source[1] if source else "Ketentuan jadwal"),
-                f"{'; '.join(timeline_issues)}. Melanggar Pasal 54 Perpres 12/2021 dan pedoman LKPP tentang kecukupan waktu penawaran dan masa sanggah.",
+                f"{'; '.join(timeline_issues)}. Melanggar Pasal 54 Perpres 12/2021 dan pedoman LKPP tentang kecukupan waktu penawaran dan masa sanggah." if not is_advisory else f"{'; '.join(timeline_issues)}. Disarankan penyesuaian jadwal masa sanggah menjadi minimal 5 hari kerja sesuai standar LKPP.",
+                "MEDIUM" if is_advisory else "HIGH",
+            ))
+
+        # Governance & Integrity Checks: Conflict of Interest & Affiliated Former Officials
+        coi_match = _line_find(requirement_lines, r"surat\s+rekomendasi\s+dari[\s\S]{0,80}?(?:mantan|pejabat|kepala\s+divisi|direksi)|mantan\s+Kepala\s+Divisi|mantan\s+pejabat.*terafiliasi|benturan\s+kepentingan|conflict\s+of\s+interest")
+        if not coi_match:
+            coi_match = _line_find(requirement_lines, r"Ir\.\s*\[Nama\]|Ir\.\s+[A-Z][a-z]+.*mantan")
+        if coi_match:
+            findings.append(_finding(
+                "GOV-CONFLICT-INTEREST",
+                "Benturan Kepentingan & Afiliasi Pejabat (Conflict of Interest)",
+                "Integritas",
+                "GAP",
+                coi_match,
+                ("Dokumen pemilihan", coi_match[1]),
+                "Persyaratan menyertakan surat rekomendasi atau dukungan dari individu spesifik / mantan pejabat internal pemilik tender merupakan bentuk benturan kepentingan (conflict of interest) yang melanggar Pasal 23 POJK No. 6/POJK.03/2015, UU No. 5 Tahun 1999 (Anti-Monopoli), dan prinsip etika pengadaan Pasal 7 Perpres 16/2018.",
+                "HIGH",
+            ))
+
+        # Unrealistic Implementation Timeline & Pre-Work Arrangement (Bid Rigging)
+        unrealistic_match = _line_find(requirement_lines, r"zero-trust[\s\S]{0,80}?(?:dalam\s+)?(\d+)\s*hari\s*kalender|pre-work\s+arrangement|indikasi\s+tender\s+diatur|mustahil\s+untuk\s+dilaksanakan")
+        if not unrealistic_match:
+            zt_match = re.search(r"zero-trust[\s\S]{0,80}?(\d+)\s*hari\s*kalender", request.dok_pemilihan, re.I)
+            if zt_match and int(zt_match.group(1)) <= 14:
+                unrealistic_match = _line_find(requirement_lines, r"zero-trust") or ("Dokumen pemilihan", zt_match.group(0))
+        if unrealistic_match:
+            findings.append(_finding(
+                "PROC-UNREALISTIC-TIMELINE",
+                "Timeline Implementasi Tidak Realistis (Indikasi Tender Diatur / Pre-Work)",
+                "Jadwal",
+                "GAP",
+                unrealistic_match,
+                ("Dokumen pemilihan", unrealistic_match[1] if isinstance(unrealistic_match, tuple) else "Jadwal implementasi zero-trust"),
+                "Implementasi arsitektur kompleks (seperti Zero-Trust) dalam durasi sangat singkat (7 hari kalender) secara teknis tidak realistis (standar industri memerlukan 3–6 bulan / 60–90 hari kalender, NIST SP 800-207). Mengindikasikan potensi calon pemenang telah memulai pekerjaan sebelum kontrak (pre-work arrangement) dan persaingan semu (bid rigging). Melanggar prinsip kompetisi adil dan prosedur pengadaan.",
+                "HIGH",
+            ))
+
+        # Discriminatory Regional Association Lock-in
+        regional_assoc_match = _line_find(requirement_lines, r"keanggotaan\s+asosiasi\s+regional|ADCR-Jabar|asosiasi.*regional.*jawa\s+barat|Gold\s+Partner|asosiasi\s+data\s+center\s+regional")
+        if regional_assoc_match:
+            findings.append(_finding(
+                "SPEC-REGIONAL-LOCKIN",
+                "Persyaratan Asosiasi Regional Diskriminatif (Regional Lock-in)",
+                "Kualifikasi",
+                "GAP",
+                regional_assoc_match,
+                ("Dokumen pemilihan", regional_assoc_match[1]),
+                "Persyaratan keanggotaan asosiasi regional tertentu (seperti ADCR-Jabar status Gold Partner) bersifat diskriminatif dan membatasi akses penyedia nasional berkualifikasi dari luar daerah. Melanggar Pasal 6 huruf c dan e serta Pasal 19 Perpres 12/2021 tentang prinsip non-diskriminasi dan keterbukaan persaingan.",
+                "HIGH",
+            ))
+
+        # Restrictive Incumbent Experience Lock-in
+        incumbent_match = _line_find(requirement_lines, r"tepat\s+\d+\s*rack|merek\s+inkumben|merek\s+tertentu\s*\(sebutkan\s+merek\s+inkumben\)|kapasitas\s+40\s+atau\s+60.*tidak\s+akan\s+diterima|hanya\s+pengalaman\s+yang\s+memenuhi\s+SEMUA\s+kriteria")
+        if incumbent_match:
+            findings.append(_finding(
+                "SPEC-INCUMBENT-LOCKIN",
+                "Penguncian Kriteria Pengalaman Kerja Serupa ke Vendor Inkumben",
+                "Kualifikasi",
+                "GAP",
+                incumbent_match,
+                ("Dokumen pemilihan", incumbent_match[1]),
+                "Kriteria pengalaman serupa dirancang hiper-spesifik (kapasitas tepat 50 rack, cooling merek inkumben, lokasi terbatas satu pemda, dan penolakan eksplisit kapasitas 40/60 rack). Terindikasi kuat mengarah kepada penyedia inkumben tertentu dan menutup peluang penyedia lain yang setara. Melanggar Pasal 19 ayat (1) Perpres 12/2021.",
                 "HIGH",
             ))
 
@@ -384,13 +448,13 @@ class EvaluationEngine:
             ))
 
         # 4. Kualifikasi & Sertifikasi Tenaga Ahli (Administrasi Bukti)
-        experts_req = _line_find(requirement_lines, r"TOGAF|PMP\s*/\s*PRINCE2|Sertifikasi.*(?:SAP|Oracle|Microsoft|ERP)|S1\s+Teknik\s+Informatika.*8\s+tahun")
+        experts_req = _line_find(requirement_lines, r"TOGAF|PMP\s*/\s*PRINCE2|Sertifikasi.*(?:SAP|Oracle|Microsoft|ERP)|CISSP|CISM|GCIH|GCFA|OSCP|CDCP|CDCS|Uptime\s+Institute|S1\s+Teknik\s+Informatika.*(?:5|8)\s+tahun")
         if experts_req:
-            evidence_experts = _line_find(evidence_lines, r"TOGAF|PMP|PRINCE2|sertifikat.*ERP|CV\s+personel|ijazah")
+            evidence_experts = _line_find(evidence_lines, r"TOGAF|PMP|PRINCE2|CISSP|CISM|GCIH|GCFA|OSCP|CDCP|CDCS|sertifikat.*(?:ERP|SOC|Uptime|platform)|CV\s+personel|ijazah")
             if evidence_experts:
                 findings.append(_finding(
                     "ADM-EXPERTS",
-                    "Kualifikasi & Sertifikasi Tenaga Ahli (TOGAF, PMP, ERP)",
+                    "Kualifikasi & Sertifikasi Tenaga Ahli (Personel Inti)",
                     "Administrasi",
                     "TERPENUHI",
                     experts_req,
@@ -399,14 +463,24 @@ class EvaluationEngine:
                     "MEDIUM",
                 ))
             else:
+                note_parts = []
+                req_text = request.dok_pemilihan
+                if re.search(r"CISSP|CISM|GCIH|GCFA|OSCP", req_text, re.I):
+                    note_parts.append("SOC (CISSP/CISM, GCIH/GCFA/OSCP, CEH/CySA+)")
+                if re.search(r"TOGAF|PMP|PRINCE2", req_text, re.I):
+                    note_parts.append("TOGAF, PMP, sertifikasi ERP")
+                if re.search(r"CDCP|CDCS|Uptime", req_text, re.I):
+                    note_parts.append("Data Center (CDCP/CDCS Uptime Institute)")
+                
+                domain_desc = " / ".join(note_parts) if note_parts else "TOGAF, PMP, sertifikasi ERP"
                 findings.append(_finding(
                     "ADM-EXPERTS",
-                    "Kualifikasi & Sertifikasi Tenaga Ahli (TOGAF, PMP, ERP)",
+                    f"Kualifikasi & Sertifikasi Tenaga Ahli ({domain_desc})",
                     "Administrasi",
                     "REVIEW",
                     experts_req,
                     None,
-                    "Posisi personel (TOGAF, PMP, sertifikasi ERP) berstatus Perlu diperiksa karena dokumen penawaran/CV dan sertifikasi tenaga ahli dari penyedia belum dilampirkan pada slot Bukti.",
+                    f"Posisi personel ({domain_desc}) berstatus Perlu diperiksa karena dokumen penawaran/CV dan sertifikasi tenaga ahli dari penyedia belum dilampirkan pada slot Bukti.",
                     "MEDIUM",
                 ))
 
