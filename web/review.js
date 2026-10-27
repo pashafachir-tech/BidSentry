@@ -6,16 +6,16 @@ const statusLabels = { TERPENUHI: "Terpenuhi", GAP: "Kesenjangan", EXPIRING: "Se
 const statusClasses = { TERPENUHI: "status-ok", GAP: "status-gap", EXPIRING: "status-warn", SUPERSEDED: "status-muted", REVIEW: "status-warn" };
 
 function buildReview(state) {
-  const result = state.customReview;
+  const result = state.currentAudit || state.customReview || state.audits.find((row) => row.audit_id === state.selectedAuditId) || (state.audits && state.audits[0]) || null;
   if (!result) return { isCustom: false, findings: [], package_name: "Belum ada evaluasi", verdict: "—", risk_level: "LOW", summary: "Masukkan dokumen tender dan bukti penyedia untuk memulai pemeriksaan." };
   return {
     ...result,
-    id: "latest",
+    id: result.audit_id || "latest",
     package_name: result.package_name || "Evaluasi dokumen",
     verdict: result.executive_summary?.eligibility || result.verdict || "NEEDS_REVIEW",
-    summary: result.executive_summary?.executive_summary || result.review_recommendation || "Periksa setiap temuan terhadap dokumen sumber.",
+    summary: result.executive_summary?.executive_summary || result.review_recommendation || result.summary?.executive_summary || "Periksa setiap temuan terhadap dokumen sumber.",
     findings: result.findings || [],
-    risk_level: result.risk_level || "LOW",
+    risk_level: result.risk_level || (typeof result.risk === "object" ? result.risk?.level : result.risk) || "LOW",
     isCustom: true,
   };
 }

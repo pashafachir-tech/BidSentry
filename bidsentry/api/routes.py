@@ -72,6 +72,18 @@ class ApiRouter:
                 data = self.app.portfolio.overview()
             elif method == "GET" and path == "/api/audits":
                 data = self.app.portfolio.list_audits(self._one(query, "q"), self._one(query, "risk", "ALL"))
+            elif method == "GET" and (path == "/api/audit" or (path.startswith("/api/audits/") and len(path) > len("/api/audits/"))):
+                audit_id = path.removeprefix("/api/audits/").strip() if path.startswith("/api/audits/") else self._one(query, "audit_id")
+                if not audit_id:
+                    raise ValidationError("Audit ID wajib diisi.", [{"field": "audit_id", "issue": "required"}])
+                audit_data = self.app.audit_log.get_audit(audit_id)
+                if not audit_data:
+                    row = next((r for r in self.app.portfolio.list_audits() if r.get("audit_id") == audit_id), None)
+                    if row:
+                        audit_data = row
+                    else:
+                        raise ValidationError("Pemeriksaan tidak ditemukan.", [{"field": "audit_id", "issue": "not_found"}])
+                data = audit_data
             elif method == "DELETE" and (path == "/api/audits" or path.startswith("/api/audits/")):
                 audit_id = path.removeprefix("/api/audits/").strip() if path.startswith("/api/audits/") else (self._one(query, "audit_id") or (payload.get("audit_id") if isinstance(payload, dict) else None))
                 if not audit_id:

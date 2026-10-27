@@ -50,6 +50,57 @@ function toast(message, kind = "success") {
   toastNode.className = `toast toast-visible ${kind === "error" ? "toast-error" : ""}`;
 }
 
+async function selectAudit(auditId) {
+  if (!auditId) return;
+  const state = getState();
+  const cachedRow = (state.audits || []).find((row) => row.audit_id === auditId);
+  let payload = null;
+  try {
+    const stored = localStorage.getItem(`bidsentry-payload-${auditId}`);
+    if (stored) payload = JSON.parse(stored);
+  } catch {}
+
+  if (!payload && cachedRow) {
+    payload = cachedRow;
+  }
+
+  setState({
+    selectedAuditId: auditId,
+    currentAudit: payload || cachedRow || null,
+    customReview: payload || cachedRow || null,
+    reviewFilter: "ALL",
+    expandedFindingId: null,
+  });
+
+  try {
+    const full = await api.getAudit(auditId);
+    if (full) {
+      try {
+        localStorage.setItem(`bidsentry-payload-${auditId}`, JSON.stringify(full));
+      } catch {}
+      if (getState().selectedAuditId === auditId) {
+        setState({
+          currentAudit: full,
+          customReview: full,
+        });
+      }
+    }
+  } catch {
+    // If offline or error, state already has payload/cachedRow
+  }
+
+  try {
+    const reviewFeedback = await api.reviewFeedback(auditId);
+    if (getState().selectedAuditId === auditId) {
+      setState({ reviewFeedback });
+    }
+  } catch {
+    if (getState().selectedAuditId === auditId) {
+      setState({ reviewFeedback: null });
+    }
+  }
+}
+
 async function loadWorkspace({ preserveSelection = true, includeOverview = true, includeHealth = true, includeFeedback = true } = {}) {
   const requestSequence = ++workspaceRequestSequence;
   setState({ loading: true });
@@ -64,10 +115,12 @@ async function loadWorkspace({ preserveSelection = true, includeOverview = true,
     if (requestSequence !== workspaceRequestSequence) return;
     const selected = preserveSelection && audits.audits.some((row) => row.audit_id === state.selectedAuditId)
       ? state.selectedAuditId : audits.audits[0]?.audit_id || null;
+    const selectedAuditObj = (audits.audits || []).find((row) => row.audit_id === selected) || null;
     setState({
       ...(includeOverview ? { overview } : {}),
       audits: audits.audits,
       selectedAuditId: selected,
+      ...(!state.customReview || !preserveSelection ? { customReview: selectedAuditObj, currentAudit: selectedAuditObj } : {}),
       ...(includeHealth && health ? { integrations: health.integrations } : {}),
       ...(includeFeedback ? { reviewFeedback } : {}),
       loading: false,
@@ -86,15 +139,18 @@ async function deleteAuditRecord(auditId, packageName = "Audit ini") {
 
   try {
     await api.deleteAudit(auditId);
+    try { localStorage.removeItem(`bidsentry-payload-${auditId}`); } catch {}
     toast(`Pemeriksaan "${packageName}" berhasil dihapus.`);
     const state = getState();
     const remainingAudits = (state.audits || []).filter((row) => row.audit_id !== auditId);
     const nextSelected = remainingAudits[0]?.audit_id || null;
+    const nextSelectedObj = remainingAudits[0] || null;
     const isCustomActive = state.customReview?.audit_id === auditId;
     setState({
       audits: remainingAudits,
       selectedAuditId: nextSelected,
-      customReview: isCustomActive ? null : state.customReview,
+      currentAudit: isCustomActive ? nextSelectedObj : state.currentAudit,
+      customReview: isCustomActive ? nextSelectedObj : state.customReview,
     });
     await loadWorkspace({ preserveSelection: false });
   } catch (error) {
@@ -847,6 +903,11 @@ root.addEventListener("click", async (event) => {
     document.querySelector(`[data-file-input="${dropZone.dataset.dropTarget}"]`)?.click();
     return;
   }
+  const auditRow = event.target.closest(".audit-row");
+  if (auditRow && !event.target.closest('[data-action="delete-audit"]')) {
+    selectAudit(auditRow.dataset.auditId);
+    return;
+  }
   const target = event.target.closest("[data-action]");
   if (event.target.closest("#test-integrations")) {
     await testIntegrations();
@@ -895,7 +956,7 @@ root.addEventListener("click", async (event) => {
     deleteAuditRecord(target.dataset.auditId, target.dataset.packageName);
     return;
   }
-  if (action === "select-audit") setState({ selectedAuditId: target.dataset.auditId });
+  if (action === "select-audit") selectAudit(target.dataset.auditId);
   if (action === "review-filter") setState({ reviewFilter: target.dataset.filter, expandedFindingId: null });
   if (action === "toggle-finding") setState({ expandedFindingId: getState().expandedFindingId === target.dataset.findingId ? null : target.dataset.findingId });
   if (action === "record-review-feedback") {
@@ -936,7 +997,7 @@ root.addEventListener("keydown", (event) => {
   const row = event.target.closest(".audit-row");
   if (row && (event.key === "Enter" || event.key === " ")) {
     event.preventDefault();
-    setState({ selectedAuditId: row.dataset.auditId });
+    selectAudit(row.dataset.auditId);
   }
   const reviewRow = event.target.closest(".review-row");
   if (reviewRow && (event.key === "Enter" || event.key === " ")) {
@@ -1075,9 +1136,11 @@ root.addEventListener("submit", async (event) => {
     clearUploadedFileLabels();
     setState({ query: "", riskFilter: "ALL", lastAuditDraft: payload });
     await loadWorkspace({ preserveSelection: false });
+    try { localStorage.setItem(`bidsentry-payload-${result.audit_id}`, JSON.stringify(result)); } catch {}
     const otherRows = getState().audits.filter((row) => row.audit_id !== localRow.audit_id);
     setState({
       audits: [localRow, ...otherRows], selectedAuditId: localRow.audit_id,
+      currentAudit: result,
       customReview: result, reviewFilter: "ALL", expandedFindingId: null, activeView: "review",
       reviewTab: "insights", reviewInsightsVisited: true,
     });

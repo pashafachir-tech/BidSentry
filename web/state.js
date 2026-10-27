@@ -1,5 +1,5 @@
 const initialState = {
-  overview: null, audits: [], selectedAuditId: null,
+  overview: null, audits: [], selectedAuditId: null, currentAudit: null,
   query: "", riskFilter: "ALL", integrations: null, loading: true,
   activeView: "overview", reviewFilter: "ALL", expandedFindingId: null,
   reviewTab: "matrix", reviewInsightsVisited: false,

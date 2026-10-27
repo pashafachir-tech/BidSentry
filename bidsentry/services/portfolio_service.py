@@ -48,7 +48,18 @@ class PortfolioService:
         summary = event.get("summary") if isinstance(event.get("summary"), dict) else {}
         findings = event.get("findings") if isinstance(event.get("findings"), list) else []
         normalized_findings = [
-            {"id": item.get("id", "FINDING"), "category": item.get("category", "Review"), "clause": item.get("id", "Temuan evaluasi"), "status": item.get("status", "REVIEW"), "severity": item.get("severity", "MEDIUM"), "source": "Audit tersimpan; kutipan tidak disimpan", "evidence": "Bukti tidak disimpan dalam log. Buka hasil audit saat ini atau jalankan evaluasi ulang."}
+            {
+                "id": item.get("id", "FINDING"),
+                "category": item.get("category", "Review"),
+                "clause": item.get("clause") or item.get("id", "Temuan evaluasi"),
+                "status": item.get("status", "REVIEW"),
+                "severity": item.get("severity", "MEDIUM"),
+                "source": item.get("source") or "Audit tersimpan",
+                "evidence": item.get("evidence") or "Bukti tidak disimpan dalam log.",
+                "requirement_evidence": item.get("requirement_evidence"),
+                "evidence_source": item.get("evidence_source"),
+                "review_note": item.get("review_note", ""),
+            }
             for item in findings if isinstance(item, dict)
         ]
         return {
@@ -59,6 +70,10 @@ class PortfolioService:
             "contract_value_idr": event.get("contract_value_idr"),
             "verdict": event.get("verdict", "REVIEW"), "risk_score": risk.get("score", 0), "risk_level": risk.get("level", "LOW"),
             "summary": {**summary, "findings": len(normalized_findings)}, "findings": normalized_findings,
+            "executive_summary": event.get("executive_summary") or event.get("evaluation", {}).get("executive_summary") or {},
+            "penalty_simulation": event.get("penalty_simulation") or event.get("evaluation", {}).get("penalty_simulation") or {},
+            "adendum_reconciliation": event.get("adendum_reconciliation") or event.get("evaluation", {}).get("adendum_reconciliation") or {},
+            "contextual_extraction": event.get("contextual_extraction") or event.get("evaluation", {}).get("contextual_extraction") or {},
             "source": "local_audit_log", "risk_method": risk.get("method", "deterministic evidence checks"),
             "engine_duration_ms": event.get("engine_duration_ms"),
         }

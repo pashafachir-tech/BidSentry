@@ -130,3 +130,47 @@ def test_compressed_procurement_timeline_flags_short_bidding_and_objection_perio
     assert "7 hari kerja" in finding["review_note"]
     assert "5 hari kerja" in finding["review_note"]
     assert result["verdict"] == "NO-GO"
+
+
+def test_deepseek_erp_financial_fatal_flaws_detection() -> None:
+    text = (
+        "Pagu Anggaran : Rp 8.500.000.000,-\n"
+        "TOTAL BIAYA (A + B) : 10.160.000.000\n"
+        "SELISIH (OVER BUDGET) : (1.660.000.000)\n"
+        "1. Mark-up Tarif Man-Month: Tarif Solution Architect sebesar Rp 150.000.000/man-month dan Project Manager Rp 120.000.000/man-month berada ±250–300% di atas standar rata-rata industri nasional (IKINDO) yang berkisar Rp 40.000.000–Rp 60.000.000/man-month.\n"
+        "2. Duplikasi Lisensi: Pos 'Lisensi Core ERP — Tahun Pertama' (Rp 1.200.000.000) dan Pos 'Biaya Pemeliharaan Berkala (Tahun Pertama)' (Rp 480.000.000) berpotensi tumpang tindih (double counting), karena biaya pemeliharaan tahun pertama umumnya sudah mencakup hak penggunaan lisensi.\n"
+        "Kualifikasi Personel: Project Manager (PMP / PRINCE2), Solution Architect (TOGAF / ERP Architect), sertifikasi modul ERP.\n"
+    )
+    result = EvaluationEngine().evaluate(EvaluationRequest(package_name="Implementasi ERP", dok_pemilihan=text))
+    finding_ids = {f["id"] for f in result["findings"]}
+
+    assert "FIN-OVER-BUDGET" in finding_ids
+    assert "FIN-MARKUP-RATE" in finding_ids
+    assert "FIN-DOUBLE-LICENSE" in finding_ids
+    assert "ADM-EXPERTS" in finding_ids
+
+    over_budget = next(f for f in result["findings"] if f["id"] == "FIN-OVER-BUDGET")
+    assert over_budget["status"] == "GAP"
+    assert over_budget["severity"] == "HIGH"
+    assert "10.160.000.000" in over_budget["review_note"]
+    assert "8.500.000.000" in over_budget["review_note"]
+
+    markup = next(f for f in result["findings"] if f["id"] == "FIN-MARKUP-RATE")
+    assert markup["status"] == "GAP"
+    assert markup["severity"] == "HIGH"
+    assert "150.000.000" in markup["review_note"]
+    assert "INKINDO" in markup["review_note"]
+
+    double_lic = next(f for f in result["findings"] if f["id"] == "FIN-DOUBLE-LICENSE")
+    assert double_lic["status"] == "GAP"
+    assert double_lic["severity"] == "HIGH"
+    assert "1.200.000.000" in double_lic["review_note"]
+    assert "double counting" in double_lic["review_note"]
+
+    experts = next(f for f in result["findings"] if f["id"] == "ADM-EXPERTS")
+    assert experts["status"] == "REVIEW"
+    assert experts["severity"] == "MEDIUM"
+
+    assert result["verdict"] == "NO-GO"
+    assert result["risk_level"] == "CRITICAL"
+    assert result["risk_score"] >= 70

@@ -100,6 +100,27 @@ class ApiContractTests(unittest.TestCase):
         self.assertIn("workspace.dispatch", log_text)
         self.assertNotIn("Isi dokumen rahasia", log_text)
 
+    def test_get_audit_by_id_returns_full_evaluation_payload(self) -> None:
+        created = self.router.dispatch("POST", "/api/audit", payload={
+            "package_name": "Paket Audit Full Payload",
+            "dok_pemilihan": "Pagu Anggaran Rp 8.500.000.000\nTOTAL BIAYA Rp 10.160.000.000\nSELISIH (OVER BUDGET)",
+        })
+        self.assertEqual(created.status, 200)
+        audit_id = created.body["data"]["audit_id"]
+
+        # Test query parameter endpoint
+        fetched = self.router.dispatch("GET", "/api/audit", f"audit_id={audit_id}")
+        self.assertEqual(fetched.status, 200)
+        self.assertEqual(fetched.body["data"]["audit_id"], audit_id)
+        self.assertEqual(fetched.body["data"]["package_name"], "Paket Audit Full Payload")
+        self.assertTrue(len(fetched.body["data"]["findings"]) > 0)
+        self.assertEqual(fetched.body["data"]["verdict"], "NO-GO")
+
+        # Test path parameter endpoint
+        fetched_path = self.router.dispatch("GET", f"/api/audits/{audit_id}")
+        self.assertEqual(fetched_path.status, 200)
+        self.assertEqual(fetched_path.body["data"]["audit_id"], audit_id)
+
     def test_unknown_route_and_wrong_method_are_consistent(self) -> None:
         missing = self.router.dispatch("GET", "/api/missing")
         wrong_method = self.router.dispatch("DELETE", "/api/audit")

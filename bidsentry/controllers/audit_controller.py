@@ -55,8 +55,13 @@ class AuditController:
             "risk": result["risk"],
             "summary": result["summary"],
             "engine_duration_ms": result.get("performance", {}).get("engine_duration_ms"),
-            "findings": [{"id": item["id"], "category": item["category"], "status": item["status"], "severity": item["severity"]} for item in result["findings"]],
+            "findings": result["findings"],
+            "executive_summary": result.get("executive_summary", {}),
+            "penalty_simulation": result.get("penalty_simulation", {}),
+            "adendum_reconciliation": result.get("adendum_reconciliation", {}),
+            "contextual_extraction": result.get("contextual_extraction", {}),
             "integrations": {"langflow": integration.get("status", "not_requested")},
+            "evaluation": result,
         })
         return result
 

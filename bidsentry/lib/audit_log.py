@@ -54,6 +54,38 @@ class AuditLog:
             return []
         return list(reversed(records))
 
+    def get_audit(self, audit_id: str) -> dict[str, Any] | None:
+        if not self.path.is_file() or not audit_id:
+            return None
+        target = str(audit_id).strip()
+        for event in reversed(list(self._iter_events())):
+            if event.get("event_type") == "audit.completed" and str(event.get("audit_id", "")).strip() == target:
+                if isinstance(event.get("evaluation"), dict):
+                    return event["evaluation"]
+                risk = event.get("risk") if isinstance(event.get("risk"), dict) else {}
+                return {
+                    "audit_id": event.get("audit_id"),
+                    "created_at": event.get("created_at"),
+                    "package_name": event.get("package_name"),
+                    "tender_id": event.get("tender_id"),
+                    "notice_number": event.get("notice_number"),
+                    "pokja_name": event.get("pokja_name"),
+                    "company_name": event.get("company_name"),
+                    "contract_value_idr": event.get("contract_value_idr"),
+                    "review_role": event.get("review_role", "procurement"),
+                    "verdict": event.get("verdict"),
+                    "risk_score": risk.get("score", 0),
+                    "risk_level": risk.get("level", "LOW"),
+                    "risk": risk,
+                    "summary": event.get("summary", {}),
+                    "executive_summary": event.get("executive_summary", {}),
+                    "findings": event.get("findings", []),
+                    "adendum_reconciliation": event.get("adendum_reconciliation", {}),
+                    "penalty_simulation": event.get("penalty_simulation", {}),
+                    "contextual_extraction": event.get("contextual_extraction", {}),
+                }
+        return None
+
     def delete_audit(self, audit_id: str) -> bool:
         if not self.path.is_file() or not audit_id:
             return False
