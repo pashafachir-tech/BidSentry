@@ -1,1 +1,0 @@
-Pre-refactor deck, PDF, and slide copy retained as a reversible snapshot. Current deliverables are in output/IBM_2026_BidSentry.* and output/pdf/IBM_2026_BidSentry.pdf.
