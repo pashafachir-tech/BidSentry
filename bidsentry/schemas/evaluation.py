@@ -15,6 +15,8 @@ class ContextExtractionItem(BaseModel):
 class ContextualExtractionResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
     scope: str | None = Field(default=None, max_length=1000)
+    brand_lockin_signals: list[ContextExtractionItem] = Field(default_factory=list, max_length=100)
+    timeline_anomalies: list[ContextExtractionItem] = Field(default_factory=list, max_length=100)
     addendum_changes: list[ContextExtractionItem] = Field(default_factory=list, max_length=100)
     personnel_qualifications: list[ContextExtractionItem] = Field(default_factory=list, max_length=100)
     sla_uptime: list[ContextExtractionItem] = Field(default_factory=list, max_length=100)

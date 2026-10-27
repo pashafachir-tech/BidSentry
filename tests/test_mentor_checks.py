@@ -106,3 +106,27 @@ def test_langflow_prompt_escapes_literal_json_braces() -> None:
     assert '{{"scope"' in prompt
     assert '{"scope": string or null' in rendered
     assert "{{" not in rendered
+
+
+def test_brand_lockin_detection_flags_exclusive_hardware_specifications() -> None:
+    text = "Prosesor per Node: 2 x Intel Xeon Scalable Gen 5 (Emerald Rapids), mendukung UPI 4.0. GPU: NVIDIA H100 SXM5."
+    result = EvaluationEngine().evaluate(EvaluationRequest(dok_pemilihan=text))
+    finding_ids = {f["id"] for f in result["findings"]}
+    assert "SPEC-LOCKIN-CPU" in finding_ids
+    assert "SPEC-LOCKIN-GPU" in finding_ids
+    cpu_finding = next(f for f in result["findings"] if f["id"] == "SPEC-LOCKIN-CPU")
+    assert cpu_finding["status"] == "GAP"
+    assert cpu_finding["severity"] == "HIGH"
+    assert "Pasal 19 ayat (1) Perpres 12/2021" in cpu_finding["review_note"]
+
+
+def test_compressed_procurement_timeline_flags_short_bidding_and_objection_periods() -> None:
+    text = "Masa penyusunan dokumen penawaran: 3 hari kerja. Masa sanggah: 3 hari kerja."
+    result = EvaluationEngine().evaluate(EvaluationRequest(dok_pemilihan=text))
+    finding = next(f for f in result["findings"] if f["id"] == "PROC-TIMELINE-COMPRESSED")
+    assert finding["status"] == "GAP"
+    assert finding["severity"] == "HIGH"
+    assert "Pasal 54 Perpres 12/2021" in finding["review_note"]
+    assert "7 hari kerja" in finding["review_note"]
+    assert "5 hari kerja" in finding["review_note"]
+    assert result["verdict"] == "NO-GO"
