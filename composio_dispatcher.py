@@ -23,6 +23,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta, timezone
+from typing import Any
 from bidsentry.config import Settings, load_env_file
 
 
@@ -38,16 +39,16 @@ def _get_api_key() -> str | None:
 
 # ─── Low-level HTTP helper ────────────────────────────────────────────────────
 
-def _post_composio(action: str, api_key: str, params: dict) -> dict:
+def _post_composio(action: str, api_key: str, params: dict, settings: Any = None) -> dict:
     """
     POST to the Composio execute endpoint for *action*.
     Returns the parsed JSON response dict.
     Raises urllib.error.URLError / urllib.error.HTTPError on network failure.
     """
-    settings = Settings.from_environment()
-    url     = settings.composio_base_url.format(action=urllib.parse.quote(action, safe=""))
+    cfg = settings or Settings.from_environment()
+    url     = cfg.composio_base_url.format(action=urllib.parse.quote(action, safe=""))
     payload = json.dumps({
-        "user_id": settings.composio_entity_id,
+        "user_id": cfg.composio_entity_id,
         "version": "latest",
         "arguments": params,
     }).encode("utf-8")
@@ -62,7 +63,7 @@ def _post_composio(action: str, api_key: str, params: dict) -> dict:
             "x-api-key":     api_key,
         },
     )
-    with urllib.request.urlopen(req, timeout=settings.composio_timeout_seconds) as resp:
+    with urllib.request.urlopen(req, timeout=cfg.composio_timeout_seconds) as resp:
         response_body = resp.read(2 * 1024 * 1024 + 1)
     if len(response_body) > 2 * 1024 * 1024:
         raise ValueError("Composio response exceeds the 2 MB limit.")
@@ -217,7 +218,7 @@ def _build_gmail_params(audit_data: dict) -> dict:
 
 # ─── Main dispatcher ──────────────────────────────────────────────────────────
 
-def dispatch_tender_workspace(audit_data: dict) -> dict:
+def dispatch_tender_workspace(audit_data: dict, settings: Any = None) -> dict:
     """
     Execute 3 Composio actions for the given audit data.
 
@@ -226,7 +227,10 @@ def dispatch_tender_workspace(audit_data: dict) -> dict:
     This function never raises — all exceptions are caught and returned
     as structured error payloads so the calling server stays alive.
     """
-    api_key = _get_api_key()
+    if settings is not None:
+        api_key = (getattr(settings, "composio_api_key", "") or "").strip() or None
+    else:
+        api_key = _get_api_key()
     action_plan = [
         ("GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN", _build_docs_params(audit_data)),
         ("GOOGLECALENDAR_CREATE_EVENT", _build_calendar_params(audit_data)),
@@ -250,7 +254,7 @@ def dispatch_tender_workspace(audit_data: dict) -> dict:
     success_count = 0
     for action_name, params in action_plan:
         try:
-            response = _post_composio(action_name, api_key, params)
+            response = _post_composio(action_name, api_key, params, settings=settings)
             succeeded = response.get("successful") is True
             data = response.get("data", response.get("response_data", {}))
             if not isinstance(data, dict):

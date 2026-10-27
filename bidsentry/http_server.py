@@ -51,6 +51,10 @@ class BidSentryHandler(BaseHTTPRequestHandler):
         self._method_not_allowed()
 
     def do_DELETE(self) -> None:
+        url = urllib.parse.urlparse(self.path)
+        if url.path.startswith("/api/"):
+            self._api("DELETE", url.path, url.query)
+            return
         self._method_not_allowed()
 
     def _api(self, method: str, path: str, query: str) -> None:

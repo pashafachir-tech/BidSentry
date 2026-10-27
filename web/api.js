@@ -21,6 +21,7 @@ export const api = {
   health: () => request("/health"),
   overview: () => request("/overview"),
   audits: ({ q = "", risk = "ALL" } = {}) => request(`/audits?${new URLSearchParams({ q, risk })}`),
+  deleteAudit: (auditId) => request(`/audits?${new URLSearchParams({ audit_id: auditId })}`, { method: "DELETE" }),
   evaluateAudit: (input) => request("/v1/audit/evaluate", { method: "POST", body: JSON.stringify(input), timeout: 60000 }),
   createAudit: (input) => request("/v1/audit/evaluate", { method: "POST", body: JSON.stringify(input), timeout: 60000 }),
   createSanggahan: (input) => request("/v1/audit/sanggahan-doc", { method: "POST", body: JSON.stringify(input), timeout: 60000 }),

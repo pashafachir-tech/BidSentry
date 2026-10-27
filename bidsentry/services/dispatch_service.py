@@ -8,11 +8,14 @@ from bidsentry.lib.pii import mask_value
 
 
 class DispatchService:
+    def __init__(self, settings: Any = None) -> None:
+        self.settings = settings
+
     def dispatch(self, payload: dict[str, Any]) -> dict[str, Any]:
         safe_payload = mask_value(payload)
         try:
             from composio_dispatcher import dispatch_tender_workspace
-            result = dispatch_tender_workspace(safe_payload)
+            result = dispatch_tender_workspace(safe_payload, settings=self.settings)
         except Exception as exc:  # Keep the local app available when an optional connector fails.
             result = {
                 "status": "unavailable",

@@ -114,12 +114,15 @@ def create_asgi_app(settings: Settings | None = None) -> FastAPI:
                 filename = query.get("filename", [""])[0]
                 payload = {"filename": filename, "content": body}
             else:
-                if request.method in {"POST", "PUT"}:
+                if request.method in {"POST", "PUT", "DELETE"}:
                     content_type = request.headers.get("content-type", "").split(";", 1)[0].strip().casefold()
-                    if content_type != "application/json":
-                        return JSONResponse(failure("UNSUPPORTED_MEDIA_TYPE", "Content-Type must be application/json.", request_id), status_code=415)
                     raw = await _read_limited(request, application.settings.max_request_bytes)
-                    payload = json.loads(raw.decode("utf-8")) if raw else {}
+                    if raw and content_type == "application/json":
+                        payload = json.loads(raw.decode("utf-8"))
+                    elif raw and content_type != "application/json":
+                        return JSONResponse(failure("UNSUPPORTED_MEDIA_TYPE", "Content-Type must be application/json.", request_id), status_code=415)
+                    else:
+                        payload = {} if request.method in {"POST", "PUT"} else None
                 else:
                     payload = None
             result: ApiResponse = await run_in_threadpool(

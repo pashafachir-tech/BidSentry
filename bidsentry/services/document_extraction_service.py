@@ -100,32 +100,79 @@ class DocumentExtractionService:
 
     @staticmethod
     def _pdf(content: bytes) -> str:
-        # Preflight compressed streams before handing a PDF to an optional parser.
-        fallback_text = DocumentExtractionService._pdf_basic(content)
-        # Use pypdf when installed for better Unicode extraction, while keeping
-        # the local application usable without third-party dependencies.
+        # 1. Prioritize PyMuPDF (fast, robust C-based parser, handles modern/complex PDFs in milliseconds)
         try:
-            from pypdf import PdfReader  # type: ignore[import-not-found]
-        except ImportError:
-            return fallback_text
-        reader = PdfReader(io.BytesIO(content), strict=False)
-        pages = reader.pages
-        if len(pages) > MAX_PDF_PAGES:
-            raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
-        parts: list[str] = []
-        character_count = 0
-        for page in pages:
-            page_text = page.extract_text() or ""
-            character_count += len(page_text)
-            if character_count > MAX_EXTRACTED_CHARACTERS:
-                raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
-            parts.append(page_text)
-        text = "\n".join(parts).strip()
-        return text or fallback_text
+            import pymupdf
+            doc = pymupdf.open(stream=content, filetype="pdf")
+            if len(doc) > MAX_PDF_PAGES:
+                raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
+            parts: list[str] = []
+            character_count = 0
+            for page in doc:
+                page_text = page.get_text() or ""
+                character_count += len(page_text)
+                if character_count > MAX_EXTRACTED_CHARACTERS:
+                    raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
+                parts.append(page_text)
+            text = "\n".join(parts).strip()
+            if text:
+                return text
+        except ValidationError:
+            raise
+        except Exception:
+            pass
+
+        # 2. Try pypdf
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(content), strict=False)
+            pages = reader.pages
+            if len(pages) > MAX_PDF_PAGES:
+                raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
+            parts = []
+            character_count = 0
+            for page in pages:
+                page_text = page.extract_text() or ""
+                character_count += len(page_text)
+                if character_count > MAX_EXTRACTED_CHARACTERS:
+                    raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
+                parts.append(page_text)
+            text = "\n".join(parts).strip()
+            if text:
+                return text
+        except ValidationError:
+            raise
+        except Exception:
+            pass
+
+        # 3. Try pdfplumber
+        try:
+            import pdfplumber
+            with pdfplumber.open(io.BytesIO(content)) as pdf:
+                if len(pdf.pages) > MAX_PDF_PAGES:
+                    raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
+                parts = []
+                character_count = 0
+                for page in pdf.pages:
+                    page_text = page.extract_text() or ""
+                    character_count += len(page_text)
+                    if character_count > MAX_EXTRACTED_CHARACTERS:
+                        raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
+                    parts.append(page_text)
+                text = "\n".join(parts).strip()
+                if text:
+                    return text
+        except ValidationError:
+            raise
+        except Exception:
+            pass
+
+        # 4. Fallback only if all modern libraries fail or are not available
+        return DocumentExtractionService._pdf_basic(content)
 
     @staticmethod
     def _pdf_basic(content: bytes) -> str:
-        """Best-effort extraction for uncomplicated PDFs when pypdf is absent."""
+        """Best-effort extraction for uncomplicated PDFs when parsers are absent."""
         source = content.decode("latin-1", errors="ignore")
         streams: list[str] = []
         expanded_bytes = 0
@@ -147,9 +194,11 @@ class DocumentExtractionService:
             if expanded_bytes > MAX_EXPANDED_FILE_BYTES:
                 raise ValidationError("PDF memuat data terkompresi yang melebihi batas aman 8 MB.", [{"field": "file", "issue": "expanded_file_too_large"}])
             streams.append(decoded.decode("latin-1", errors="ignore"))
+            if len(streams) > 200:
+                break
         text_source = "\n".join(streams) or source
         found: list[str] = []
-        token = re.compile(r"\(((?:\\.|[^\\)])*)\)\s*Tj|\[((?:.|\n)*?)\]\s*TJ", re.DOTALL)
+        token = re.compile(r"\(((?:\\.|[^\\)])*)\)\s*Tj|\[([^\]]*?)\]\s*TJ")
         for item in token.finditer(text_source):
             value = item.group(1) if item.group(1) is not None else item.group(2)
             pieces = re.findall(r"\(((?:\\.|[^\\)])*)\)|<([0-9A-Fa-f]+)>", value)

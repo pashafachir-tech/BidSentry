@@ -54,6 +54,29 @@ class AuditLog:
             return []
         return list(reversed(records))
 
+    def delete_audit(self, audit_id: str) -> bool:
+        if not self.path.is_file() or not audit_id:
+            return False
+        with self._lock:
+            try:
+                lines = self.path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                return False
+            kept_lines = []
+            found = False
+            for line in lines:
+                try:
+                    item = json.loads(line)
+                    if isinstance(item, dict) and item.get("audit_id") == audit_id:
+                        found = True
+                        continue
+                except (json.JSONDecodeError, TypeError):
+                    pass
+                kept_lines.append(line)
+            if found:
+                self.path.write_text("\n".join(kept_lines) + ("\n" if kept_lines else ""), encoding="utf-8")
+            return found
+
     def finding_exists(self, audit_id: str, finding_id: str) -> bool:
         return any(
             event.get("event_type") == "audit.completed"

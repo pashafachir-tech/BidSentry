@@ -1,4 +1,4 @@
-﻿# Python
+# Python
 __pycache__/
 *.py[cod]
 *.pyo
@@ -51,6 +51,23 @@ desktop.ini
 .idea/
 *.swp
 *~
+
+# Database & runtime files
+*.db
+*.sqlite
+*.sqlite3
+bidsentry_jobs.db
+
+# Build & temp tool artifacts
+.codex-build/
+.codex-finalizer/
+.vscode/
+.turbo/
+out/
+
+# Output archives and external template references
+output/template-reference/
+output/*.zip
 
 # Langflow runtime
 langflow/*.db

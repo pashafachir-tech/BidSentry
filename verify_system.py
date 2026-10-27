@@ -1,125 +1,39 @@
 #!/usr/bin/env python3
-"""
-BidSentry — System Verification
-=================================
-Checks that all required local services are reachable before running the
-full stack. Uses Python stdlib only — no third-party packages needed.
+"""Check the local BidSentry API and report optional integration modes."""
 
-Services checked:
-  1. Langflow Core Engine   — http://localhost:7860/
-  2. BidSentry Bridge Server — http://localhost:8000/
+from __future__ import annotations
 
-Exit codes:
-  0 — All services UP
-  1 — One or more services unreachable
-
-Usage:
-    python verify_system.py
-"""
-
+import json
+import os
 import sys
 import urllib.error
 import urllib.request
 
-# ─── Service definitions ──────────────────────────────────────────────────────
-
-SERVICES = [
-    {
-        "name":    "Langflow Core Engine",
-        "url":     "http://localhost:7860/",
-        "timeout": 5,
-    },
-    {
-        "name":    "BidSentry Bridge Server",
-        "url":     "http://localhost:8000/",
-        "timeout": 5,
-    },
-]
-
-# ─── Colours (disabled automatically on Windows without ANSICON / WT) ─────────
-
-_RESET  = "\033[0m"
-_GREEN  = "\033[32m"
-_RED    = "\033[31m"
-_YELLOW = "\033[33m"
-_BOLD   = "\033[1m"
-
-
-def _c(colour: str, text: str) -> str:
-    """Wrap text in ANSI colour codes."""
-    return f"{colour}{text}{_RESET}"
-
-
-# ─── HTTP probe ───────────────────────────────────────────────────────────────
-
-def _probe(url: str, timeout: int) -> tuple[bool, str]:
-    """
-    Attempt a GET to *url*.  Returns (is_up, detail_message).
-    Any HTTP response (even 4xx/5xx) counts as UP — the process is listening.
-    Only connection-level errors (refused, timeout, DNS) count as DOWN.
-    """
-    try:
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
-            return True, f"HTTP {resp.status}"
-    except urllib.error.HTTPError as exc:
-        # Server replied — it's up, even if it returned an error code
-        return True, f"HTTP {exc.code}"
-    except urllib.error.URLError as exc:
-        reason = str(exc.reason)
-        if "refused" in reason.lower():
-            return False, "Connection refused - service not running"
-        if "timed out" in reason.lower() or "time" in reason.lower():
-            return False, "Connection timed out"
-        return False, reason
-    except TimeoutError:
-        return False, "Connection timed out"
-    except OSError as exc:
-        return False, str(exc)
-
-
-# ─── Main ─────────────────────────────────────────────────────────────────────
-
-_SEP = "-" * 56
-
 
 def main() -> int:
-    print()
-    print(_c(_BOLD, _SEP))
-    print(_c(_BOLD, "  BidSentry -- System Verification"))
-    print(_c(_BOLD, _SEP))
-
-    all_up   = True
-    results  = []
-
-    for svc in SERVICES:
-        is_up, detail = _probe(svc["url"], svc["timeout"])
-        results.append((svc["name"], svc["url"], is_up, detail))
-        status_str = _c(_GREEN, "  [UP]  ") if is_up else _c(_RED, "  [DOWN]")
-        print(f"  {status_str}  {svc['name']:<30}  {_c(_YELLOW, svc['url'])}")
-        if not is_up:
-            print(f"             +-- {_c(_RED, detail)}")
-            all_up = False
-
-    print(_c(_BOLD, _SEP))
-
-    if all_up:
-        print(_c(_GREEN, "  All services are UP. BidSentry is ready.\n"))
-        return 0
-    else:
-        down = [r[0] for r in results if not r[2]]
-        print(_c(_RED, f"  {len(down)} service(s) unreachable: {', '.join(down)}"))
-        print()
-        print("  Start missing services and re-run:")
-        for name, _, is_up, _ in results:
-            if not is_up:
-                if "Langflow" in name:
-                    print(_c(_YELLOW, "    langflow run --host 0.0.0.0 --port 7860"))
-                elif "Bridge" in name:
-                    print(_c(_YELLOW, "    python server.py"))
-        print()
+    host = os.environ.get("HOST", "127.0.0.1")
+    port = os.environ.get("PORT", os.environ.get("BRIDGE_PORT", "8000"))
+    url = f"http://{host}:{port}/api/health"
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as exc:
+        print(f"BidSentry API unavailable at {url}: {exc}", file=sys.stderr)
         return 1
+    data = payload.get("data", {})
+    if data.get("status") != "ok":
+        print("BidSentry responded, but its health payload is not valid.", file=sys.stderr)
+        return 1
+    integrations = data.get("integrations", {})
+    print(f"BidSentry API: ready ({url})")
+    for name in ("langflow", "composio", "ibm_bob"):
+        service = integrations.get(name, {})
+        mode = service.get("mode", "status unavailable")
+        configured = service.get("configured", service.get("mcp_config_present", False))
+        print(f"{name}: {mode} ({'configured' if configured else 'not configured'})")
+    print("Optional services do not block local audits.")
+    return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

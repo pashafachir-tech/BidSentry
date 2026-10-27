@@ -1,12 +1,16 @@
 import { api } from "./api.js";
 import { getState, setState, subscribe } from "./state.js";
-import { renderApp } from "./render.js";
+import { renderApp, escapeHtml } from "./render.js";
 import { getReviewSnapshot } from "./review.js";
 
 const root = document.getElementById("app");
 const toastNode = document.getElementById("toast");
 const uploadedFiles = { dok_pemilihan: [], adendum: [], pustaka: [], contract_draft: [], baseline_contract: [] };
 const uploadErrors = { dok_pemilihan: [], adendum: [], pustaka: [], contract_draft: [], baseline_contract: [] };
+const dragCounters = {};
+let pendingReplace = null;
+const SUPPORTED_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".csv", ".json"]);
+const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
 const auditSubmitReadyMarkup = 'Jalankan audit <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 const MAX_FILES_PER_UPLOAD = 20;
 const MAX_PARALLEL_EXTRACTIONS = 3;
@@ -72,6 +76,29 @@ async function loadWorkspace({ preserveSelection = true, includeOverview = true,
     if (requestSequence !== workspaceRequestSequence) return;
     setState({ loading: false });
     toast(error.message, "error");
+  }
+}
+
+async function deleteAuditRecord(auditId, packageName = "Audit ini") {
+  if (!auditId) return;
+  const confirmed = window.confirm(`Hapus pemeriksaan "${packageName}" dari riwayat? Tindakan ini tidak dapat dibatalkan.`);
+  if (!confirmed) return;
+
+  try {
+    await api.deleteAudit(auditId);
+    toast(`Pemeriksaan "${packageName}" berhasil dihapus.`);
+    const state = getState();
+    const remainingAudits = (state.audits || []).filter((row) => row.audit_id !== auditId);
+    const nextSelected = remainingAudits[0]?.audit_id || null;
+    const isCustomActive = state.customReview?.audit_id === auditId;
+    setState({
+      audits: remainingAudits,
+      selectedAuditId: nextSelected,
+      customReview: isCustomActive ? null : state.customReview,
+    });
+    await loadWorkspace({ preserveSelection: false });
+  } catch (error) {
+    toast(error.message || "Gagal menghapus audit.", "error");
   }
 }
 
@@ -172,78 +199,369 @@ async function testIntegrations() {
   }
 }
 
+function formatFileSize(bytes) {
+  if (typeof bytes !== "number" || isNaN(bytes) || bytes <= 0) return "0 B";
+  const units = ["B", "KB", "MB", "GB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const unit = units[Math.min(i, units.length - 1)];
+  const val = bytes / Math.pow(1024, unit === "B" ? 0 : unit === "KB" ? 1 : 2);
+  return `${val < 10 && unit !== "B" ? val.toFixed(1) : Math.round(val)} ${unit}`;
+}
+
+function getFileIcon(filename) {
+  const ext = (filename || "").slice((filename || "").lastIndexOf(".")).toLowerCase();
+  if (ext === ".pdf") return "📄";
+  if (ext === ".docx") return "📝";
+  if (ext === ".json") return "📋";
+  if (ext === ".csv") return "📊";
+  return "📑";
+}
+
+function getUploadedFiles(field) {
+  if (!uploadedFiles[field]) uploadedFiles[field] = [];
+  return uploadedFiles[field];
+}
+
+function getUploadErrors(field) {
+  if (!uploadErrors[field]) uploadErrors[field] = [];
+  return uploadErrors[field];
+}
+
+function getDragCounter(field) {
+  return dragCounters[field] || 0;
+}
+
+function setDragCounter(field, count) {
+  dragCounters[field] = Math.max(0, count);
+  return dragCounters[field];
+}
+
+function validateFile(file) {
+  if (!file) return { valid: false, message: "File tidak terbaca atau kosong." };
+  const name = file.name || "";
+  const lastDot = name.lastIndexOf(".");
+  const ext = lastDot !== -1 ? name.slice(lastDot).toLowerCase() : "";
+  if (!SUPPORTED_EXTENSIONS.has(ext)) {
+    return {
+      valid: false,
+      message: `Format "${ext || "tanpa ekstensi"}" tidak didukung. Format didukung: PDF, DOCX, TXT, MD, CSV, JSON.`,
+    };
+  }
+  if (file.size > MAX_DOCUMENT_BYTES) {
+    return {
+      valid: false,
+      message: `Ukuran file melebihi batas 8 MB (${formatFileSize(file.size)}).`,
+    };
+  }
+  if (file.size === 0) {
+    return {
+      valid: false,
+      message: "File kosong (0 byte).",
+    };
+  }
+  return { valid: true };
+}
+
+function readTextFileLocally(file) {
+  return new Promise((resolve, reject) => {
+    let reader = new FileReader();
+    reader.onload = () => {
+      const result = reader?.result || "";
+      reader = null;
+      resolve(result);
+    };
+    reader.onerror = () => {
+      reader = null;
+      reject(new Error("File tidak dapat dibaca dari penyimpanan perangkat."));
+    };
+    reader.onabort = () => {
+      reader = null;
+      reject(new Error("Pembacaan file dibatalkan."));
+    };
+    try {
+      reader.readAsText(file, "utf-8");
+    } catch (err) {
+      reader = null;
+      reject(err);
+    }
+  });
+}
+
+async function extractSingleDocument(file) {
+  const validation = validateFile(file);
+  if (!validation.valid) {
+    throw new Error(validation.message);
+  }
+
+  const name = file.name || "";
+  const ext = name.slice(name.lastIndexOf(".")).toLowerCase();
+
+  try {
+    const data = await api.extractDocument(file);
+    if (!data || typeof data.text !== "string") {
+      throw new Error("Hasil ekstraksi dokumen kosong.");
+    }
+    return data;
+  } catch (apiError) {
+    if ([".txt", ".md", ".csv", ".json"].includes(ext)) {
+      try {
+        const text = await readTextFileLocally(file);
+        let processedText = text.trim();
+        if (!processedText) {
+          throw new Error("File tidak memiliki konten teks.");
+        }
+        if (ext === ".json") {
+          try {
+            const parsed = JSON.parse(processedText);
+            processedText = JSON.stringify(parsed, null, 2);
+          } catch {
+            // Keep original text
+          }
+        }
+        return {
+          filename: file.name,
+          text: processedText,
+          characters: processedText.length,
+        };
+      } catch (localError) {
+        throw new Error(localError.message || apiError.message || "File teks tidak dapat dibaca.");
+      }
+    }
+    throw new Error(apiError.message || "File dokumen tidak dapat diekstrak oleh sistem.");
+  }
+}
+
 function clearUploadedFileLabels() {
   for (const field of Object.keys(uploadedFiles)) {
     uploadedFiles[field] = [];
     uploadErrors[field] = [];
-    const list = document.getElementById(`${field}-files`);
-    if (list) { list.textContent = ""; list.classList.remove("file-list-error"); }
+    dragCounters[field] = 0;
+    renderFileNames(field);
+  }
+  pendingReplace = null;
+}
+
+function removeUploadedFile(field, fileId, quiet = false) {
+  const files = getUploadedFiles(field);
+  const index = files.findIndex((f) => f.id === fileId);
+  if (index === -1) return;
+  const removed = files[index];
+  files.splice(index, 1);
+
+  const textarea = document.querySelector(`[name="${field}"]`);
+  if (textarea && removed) {
+    const block = `--- ${removed.name} ---\n${removed.text}`;
+    if (textarea.value.includes(block)) {
+      textarea.value = textarea.value.replace(block, "").replace(/\n{3,}/g, "\n\n").trim();
+    } else {
+      const escaped = removed.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(`(?:^|\n\n)--- ${escaped} ---[\s\S]*?(?=(?:\n\n--- [^\n]+ ---|$))`, "g");
+      textarea.value = textarea.value.replace(regex, "").trim();
+    }
+  }
+
+  const input = document.querySelector(`[data-file-input="${field}"]`);
+  if (input && files.length === 0) {
+    input.value = "";
+  }
+
+  renderFileNames(field);
+  if (!quiet) {
+    toast(`File "${removed.name}" dihapus.`);
+  }
+}
+
+function dismissUploadError(field, errorId) {
+  const errors = getUploadErrors(field);
+  const idx = errors.findIndex((e) => e.id === errorId);
+  if (idx !== -1) {
+    errors.splice(idx, 1);
+    renderFileNames(field);
+  }
+}
+
+function clearSlotSection(field) {
+  const files = getUploadedFiles(field);
+  const errors = getUploadErrors(field);
+  const textarea = document.querySelector(`[name="${field}"]`);
+  const input = document.querySelector(`[data-file-input="${field}"]`);
+
+  const hadContent = (files.length > 0) || (errors.length > 0) || (textarea && textarea.value.trim().length > 0);
+
+  uploadedFiles[field] = [];
+  uploadErrors[field] = [];
+  dragCounters[field] = 0;
+  if (textarea) textarea.value = "";
+  if (input) input.value = "";
+  renderFileNames(field);
+
+  if (hadContent) {
+    const sectionName = field === "dok_pemilihan"
+      ? "Dokumen pemilihan"
+      : field === "adendum"
+      ? "Adendum"
+      : field === "pustaka"
+      ? "Bukti/kredensial"
+      : field === "contract_draft"
+      ? "Draf kontrak"
+      : "Kontrak baseline";
+    toast(`${sectionName} berhasil dibersihkan.`);
   }
 }
 
 function renderFileNames(field) {
-  const list = document.getElementById(`${field}-files`);
-  if (!list) return;
-  const messages = [...uploadedFiles[field], ...uploadErrors[field].map((item) => `Gagal · ${item.name ? `${item.name}: ` : ""}${item.message}`)];
-  list.textContent = messages.join(" · ");
-  list.classList.toggle("file-list-error", uploadErrors[field].length > 0);
+  const container = document.getElementById(`${field}-files`);
+  if (!container) return;
+  const files = getUploadedFiles(field);
+  const errors = getUploadErrors(field);
+
+  if (files.length === 0 && errors.length === 0) {
+    container.innerHTML = "";
+    return;
+  }
+
+  const fileItemsHtml = files.map((file) => `
+    <div class="uploaded-file-item" data-file-id="${escapeHtml(file.id)}">
+      <div class="uploaded-file-info">
+        <span class="uploaded-file-icon" aria-hidden="true">${getFileIcon(file.name)}</span>
+        <span class="uploaded-file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
+        <span class="uploaded-file-meta">${escapeHtml(file.sizeFormatted)}${file.characters ? ` · ${new Intl.NumberFormat("id-ID").format(file.characters)} karakter` : ""}</span>
+      </div>
+      <div class="uploaded-file-actions">
+        <button type="button" class="file-action-btn file-action-replace" data-action="replace-file" data-field="${escapeHtml(field)}" data-file-id="${escapeHtml(file.id)}" title="Ganti file ini">🔄 Ganti</button>
+        <button type="button" class="file-action-btn file-action-remove" data-action="remove-file" data-field="${escapeHtml(field)}" data-file-id="${escapeHtml(file.id)}" title="Hapus file ini">🗑️ Hapus</button>
+      </div>
+    </div>
+  `).join("");
+
+  const errorItemsHtml = errors.map((err) => `
+    <div class="uploaded-file-error" data-error-id="${escapeHtml(err.id)}">
+      <div class="uploaded-file-info">
+        <span class="uploaded-file-error-icon" aria-hidden="true">⚠️</span>
+        <span class="uploaded-file-error-msg">${err.name ? `<strong>${escapeHtml(err.name)}:</strong> ` : ""}${escapeHtml(err.message)}</span>
+      </div>
+      <div class="uploaded-file-actions">
+        <button type="button" class="file-action-btn file-action-dismiss" data-action="dismiss-error" data-field="${escapeHtml(field)}" data-error-id="${escapeHtml(err.id)}" title="Tutup pesan error">✕</button>
+      </div>
+    </div>
+  `).join("");
+
+  container.innerHTML = fileItemsHtml + errorItemsHtml;
 }
 
 async function ingestFiles(fileList, field) {
-  const files = [...(fileList || [])];
+  const rawFiles = [...(fileList || [])];
   const textarea = document.querySelector(`[name="${field}"]`);
-  if (!textarea || !files.length) return;
-  if (files.length > MAX_FILES_PER_UPLOAD) {
-    uploadErrors[field].push({ name: "", message: `maksimal ${MAX_FILES_PER_UPLOAD} file dalam satu kali unggah.` });
+  if (!textarea || !rawFiles.length) return;
+
+  const currentFiles = getUploadedFiles(field);
+  const currentErrors = getUploadErrors(field);
+
+  if (pendingReplace && pendingReplace.field === field) {
+    removeUploadedFile(field, pendingReplace.fileId, true);
+    pendingReplace = null;
+  }
+
+  if (rawFiles.length > MAX_FILES_PER_UPLOAD) {
+    currentErrors.push({
+      id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: "",
+      message: `Maksimal ${MAX_FILES_PER_UPLOAD} file dalam satu kali unggah.`,
+    });
     renderFileNames(field);
     toast(`Pilih maksimal ${MAX_FILES_PER_UPLOAD} file dalam satu kali unggah.`, "error");
     return;
   }
+
   const submit = document.getElementById("submit-audit");
   activeUploads += 1;
-  if (submit) { submit.disabled = true; submit.textContent = "Membaca file…"; }
-  const zone = root.querySelector(`.drop-zone[data-drop-target="${field}"]`);
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = "Membaca file…";
+  }
+
+  const zone = document.querySelector(`.drop-zone[data-drop-target="${field}"]`);
   if (zone) zone.classList.add("is-reading");
+
   try {
     const results = [];
-    for (let offset = 0; offset < files.length; offset += MAX_PARALLEL_EXTRACTIONS) {
-      const batch = await Promise.all(files.slice(offset, offset + MAX_PARALLEL_EXTRACTIONS).map(async (file) => {
-        try {
-          if (file.size > 8 * 1024 * 1024) throw new Error("ukuran maksimum 8 MB.");
-          return { ok: true, file, data: await api.extractDocument(file) };
-        } catch (error) {
-          return { ok: false, file, message: error.message || "file tidak dapat dibaca." };
-        }
-      }));
+    for (let offset = 0; offset < rawFiles.length; offset += MAX_PARALLEL_EXTRACTIONS) {
+      const batch = await Promise.all(
+        rawFiles.slice(offset, offset + MAX_PARALLEL_EXTRACTIONS).map(async (file) => {
+          try {
+            const data = await extractSingleDocument(file);
+            return { ok: true, file, data };
+          } catch (error) {
+            return { ok: false, file, message: error.message || "File tidak dapat dibaca." };
+          }
+        })
+      );
       results.push(...batch);
     }
-    const extracted = results.filter((item) => item.ok).map((item) => item.data);
-    const failed = results.filter((item) => !item.ok);
-    const attemptedNames = new Set(files.map((file) => file.name));
-    uploadErrors[field] = uploadErrors[field].filter((item) => item.name && !attemptedNames.has(item.name));
-    if (failed.length) uploadErrors[field].push(...failed.map((item) => ({ name: item.file.name, message: item.message })));
+
+    const successful = results.filter((r) => r.ok);
+    const failed = results.filter((r) => !r.ok);
+
+    const attemptedNames = new Set(rawFiles.map((f) => f.name));
+    uploadErrors[field] = currentErrors.filter((item) => item.name && !attemptedNames.has(item.name));
+
+    if (failed.length) {
+      uploadErrors[field].push(
+        ...failed.map((item) => ({
+          id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: item.file.name,
+          message: item.message,
+        }))
+      );
+    }
+
     let addedCount = 0;
-    if (extracted.length) {
-      const additions = extracted.map((item) => `--- ${item.filename} ---\n${item.text}`).join("\n\n");
+    if (successful.length) {
+      const additions = successful.map((item) => `--- ${item.data.filename} ---\n${item.data.text}`).join("\n\n");
       if (textarea.value.length + additions.length + 2 > 1_000_000) {
-        uploadErrors[field].push(...extracted.map((item) => ({ name: item.filename, message: "gabungan teks melebihi 1.000.000 karakter; file ini tidak dimasukkan." })));
+        uploadErrors[field].push({
+          id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: "",
+          message: "Gabungan teks melebihi 1.000.000 karakter; file ini tidak dimasukkan.",
+        });
       } else {
         textarea.value = `${textarea.value.trim()}${textarea.value.trim() ? "\n\n" : ""}${additions}`;
-        uploadedFiles[field].push(...extracted.map((item) => `${item.filename} (${new Intl.NumberFormat("id-ID").format(item.characters)} karakter)`));
-        const addedNames = new Set(extracted.map((item) => item.filename));
-        uploadErrors[field] = uploadErrors[field].filter((item) => !addedNames.has(item.name));
-        addedCount = extracted.length;
+        for (const item of successful) {
+          uploadedFiles[field].push({
+            id: `${item.file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            name: item.data.filename,
+            size: item.file.size,
+            sizeFormatted: formatFileSize(item.file.size),
+            characters: item.data.characters,
+            text: item.data.text,
+          });
+        }
+        addedCount = successful.length;
       }
     }
+
     renderFileNames(field);
+
     if (field === "dok_pemilihan") {
       const packageInput = document.querySelector('[name="package_name"]');
-      if (addedCount === 1 && packageInput && !packageInput.value.trim()) packageInput.value = extracted[0].filename.replace(/\.[^.]+$/, "");
+      if (addedCount === 1 && packageInput && !packageInput.value.trim()) {
+        packageInput.value = successful[0].data.filename.replace(/\.[^.]+$/, "");
+      }
     }
-    const sectionName = field === "dok_pemilihan" ? "dokumen pemilihan" : field === "adendum" ? "adendum" : "bukti/kredensial";
-    if (failed.length || uploadErrors[field].length) {
-      const firstFailure = uploadErrors[field][0];
-      toast(`${addedCount} file baru dibaca ke ${sectionName}; ${uploadErrors[field].length} file perlu diperiksa. ${firstFailure?.name ? `${firstFailure.name}: ` : ""}${firstFailure?.message || "Periksa daftar file."}`, "error");
+
+    const sectionName = field === "dok_pemilihan"
+      ? "dokumen pemilihan"
+      : field === "adendum"
+      ? "adendum"
+      : field === "pustaka"
+      ? "bukti/kredensial"
+      : field === "contract_draft"
+      ? "draf kontrak"
+      : "kontrak baseline";
+
+    if (failed.length) {
+      const firstFailure = failed[0];
+      toast(`${addedCount ? `${addedCount} file terbaca, ` : ""}${failed.length} file bermasalah: ${firstFailure.file.name} (${firstFailure.message})`, "error");
     } else if (addedCount) {
       toast(`${addedCount} file berhasil dibaca ke bagian ${sectionName}.`);
     }
@@ -494,8 +812,38 @@ async function dispatchFollowUp() {
 }
 
 root.addEventListener("click", async (event) => {
+  const clearBtn = event.target.closest('[data-action="clear-section"]');
+  if (clearBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    clearSlotSection(clearBtn.dataset.field);
+    return;
+  }
+  const removeBtn = event.target.closest('[data-action="remove-file"]');
+  if (removeBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    removeUploadedFile(removeBtn.dataset.field, removeBtn.dataset.fileId);
+    return;
+  }
+  const replaceBtn = event.target.closest('[data-action="replace-file"]');
+  if (replaceBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    pendingReplace = { field: replaceBtn.dataset.field, fileId: replaceBtn.dataset.fileId };
+    document.querySelector(`[data-file-input="${replaceBtn.dataset.field}"]`)?.click();
+    return;
+  }
+  const dismissBtn = event.target.closest('[data-action="dismiss-error"]');
+  if (dismissBtn) {
+    event.preventDefault();
+    event.stopPropagation();
+    dismissUploadError(dismissBtn.dataset.field, dismissBtn.dataset.errorId);
+    return;
+  }
   const dropZone = event.target.closest(".drop-zone");
   if (dropZone) {
+    pendingReplace = null;
     document.querySelector(`[data-file-input="${dropZone.dataset.dropTarget}"]`)?.click();
     return;
   }
@@ -540,6 +888,12 @@ root.addEventListener("click", async (event) => {
   if (action === "review-tab") {
     const tab = target.dataset.tab === "insights" ? "insights" : "matrix";
     setState({ reviewTab: tab, reviewInsightsVisited: getState().reviewInsightsVisited || tab === "insights" });
+  }
+  if (action === "delete-audit") {
+    event.preventDefault();
+    event.stopPropagation();
+    deleteAuditRecord(target.dataset.auditId, target.dataset.packageName);
+    return;
   }
   if (action === "select-audit") setState({ selectedAuditId: target.dataset.auditId });
   if (action === "review-filter") setState({ reviewFilter: target.dataset.filter, expandedFindingId: null });
@@ -591,24 +945,71 @@ root.addEventListener("keydown", (event) => {
   }
 });
 
-root.addEventListener("dragover", (event) => {
-  const zone = event.target.closest(".drop-zone");
+// Prevent default drag/drop behavior on entire window to prevent accidental navigation
+["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
+  window.addEventListener(eventName, (event) => {
+    event.preventDefault();
+  }, false);
+});
+
+document.addEventListener("dragenter", (event) => {
+  const zone = event.target.closest?.(".drop-zone");
   if (!zone) return;
   event.preventDefault();
+  event.stopPropagation();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+  const field = zone.dataset.dropTarget;
+  if (!field) return;
+  const count = setDragCounter(field, getDragCounter(field) + 1);
+  if (count > 0) zone.classList.add("is-dragging");
+});
+
+document.addEventListener("dragover", (event) => {
+  const zone = event.target.closest?.(".drop-zone");
+  if (!zone) return;
+  event.preventDefault();
+  event.stopPropagation();
+  if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
   zone.classList.add("is-dragging");
 });
 
-root.addEventListener("dragleave", (event) => {
-  const zone = event.target.closest(".drop-zone");
-  if (zone && !zone.contains(event.relatedTarget)) zone.classList.remove("is-dragging");
-});
-
-root.addEventListener("drop", (event) => {
-  const zone = event.target.closest(".drop-zone");
+document.addEventListener("dragleave", (event) => {
+  const zone = event.target.closest?.(".drop-zone");
   if (!zone) return;
   event.preventDefault();
+  event.stopPropagation();
+  const field = zone.dataset.dropTarget;
+  if (!field) return;
+  const count = setDragCounter(field, getDragCounter(field) - 1);
+  if (count <= 0) zone.classList.remove("is-dragging");
+});
+
+document.addEventListener("drop", (event) => {
+  const zone = event.target.closest?.(".drop-zone");
+  if (!zone) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const field = zone.dataset.dropTarget;
+  if (!field) return;
+  setDragCounter(field, 0);
   zone.classList.remove("is-dragging");
-  ingestFiles(event.dataTransfer?.files, zone.dataset.dropTarget);
+
+  const files = event.dataTransfer?.files;
+  if (files && files.length > 0) {
+    const input = document.querySelector(`[data-file-input="${field}"]`);
+    if (input) {
+      try {
+        const dt = new DataTransfer();
+        for (let i = 0; i < files.length; i++) {
+          dt.items.add(files[i]);
+        }
+        input.files = dt.files;
+      } catch {
+        // Fallback if DataTransfer is restricted
+      }
+    }
+    ingestFiles(files, field);
+  }
 });
 
 root.addEventListener("input", (event) => {

@@ -94,3 +94,15 @@ def test_langflow_export_is_valid_json_with_connected_chat_model_path() -> None:
     assert all(edge["source"] in ids and edge["target"] in ids for edge in edges)
     assert any(node.get("data", {}).get("type") == "LanguageModelComponent" for node in nodes)
     assert len(edges) >= 3
+
+
+def test_langflow_prompt_escapes_literal_json_braces() -> None:
+    flow = json.loads((ROOT / "langflow" / "tender_extraction_flow.json").read_text(encoding="utf-8"))
+    prompt_node = next(node for node in flow["data"]["nodes"] if node.get("data", {}).get("type") == "Prompt")
+    prompt = prompt_node["data"]["node"]["template"]["template"]["value"]
+
+    rendered = prompt.format()
+
+    assert '{{"scope"' in prompt
+    assert '{"scope": string or null' in rendered
+    assert "{{" not in rendered

@@ -72,6 +72,14 @@ class ApiRouter:
                 data = self.app.portfolio.overview()
             elif method == "GET" and path == "/api/audits":
                 data = self.app.portfolio.list_audits(self._one(query, "q"), self._one(query, "risk", "ALL"))
+            elif method == "DELETE" and (path == "/api/audits" or path.startswith("/api/audits/")):
+                audit_id = path.removeprefix("/api/audits/").strip() if path.startswith("/api/audits/") else (self._one(query, "audit_id") or (payload.get("audit_id") if isinstance(payload, dict) else None))
+                if not audit_id:
+                    raise ValidationError("Audit ID wajib diisi.", [{"field": "audit_id", "issue": "required"}])
+                deleted = self.app.audit_log.delete_audit(audit_id)
+                if not deleted:
+                    raise ValidationError("Pemeriksaan tidak ditemukan atau sudah dihapus.", [{"field": "audit_id", "issue": "not_found"}])
+                data = {"audit_id": audit_id, "deleted": True}
             elif method == "POST" and path == "/api/export/workbook":
                 data = self.app.workbook_export.create(payload)
             elif method == "POST" and path == "/api/audit":

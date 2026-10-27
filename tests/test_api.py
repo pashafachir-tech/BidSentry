@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from dataclasses import replace
@@ -14,12 +15,25 @@ class ApiContractTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
         base = Settings.from_environment()
-        self.settings = replace(base, audit_log_path=Path(self.temp_dir.name) / "audit.jsonl", langflow_enabled=False, langflow_flow_id="")
+        self._orig_composio_key = os.environ.get("COMPOSIO_API_KEY")
+        if "COMPOSIO_API_KEY" in os.environ:
+            del os.environ["COMPOSIO_API_KEY"]
+        self.settings = replace(
+            base,
+            audit_log_path=Path(self.temp_dir.name) / "audit.jsonl",
+            langflow_enabled=False,
+            langflow_flow_id="",
+            composio_api_key="",
+        )
         self.app = create_application(self.settings)
         self.router = ApiRouter(self.app)
 
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
+        if self._orig_composio_key is not None:
+            os.environ["COMPOSIO_API_KEY"] = self._orig_composio_key
+        elif "COMPOSIO_API_KEY" in os.environ:
+            del os.environ["COMPOSIO_API_KEY"]
 
     def test_health_reports_local_fallback_without_optional_services(self) -> None:
         response = self.router.dispatch("GET", "/api/health")
