@@ -1,0 +1,41 @@
+name: BidSentry Continuous Integration
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    name: Unit Tests & Regression Benchmark
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest openpyxl pyyaml playwright
+          playwright install --with-deps chromium
+
+      - name: Verify IBM probe exits cleanly
+        run: |
+          python scripts/verify_watsonx.py
+
+      - name: Run Pytest Suite
+        run: |
+          pytest tests/ -v
+
+      - name: Run Held-Out Benchmark Regression Test (Zero-Regression Guard)
+        run: |
+          python tests/benchmark_heldout.py
