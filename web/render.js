@@ -22,6 +22,7 @@ function icon(name) {
     plus: '<path d="M12 5v14M5 12h14"/>',
     refresh: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9A7 7 0 0 1 17 6l3 6M4 12l3 6a7 7 0 0 0 11.4-3"/>',
     close: '<path d="m18 6-12 12M6 6l12 12"/>',
+    file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.audit}</svg>`;
 }
@@ -38,7 +39,7 @@ function statusPill(status) {
 }
 
 function rowsMarkup(rows, selectedId) {
-  if (!rows.length) return '<tr><td colspan="5" class="empty-row">Belum ada audit tersimpan atau tidak ada yang cocok dengan pencarian.</td></tr>';
+  if (!rows || !rows.length) return '<tr><td colspan="5" class="empty-row">Belum ada audit tersimpan atau tidak ada yang cocok dengan pencarian.</td></tr>';
   return rows.map((row) => `
     <tr class="audit-row ${row.audit_id === selectedId ? "is-selected" : ""}" data-action="select-audit" data-audit-id="${escapeHtml(row.audit_id)}" tabindex="0" aria-label="Lihat audit ${escapeHtml(row.package_name)}">
       <td><div class="package-cell"><span class="package-dot ${riskMeta[row.risk_level]?.css || "risk-medium"}"></span><span><strong>${escapeHtml(row.package_name)}</strong><small>${escapeHtml(row.tender_id || row.audit_id)} · ${escapeHtml(row.agency || "Workspace lokal")}</small></span></div></td>
@@ -78,7 +79,25 @@ export function renderApp(state) {
   const feedback = state.reviewFeedback?.pilot || {};
   const selected = state.audits.find((row) => row.audit_id === state.selectedAuditId) || state.audits[0] || null;
   const riskFilter = state.riskFilter || "ALL";
+  const verdictFilter = state.verdictFilter || "ALL";
   const activeViewLabel = { overview: "Ringkasan", audits: "Daftar pengajuan", review: "Hasil evaluasi" }[state.activeView] || "Ringkasan";
+
+  // Filter audits for history table (including verdict filter per 3.10)
+  const allAudits = state.audits || [];
+  const filteredAudits = allAudits.filter((row) => {
+    if (riskFilter !== "ALL" && row.risk_level !== riskFilter) return false;
+    if (verdictFilter !== "ALL") {
+      const v = row.executive_summary?.eligibility || row.verdict || "";
+      if (v !== verdictFilter) return false;
+    }
+    return true;
+  });
+
+  const page = state.historyPage || 1;
+  const pageSize = 50;
+  const totalPages = Math.max(1, Math.ceil(filteredAudits.length / pageSize));
+  const pagedAudits = filteredAudits.slice((page - 1) * pageSize, page * pageSize);
+
   return `
     <div class="app-shell">
       <aside class="sidebar">
@@ -94,38 +113,122 @@ export function renderApp(state) {
       </aside>
 
       <main class="main-content">
-        <header class="topbar"><div class="breadcrumb"><span>Ruang kerja</span><span>/</span><strong>${activeViewLabel}</strong></div><div class="topbar-actions"><span class="live-indicator"><i></i>LOKAL</span><button class="button button-quiet button-small topbar-text-action" data-action="open-settings">Koneksi</button><button class="icon-button" title="Ganti tema" aria-label="Ganti tema" data-action="theme-toggle">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button><button class="icon-button" title="Muat ulang data" aria-label="Muat ulang data" data-action="refresh">${icon("refresh")}</button></div></header>
+        <header class="topbar"><div class="breadcrumb"><span>Ruang kerja</span><span>/</span><strong>${activeViewLabel}</strong></div><div class="topbar-actions"><span class="live-indicator"><i></i>LOKAL</span><button class="button button-quiet button-small topbar-text-action" data-action="open-settings">Koneksi & Pengaturan</button><button class="icon-button" title="Ganti tema" aria-label="Ganti tema" data-action="theme-toggle">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button><button class="icon-button" title="Muat ulang data" aria-label="Muat ulang data" data-action="refresh">${icon("refresh")}</button></div></header>
         <div class="page-content">
-          <section class="page-heading"><div><p class="eyebrow">INTELIJEN PENGADAAN <span>·</span> RUANG KERJA</p><h1>Pemeriksaan pengadaan</h1><p class="page-intro">Bandingkan persyaratan, bukti penyedia, adendum, dan klausul kontrak.</p></div><button class="button button-primary" data-action="new-audit">${icon("plus")} Periksa dokumen</button></section>
+          <section class="page-heading">
+            <div>
+              <p class="eyebrow">INTELIJEN PENGADAAN <span>·</span> RUANG KERJA</p>
+              <h1>Pemeriksaan pengadaan</h1>
+              <p class="page-intro">Bandingkan persyaratan, bukti penyedia, adendum, dan klausul kontrak secara otomatis dan jujur.</p>
+            </div>
+            <div class="heading-actions">
+              <button class="button button-secondary" data-action="load-sample-tender" title="Muat dokumen tender contoh untuk evaluasi 1-klik">${icon("file")} Coba dengan contoh</button>
+              <button class="button button-primary" data-action="new-audit">${icon("plus")} Periksa dokumen</button>
+            </div>
+          </section>
+
           <section class="metrics-grid" aria-label="Ringkasan metrik">
             <article class="metric-card"><div class="metric-top"><span>Audit tersimpan</span><span class="metric-icon icon-blue">${icon("audit")}</span></div><strong class="metric-value">${number(overview.total_audits || 0)}</strong><div class="metric-foot"><span class="metric-caption">Riwayat lokal</span><span class="metric-neutral">${number(overview.local_audits_shown || 0)} audit terbaru</span></div></article>
             <article class="metric-card"><div class="metric-top"><span>Temuan dinilai reviewer</span><span class="metric-icon icon-green">${icon("shield")}</span></div><strong class="metric-value">${number(feedback.reviewed_findings || 0)}</strong><div class="metric-foot"><span class="metric-caption">Catatan manusia</span><span class="metric-neutral">${feedback.eligible_findings ? `${number(feedback.reviewed_findings)} dari ${number(feedback.eligible_findings)} temuan` : "Belum ada data pilot"}</span></div></article>
             <article class="metric-card"><div class="metric-top"><span>Risiko tinggi / kritis</span><span class="metric-icon icon-red">!</span></div><strong class="metric-value">${number(overview.review_required || 0)}</strong><div class="metric-foot"><span class="metric-caption">Prioritas review</span><span class="metric-neutral">Bukan verdict otomatis</span></div></article>
             <article class="metric-card"><div class="metric-top"><span>Median durasi engine</span><span class="metric-icon icon-amber">ms</span></div><strong class="metric-value">${overview.local_engine_runtime?.median_ms == null ? "—" : number(overview.local_engine_runtime.median_ms)}<small>ms</small></strong><div class="metric-foot"><span class="metric-caption">Aturan lokal saja</span><span class="metric-neutral">${number(overview.local_engine_runtime?.sample_count || 0)} audit terbaru</span></div></article>
           </section>
+
           <section class="overview-grid">
             <div class="register-card" id="audit-register">
               <div class="section-heading"><div><p class="eyebrow">RIWAYAT</p><h2>Daftar pemeriksaan</h2><p>Audit dokumen yang tersimpan di workspace ini</p></div><button class="button button-quiet button-small" data-action="export">Ekspor Excel ${icon("download")}</button></div>
-              <div class="table-toolbar"><label class="search-field">${icon("search")}<input id="audit-search" type="search" placeholder="Cari paket, ID, atau instansi" value="${escapeHtml(state.query)}" autocomplete="off" /></label><label class="filter-field"><span>Risiko</span><select id="risk-filter"><option value="ALL" ${riskFilter === "ALL" ? "selected" : ""}>Semua</option>${["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((level) => `<option value="${level}" ${riskFilter === level ? "selected" : ""}>${({ LOW: "Rendah", MEDIUM: "Sedang", HIGH: "Tinggi", CRITICAL: "Kritis" })[level]}</option>`).join("")}</select></label></div>
-              <div class="table-wrap"><table><thead><tr><th>PAKET / ID</th><th>PENYEDIA</th><th>NILAI KONTRAK</th><th>TINGKAT RISIKO</th><th>SKOR</th></tr></thead><tbody>${state.loading ? '<tr><td colspan="5" class="empty-row">Memuat daftar audit…</td></tr>' : rowsMarkup(state.audits, state.selectedAuditId)}</tbody></table></div>
-              <div class="table-footer"><span>Menampilkan ${number(state.audits.length)} paket</span><span><b class="legend-dot low"></b>Rendah <b class="legend-dot medium"></b>Sedang <b class="legend-dot high"></b>Tinggi <b class="legend-dot critical"></b>Kritis</span></div>
+              <div class="table-toolbar">
+                <label class="search-field">
+                  ${icon("search")}
+                  <input id="audit-search" type="search" placeholder="Cari paket, ID, atau instansi" value="${escapeHtml(state.query)}" autocomplete="off" />
+                  <span id="search-spinner" class="search-spinner" hidden>Memfilter…</span>
+                </label>
+                <label class="filter-field">
+                  <span>Verdict</span>
+                  <select id="verdict-filter">
+                    <option value="ALL" ${verdictFilter === "ALL" ? "selected" : ""}>Semua Verdict</option>
+                    <option value="GO" ${verdictFilter === "GO" ? "selected" : ""}>GO</option>
+                    <option value="NO-GO" ${verdictFilter === "NO-GO" ? "selected" : ""}>NO-GO</option>
+                    <option value="BELUM CUKUP BUKTI" ${verdictFilter === "BELUM CUKUP BUKTI" ? "selected" : ""}>BELUM CUKUP BUKTI</option>
+                    <option value="TIDAK ADA SYARAT TERBACA" ${verdictFilter === "TIDAK ADA SYARAT TERBACA" ? "selected" : ""}>TIDAK ADA SYARAT TERBACA</option>
+                  </select>
+                </label>
+                <label class="filter-field">
+                  <span>Risiko</span>
+                  <select id="risk-filter">
+                    <option value="ALL" ${riskFilter === "ALL" ? "selected" : ""}>Semua</option>
+                    ${["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((level) => `<option value="${level}" ${riskFilter === level ? "selected" : ""}>${({ LOW: "Rendah", MEDIUM: "Sedang", HIGH: "Tinggi", CRITICAL: "Kritis" })[level]}</option>`).join("")}
+                  </select>
+                </label>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead><tr><th>PAKET / ID</th><th>PENYEDIA</th><th>NILAI KONTRAK</th><th>TINGKAT RISIKO</th><th>SKOR</th></tr></thead>
+                  <tbody>${state.loading ? '<tr><td colspan="5" class="empty-row">Memuat daftar audit…</td></tr>' : rowsMarkup(pagedAudits, state.selectedAuditId)}</tbody>
+                </table>
+              </div>
+              <div class="table-footer">
+                <span>Menampilkan ${number(pagedAudits.length)} dari ${number(filteredAudits.length)} paket${totalPages > 1 ? ` (Halaman ${page}/${totalPages})` : ""}</span>
+                ${totalPages > 1 ? `
+                  <div class="pagination-controls">
+                    <button class="button button-quiet button-small" data-action="prev-page" ${page <= 1 ? "disabled" : ""}>‹ Sebelumnya</button>
+                    <button class="button button-quiet button-small" data-action="next-page" ${page >= totalPages ? "disabled" : ""}>Berikutnya ›</button>
+                  </div>
+                ` : ""}
+                <span><b class="legend-dot low"></b>Rendah <b class="legend-dot medium"></b>Sedang <b class="legend-dot high"></b>Tinggi <b class="legend-dot critical"></b>Kritis</span>
+              </div>
             </div>
             ${detailMarkup(selected)}
           </section>
+
           ${renderReview(state)}
+
           <section class="bottom-grid">
             <article class="distribution-card"><div class="section-heading section-heading-compact"><div><p class="eyebrow">RIWAYAT AUDIT</p><h2>Distribusi tingkat risiko</h2></div><span class="section-note">${number(overview.total_audits || 0)} catatan</span></div><div class="distribution-list">${Object.entries(riskMeta).map(([level, meta]) => { const count = Number(distribution[level] || 0); const width = overview.total_audits ? Math.round(count * 100 / overview.total_audits) : 0; return `<div class="distribution-row"><span class="distribution-label"><i class="legend-dot ${meta.css.replace("risk-", "")}"></i>${meta.label}</span><div class="distribution-track"><span class="distribution-fill ${meta.css}" style="width:${width}%"></span></div><strong>${count}</strong></div>`; }).join("")}</div><p class="card-footnote">Ringkasan dihitung dari audit lokal yang tersimpan.</p></article>
-            <article class="integration-card"><div class="section-heading section-heading-compact"><div><p class="eyebrow">STATUS SISTEM</p><h2>Mesin dan koneksi</h2></div><span class="status-dot"></span></div><div class="integration-list"><div><span class="integration-symbol symbol-local">R</span><span><strong>Mesin aturan lokal</strong><small>Aktif · hasil deterministik</small></span><em class="connection-ready">SIAP</em></div><div><span class="integration-symbol symbol-langflow">L</span><span><strong>Langflow</strong><small>${state.integrations?.langflow?.configured ? "Opt-in · flow sudah diatur" : "Belum dikonfigurasi"}</small></span><em class="connection-idle">${state.integrations?.langflow?.configured ? "DIATUR" : "OPSIONAL"}</em></div><div><span class="integration-symbol symbol-composio">C</span><span><strong>Composio</strong><small>${state.integrations?.composio?.configured ? "API key diatur; koneksi belum diverifikasi" : "Belum dikonfigurasi; tindakan belum tersedia"}</small></span><em class="connection-idle">${state.integrations?.composio?.configured ? "DIATUR" : "OPSIONAL"}</em></div><div><span class="integration-symbol symbol-bob">B</span><span><strong>IBM Bob / MCP</strong><small>${state.integrations?.ibm_bob?.mcp_config_present ? "Konfigurasi MCP tersedia; koneksi belum diverifikasi" : "Belum terhubung"}</small></span><em class="connection-idle">MCP</em></div></div><p class="card-footnote">Teks dokumen dikirim ke provider hanya setelah persetujuan audit.</p></article>
+            
+            <article class="integration-card">
+              <details class="integrations-details">
+                <summary class="integrations-summary">
+                  <div class="section-heading section-heading-compact">
+                    <div><p class="eyebrow">STATUS SISTEM (KLIK UNTUK RINCIAN)</p><h2>Mesin dan integrasi eksternal</h2></div>
+                    <span class="status-dot"></span>
+                  </div>
+                </summary>
+                <div class="integration-list" style="margin-top:12px">
+                  <div><span class="integration-symbol symbol-local">R</span><span><strong>Mesin aturan lokal (rules.yaml)</strong><small>Aktif · hasil deterministik</small></span><em class="connection-ready">SIAP</em></div>
+                  <div><span class="integration-symbol symbol-langflow">L</span><span><strong>Langflow</strong><small>${state.integrations?.langflow?.configured ? "Opt-in · flow sudah diatur" : "Belum dikonfigurasi"}</small></span><em class="connection-idle">${state.integrations?.langflow?.configured ? "DIATUR" : "OPSIONAL"}</em></div>
+                  <div><span class="integration-symbol symbol-composio">C</span><span><strong>Composio</strong><small>${state.integrations?.composio?.configured ? "API key diatur; koneksi belum diverifikasi" : "Belum dikonfigurasi; tindakan belum tersedia"}</small></span><em class="connection-idle">${state.integrations?.composio?.configured ? "DIATUR" : "OPSIONAL"}</em></div>
+                  <div><span class="integration-symbol symbol-bob">B</span><span><strong>IBM watsonx / MCP</strong><small>${state.integrations?.ibm_bob?.mcp_config_present ? "Konfigurasi MCP tersedia" : "Belum terhubung"}</small></span><em class="connection-idle">MCP</em></div>
+                </div>
+                <div style="margin-top:10px;text-align:right">
+                  <button type="button" class="button button-quiet button-small" data-action="open-settings">Buka konfigurasi koneksi ›</button>
+                </div>
+              </details>
+              <p class="card-footnote">Teks dokumen dikirim ke provider hanya setelah persetujuan audit.</p>
+            </article>
           </section>
+
           <footer class="page-footer"><span>BidSentry <b>·</b> Ruang kerja pemeriksaan internal</span><span>Skor adalah indeks triase; periksa sumber aslinya</span></footer>
         </div>
       </main>
     </div>
+  `;
+}
+
+export function renderDialogs(state) {
+  return `
     <dialog id="audit-dialog" class="audit-dialog">
       <form id="audit-form" method="dialog" novalidate>
         <div class="dialog-heading"><div><p class="eyebrow">EVALUASI DOKUMEN</p><h2>Periksa dokumen pengadaan</h2><p>Tempel teks atau unggah dokumen. File diekstrak secara lokal; provider AI hanya dipanggil jika Anda menyetujui.</p></div><button type="button" class="icon-button" data-action="close-dialog" aria-label="Tutup">${icon("close")}</button></div>
         <label class="form-label">Nama paket<input name="package_name" maxlength="240" placeholder="Contoh: Pengadaan layanan konsultansi" /></label>
-        <div class="form-grid"><label class="form-label">Nomor tender<input name="tender_id" maxlength="120" placeholder="Nomor paket" /></label><label class="form-label">Nomor pengumuman<input name="notice_number" maxlength="120" placeholder="Nomor pengumuman LPSE" /></label><label class="form-label">Pokja / instansi<input name="pokja_name" maxlength="240" placeholder="Nama Pokja Pemilihan" /></label><label class="form-label">Nama perusahaan<input name="company_name" maxlength="240" placeholder="Nama penyedia" /></label><label class="form-label form-field-wide">Nilai kontrak / penawaran (IDR)<input name="contract_value_idr" type="number" min="0" step="1" placeholder="Opsional, untuk simulasi denda" /></label></div>
+        <div class="form-grid">
+          <label class="form-label">Nomor tender<input name="tender_id" maxlength="120" placeholder="Nomor paket" /></label>
+          <label class="form-label">Nomor pengumuman<input name="notice_number" maxlength="120" placeholder="Nomor pengumuman LPSE" /></label>
+          <label class="form-label">Pokja / instansi<input name="pokja_name" maxlength="240" placeholder="Nama Pokja Pemilihan" /></label>
+          <label class="form-label">Nama perusahaan<input name="company_name" maxlength="240" placeholder="Nama penyedia" /></label>
+          <label class="form-label">Batas akhir penawaran (opsional)<input name="bid_deadline" type="text" placeholder="Contoh: 15-08-2026 atau 15 Agustus 2026" /></label>
+          <label class="form-label">Nilai kontrak / penawaran (IDR)<input name="contract_value_idr" type="number" min="0" step="1" placeholder="Opsional, untuk simulasi denda" /></label>
+        </div>
         <label class="form-label">Peran reviewer<select name="review_role" class="role-select"><option value="procurement">Tim pengadaan — syarat paket, bukti, dan adendum</option><option value="legal">Tim hukum — klausul, perubahan, dan pertanyaan legal</option></select><small class="role-help">Peran ini mengarahkan fokus saran Langflow. Hasil aturan lokal dan keputusan akhir tetap pada reviewer.</small></label>
         <div class="document-grid">
           ${documentInputMarkup("Dokumen pemilihan / RKS / KAK", "dok_pemilihan", "Persyaratan, klausul kontrak, dan ketentuan paket…", 6)}
@@ -134,12 +237,13 @@ export function renderApp(state) {
           ${documentInputMarkup("Draf kontrak", "contract_draft", "Klausul kontrak dan denda keterlambatan…", 4)}
           ${documentInputMarkup("Kontrak baseline (opsional)", "baseline_contract", "Teks kontrak rujukan untuk perbandingan…", 4)}
         </div>
-        <p class="upload-support-note">TXT, MD, CSV, JSON, DOCX, PDF teks · Maks. 8 MB dan 500 halaman PDF per file · Maks. 20 file per unggahan. PDF hasil scan memerlukan OCR.</p>
+        <p class="upload-support-note">TXT, MD, CSV, JSON, DOCX, XLSX (Excel BoQ), PDF teks · Maks. 8 MB per file · Maks. 20 file per slot.</p>
         <p class="upload-review-note">Hasil pemeriksaan berbasis teks selalu perlu diperiksa reviewer. Rujukan baris menunjukkan posisi pada teks hasil ekstraksi, bukan nomor halaman dokumen.</p>
         <label class="consent-row"><input name="allow_external_processing" type="checkbox" /><span><strong>Jalankan analisis AI tambahan</strong><small>AI membandingkan konteks lintas dokumen dan menyarankan langkah berikutnya. Teks dokumen dikirim ke provider yang dikonfigurasi (Langflow atau provider model langsung). Masking otomatis hanya mengenali pola tertentu, bukan jaminan semua data sensitif terhapus; lanjutkan hanya jika kebijakan organisasi mengizinkan.</small></span></label>
         <div class="dialog-actions dialog-actions-expanded"><span class="dialog-note">Hasil berbasis teks perlu dikonfirmasi terhadap dokumen resmi.</span><button type="button" class="button button-quiet" data-action="close-dialog">Batal</button><button type="submit" class="button button-primary" id="submit-audit">Jalankan evaluasi ${icon("arrow")}</button></div>
       </form>
     </dialog>
+
     <dialog id="settings-dialog" class="utility-dialog settings-dialog">
       <div class="utility-dialog-head"><div><p class="eyebrow">KONFIGURASI LOKAL</p><h2>Koneksi layanan</h2><p id="settings-file-status">Kunci disimpan ke file .env lokal dan tidak ditampilkan kembali.</p></div><button class="icon-button" data-action="close-utility" aria-label="Tutup">${icon("close")}</button></div>
       <form id="settings-form">
@@ -157,12 +261,66 @@ export function renderApp(state) {
         <div class="utility-actions"><button type="button" id="test-integrations" class="button button-secondary">Tes koneksi</button><button type="button" class="button button-quiet" data-action="close-utility">Batal</button><button type="submit" id="save-settings" class="button button-primary">Simpan koneksi</button></div>
       </form>
     </dialog>
-    <dialog id="objection-dialog" class="utility-dialog objection-dialog"><div class="utility-dialog-head"><div><p class="eyebrow">DRAF UNTUK DITINJAU</p><h2>Draf sanggahan / klarifikasi</h2><p>Sesuaikan identitas, nomor paket, fakta, dan sitasi; minta tim legal meninjau sebelum dipakai.</p></div><button class="icon-button" data-action="close-utility" aria-label="Tutup">${icon("close")}</button></div><label class="form-label" for="objection-draft">Isi draf<textarea id="objection-draft" rows="18"></textarea></label><div class="utility-actions"><button class="button button-quiet" data-action="close-utility">Tutup</button><button class="button button-secondary" data-action="copy-objection">Salin draf</button><button class="button button-secondary" data-action="download-objection">Unduh DOCX</button><button class="button button-primary" data-action="print-objection">Cetak</button></div></dialog>
-    <dialog id="dispatch-dialog" class="utility-dialog dispatch-dialog"><div class="utility-dialog-head"><div><p class="eyebrow">HUMAN REVIEW GATE</p><h2>Siapkan tindak lanjut workspace</h2></div><button class="icon-button" data-action="close-utility" aria-label="Tutup">${icon("close")}</button></div><p id="dispatch-confirm-copy" class="utility-note">Periksa paket dan hasil review sebelum menyiapkan tindakan.</p><div class="dispatch-consent"><strong>Semua keluaran adalah draf untuk diperiksa.</strong><span>Pengingat kalender H+7 hanya contoh dan bukan tenggat resmi. Draf Gmail hanya dibuat bila alamat penerima diisi; email tidak dikirim.</span></div><label id="dispatch-email-row" class="form-label" hidden>Alamat email penerima draf<input id="dispatch-email" type="email" maxlength="254" autocomplete="email" placeholder="tim-review@instansi.go.id"></label><label id="dispatch-live-consent-row" class="dispatch-consent-check" hidden><input id="dispatch-live-consent" type="checkbox"><span>Saya menyetujui pengiriman nama paket, skor, dan sinyal ke Google Docs/Calendar; jika alamat email diisi, alamat dan isi draf dikirim ke Gmail melalui Composio.</span></label><div id="dispatch-results" class="dispatch-results" role="status" aria-live="polite" hidden></div><div class="utility-actions"><button class="button button-quiet" data-action="close-utility">Batal</button><button id="confirm-dispatch-button" class="button button-primary" data-action="confirm-dispatch">Lanjutkan</button></div></dialog>`;
+
+    <dialog id="objection-dialog" class="utility-dialog objection-dialog">
+      <div class="utility-dialog-head">
+        <div>
+          <p class="eyebrow">DRAF UNTUK DITINJAU</p>
+          <h2>Draf sanggahan / klarifikasi resmi</h2>
+          <p>Format resmi surat sanggahan pengadaan LKPP dengan sitasi hukum Perpres 12/2021.</p>
+        </div>
+        <button class="icon-button" data-action="close-utility" aria-label="Tutup">${icon("close")}</button>
+      </div>
+      <div class="objection-filter-row" style="margin-bottom:12px">
+        <label class="form-label" style="margin:0">
+          Kategori Sanggahan:
+          <select id="objection-category-filter">
+            <option value="ALL">Semua Kategori Pelanggaran yang Terkonfirmasi</option>
+            <option value="spesifikasi">Spesifikasi Diskriminatif (Pasal 19)</option>
+            <option value="jadwal">Jadwal Mepet / Tidak Wajar (Pasal 54)</option>
+            <option value="integritas">Benturan Kepentingan (Pasal 7)</option>
+            <option value="keuangan">Keuangan / BoQ Melebihi Pagu (Pasal 26)</option>
+            <option value="kontrak">Klausul Denda Tanpa Batas (Pasal 56)</option>
+          </select>
+        </label>
+      </div>
+      <label class="form-label" for="objection-draft">Isi draf sanggahan<textarea id="objection-draft" rows="18"></textarea></label>
+      <div class="utility-actions">
+        <button class="button button-quiet" data-action="close-utility">Tutup</button>
+        <button class="button button-secondary" data-action="copy-objection">Salin teks</button>
+        <button class="button button-secondary" data-action="download-objection-txt">Unduh .TXT</button>
+        <button class="button button-secondary" data-action="download-objection">Unduh DOCX</button>
+        <button class="button button-primary" data-action="print-objection">Cetak / Print</button>
+      </div>
+    </dialog>
+
+    <dialog id="dispatch-dialog" class="utility-dialog dispatch-dialog">
+      <div class="utility-dialog-head"><div><p class="eyebrow">HUMAN REVIEW GATE</p><h2>Siapkan tindak lanjut workspace</h2></div><button class="icon-button" data-action="close-utility" aria-label="Tutup">${icon("close")}</button></div>
+      <p id="dispatch-confirm-copy" class="utility-note">Periksa paket dan hasil review sebelum menyiapkan tindakan.</p>
+      <div class="dispatch-consent"><strong>Semua keluaran adalah draf untuk diperiksa.</strong><span>Pengingat kalender H+7 hanya contoh dan bukan tenggat resmi. Draf Gmail hanya dibuat bila alamat penerima diisi; email tidak dikirim.</span></div>
+      <label id="dispatch-email-row" class="form-label" hidden>Alamat email penerima draf<input id="dispatch-email" type="email" maxlength="254" autocomplete="email" placeholder="tim-review@instansi.go.id"></label>
+      <label id="dispatch-live-consent-row" class="dispatch-consent-check" hidden><input id="dispatch-live-consent" type="checkbox"><span>Saya menyetujui pengiriman nama paket, skor, dan sinyal ke Google Docs/Calendar; jika alamat email diisi, alamat dan isi draf dikirim ke Gmail melalui Composio.</span></label>
+      <div id="dispatch-results" class="dispatch-results" role="status" aria-live="polite" hidden></div>
+      <div class="utility-actions"><button class="button button-quiet" data-action="close-utility">Batal</button><button id="confirm-dispatch-button" class="button button-primary" data-action="confirm-dispatch">Lanjutkan</button></div>
+    </dialog>
+
+    <dialog id="confirm-delete-dialog" class="utility-dialog">
+      <div class="utility-dialog-head">
+        <div><p class="eyebrow text-danger">KONFIRMASI PENGHAPUSAN</p><h2>Hapus data audit?</h2></div>
+        <button class="icon-button" data-action="close-confirm-delete" aria-label="Tutup">${icon("close")}</button>
+      </div>
+      <p>Apakah Anda yakin ingin menghapus pemeriksaan <strong id="delete-target-title">paket ini</strong> dari riwayat?</p>
+      <p class="dialog-note">Tindakan ini permanen dan menghapus catatan audit dari sistem lokal.</p>
+      <div class="utility-actions" style="margin-top:20px">
+        <button type="button" class="button button-quiet" data-action="close-confirm-delete">Batal</button>
+        <button type="button" class="button button-danger" id="execute-delete-button" data-action="execute-delete-audit">Hapus pemeriksaan</button>
+      </div>
+    </dialog>
+  `;
 }
 
 export { escapeHtml };
 
 function documentInputMarkup(label, name, placeholder, rows) {
-  return `<section class="document-input" data-drop-target="${name}"><div class="document-input-heading"><label class="document-input-label" for="${name}-text">${label}</label><div class="document-input-actions"><button type="button" class="button button-quiet button-small document-clear-btn" data-action="clear-section" data-field="${name}" title="Hapus file dan bersihkan teks ${label}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;margin-right:3px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>Hapus</button><button type="button" class="button button-quiet button-small" data-action="browse-file" data-file-target="${name}">Pilih file</button></div></div><input class="file-picker" type="file" id="${name}-file" data-file-input="${name}" accept=".txt,.md,.csv,.json,.docx,.pdf" multiple /><div class="drop-zone" data-drop-target="${name}" role="button" tabindex="0" aria-label="Seret file ${label} ke sini atau pilih file"><span class="drop-zone-icon">⇧</span><span><strong>Seret dan lepas file di sini</strong><small>atau pilih file dari perangkat</small></span></div><div class="file-list" id="${name}-files" aria-live="polite"></div><textarea class="document-textarea" id="${name}-text" name="${name}" rows="${rows}" placeholder="${placeholder}"></textarea></section>`;
+  return `<section class="document-input" data-drop-target="${name}"><div class="document-input-heading"><label class="document-input-label" for="${name}-text">${label}</label><div class="document-input-actions"><button type="button" class="button button-quiet button-small document-clear-btn" data-action="clear-section" data-field="${name}" title="Hapus file dan bersihkan teks ${label}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px;margin-right:3px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>Bersihkan</button><button type="button" class="button button-quiet button-small" data-action="browse-file" data-file-target="${name}">Pilih file</button></div></div><input class="file-picker" type="file" id="${name}-file" data-file-input="${name}" accept=".txt,.md,.csv,.json,.docx,.xlsx,.pdf" multiple /><div class="drop-zone" data-drop-target="${name}" role="button" tabindex="0" aria-label="Seret file ${label} ke sini atau pilih file"><span class="drop-zone-icon">⇧</span><span><strong>Seret dan lepas file di sini</strong><small>PDF, DOCX, XLSX, TXT, JSON (maks. 8 MB)</small></span></div><div class="file-list" id="${name}-files" aria-live="polite"></div><textarea class="document-textarea" id="${name}-text" name="${name}" rows="${rows}" placeholder="${placeholder}"></textarea></section>`;
 }

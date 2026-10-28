@@ -17,7 +17,7 @@ MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
 MAX_EXPANDED_FILE_BYTES = 8 * 1024 * 1024
 MAX_EXTRACTED_CHARACTERS = 1_000_000
 MAX_PDF_PAGES = 500
-SUPPORTED_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".docx", ".pdf"}
+SUPPORTED_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".docx", ".pdf", ".xlsx"}
 
 
 class DocumentExtractionService:
@@ -35,6 +35,10 @@ class DocumentExtractionService:
         try:
             if extension == ".docx":
                 text = self._docx(content)
+            elif extension == ".xlsx":
+                from bidsentry.audits.excel_parser import parse_boq_excel
+                excel_res = parse_boq_excel(content)
+                text = excel_res.get("text", "")
             elif extension == ".pdf":
                 text = self._pdf(content)
             else:
@@ -46,7 +50,11 @@ class DocumentExtractionService:
 
         text = "\n".join(line.rstrip() for line in text.replace("\x00", "").splitlines()).strip()
         if not text:
-            raise ValidationError("Tidak ada teks yang dapat dibaca. PDF hasil scan memerlukan OCR sebelum diunggah.", [{"field": "file", "issue": "no_extractable_text"}])
+            raise ValidationError(
+                "Tidak ada teks yang dapat dibaca. Dokumen terindikasi berupa pindaian gambar tanpa layer teks. "
+                "OCR belum terpasang, instal Tesseract untuk membaca dokumen pindaian.",
+                [{"field": "file", "issue": "no_extractable_text"}]
+            )
         if len(text) > MAX_EXTRACTED_CHARACTERS:
             raise ValidationError("Hasil ekstraksi melebihi 1.000.000 karakter per bagian. Pecah dokumen menjadi beberapa bagian sebelum mengunggah.", [{"field": "file", "issue": "text_too_long"}])
         return {"filename": safe_name, "text": text, "characters": len(text)}

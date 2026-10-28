@@ -1,9 +1,10 @@
 import { api, setAuthToken } from "./api.js";
 import { getState, setState, subscribe } from "./state.js";
-import { renderApp, escapeHtml } from "./render.js";
+import { renderApp, renderDialogs, escapeHtml } from "./render.js";
 import { getReviewSnapshot } from "./review.js";
 
 const root = document.getElementById("app");
+const dialogLayer = document.getElementById("dialog-layer");
 const toastNode = document.getElementById("toast");
 const auditMemoryCache = new Map();
 
@@ -15,13 +16,18 @@ window.addEventListener("bidsentry:auth-required", () => {
     loadWorkspace();
   }
 });
+
 const uploadedFiles = { dok_pemilihan: [], adendum: [], pustaka: [], contract_draft: [], baseline_contract: [] };
 const uploadErrors = { dok_pemilihan: [], adendum: [], pustaka: [], contract_draft: [], baseline_contract: [] };
 const dragCounters = {};
 let pendingReplace = null;
-const SUPPORTED_EXTENSIONS = new Set([".pdf", ".docx", ".txt", ".md", ".csv", ".json"]);
+let pendingDeleteAudit = null;
+let toastTimer = null;
+let searchDebounceTimer = null;
+
+const SUPPORTED_EXTENSIONS = new Set([".pdf", ".docx", ".xlsx", ".txt", ".md", ".csv", ".json"]);
 const MAX_DOCUMENT_BYTES = 8 * 1024 * 1024;
-const auditSubmitReadyMarkup = 'Jalankan audit <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
+const auditSubmitReadyMarkup = 'Jalankan evaluasi <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>';
 const MAX_FILES_PER_UPLOAD = 20;
 const MAX_PARALLEL_EXTRACTIONS = 3;
 let workspaceRequestSequence = 0;
@@ -35,6 +41,11 @@ try {
   document.documentElement.dataset.theme = "light";
 }
 
+// Initial render of dialog layer (isolated from main app re-renders per Requirement 3.4)
+if (dialogLayer) {
+  dialogLayer.innerHTML = renderDialogs(getState());
+}
+
 function render() {
   const active = document.activeElement;
   const id = active?.id;
@@ -43,9 +54,11 @@ function render() {
   const actionIndex = action
     ? [...root.querySelectorAll("[data-action]")].filter((node) => node.dataset.action === action).indexOf(active)
     : -1;
+
   root.innerHTML = renderApp(getState());
+
   const next = (id && document.getElementById(id)) || (action && [...root.querySelectorAll("[data-action]")].filter((node) => node.dataset.action === action)[actionIndex]);
-  if (next) {
+  if (next && root.contains(next)) {
     next.focus({ preventScroll: true });
     if (start !== null && typeof next.setSelectionRange === "function") next.setSelectionRange(start, start);
   }
@@ -53,11 +66,17 @@ function render() {
 
 subscribe(render);
 
+// Error and notification toast with persistence and manual dismiss (Requirement 3.6)
 function toast(message, kind = "success") {
+  if (toastTimer) clearTimeout(toastTimer);
   toastNode.className = "toast";
   void toastNode.offsetWidth;
-  toastNode.textContent = message;
+  toastNode.innerHTML = `<span>${escapeHtml(message)}</span><button type="button" class="toast-close" data-action="close-toast" aria-label="Tutup pesan">✕</button>`;
   toastNode.className = `toast toast-visible ${kind === "error" ? "toast-error" : ""}`;
+  const duration = kind === "error" ? 10000 : 4000;
+  toastTimer = setTimeout(() => {
+    toastNode.className = "toast";
+  }, duration);
 }
 
 async function selectAudit(auditId) {
@@ -132,11 +151,23 @@ async function loadWorkspace({ preserveSelection = true, includeOverview = true,
   }
 }
 
-async function deleteAuditRecord(auditId, packageName = "Audit ini") {
+// Modal delete confirmation (Requirement 3.6 - no blocking confirm())
+function deleteAuditRecord(auditId, packageName = "Audit ini") {
   if (!auditId) return;
-  const confirmed = window.confirm(`Hapus pemeriksaan "${packageName}" dari riwayat? Tindakan ini tidak dapat dibatalkan.`);
-  if (!confirmed) return;
+  pendingDeleteAudit = { auditId, packageName };
+  const targetTitle = document.getElementById("delete-target-title");
+  if (targetTitle) targetTitle.textContent = `"${packageName}"`;
+  const dialog = document.getElementById("confirm-delete-dialog");
+  if (dialog?.showModal) dialog.showModal();
+  else if (window.confirm(`Hapus pemeriksaan "${packageName}" dari riwayat?`)) {
+    executeDeleteAudit();
+  }
+}
 
+async function executeDeleteAudit() {
+  if (!pendingDeleteAudit) return;
+  const { auditId, packageName } = pendingDeleteAudit;
+  document.getElementById("confirm-delete-dialog")?.close();
   try {
     await api.deleteAudit(auditId);
     auditMemoryCache.delete(auditId);
@@ -155,6 +186,8 @@ async function deleteAuditRecord(auditId, packageName = "Audit ini") {
     await loadWorkspace({ preserveSelection: false });
   } catch (error) {
     toast(error.message || "Gagal menghapus audit.", "error");
+  } finally {
+    pendingDeleteAudit = null;
   }
 }
 
@@ -162,15 +195,50 @@ function openAuditDialog(draft = null) {
   const dialog = document.getElementById("audit-dialog");
   const form = document.getElementById("audit-form");
   if (draft && form) {
-    for (const name of ["package_name", "tender_id", "notice_number", "pokja_name", "company_name", "contract_value_idr", "dok_pemilihan", "adendum", "pustaka", "contract_draft", "baseline_contract"]) {
+    for (const name of ["package_name", "tender_id", "notice_number", "pokja_name", "company_name", "contract_value_idr", "dok_pemilihan", "adendum", "pustaka", "contract_draft", "baseline_contract", "bid_deadline"]) {
       const field = form.elements.namedItem(name);
       if (field) field.value = draft[name] ?? "";
     }
-    form.elements.namedItem("allow_external_processing").checked = Boolean(draft.allow_external_processing);
-    form.elements.namedItem("review_role").value = draft.review_role || "procurement";
+    const extBox = form.elements.namedItem("allow_external_processing");
+    if (extBox) extBox.checked = Boolean(draft.allow_external_processing);
+    const roleSelect = form.elements.namedItem("review_role");
+    if (roleSelect) roleSelect.value = draft.review_role || "procurement";
   }
   if (dialog?.showModal) dialog.showModal();
   else toast("Dialog audit tidak tersedia pada browser ini.", "error");
+}
+
+// 1-Click sample tender loader (Requirement 3.7)
+function loadSampleTender() {
+  const sampleTender = {
+    package_name: "Pengadaan Server High Performance Computing (HPC)",
+    tender_id: "HPC-2026-088",
+    notice_number: "LPSE-KEMEN-2026-HPC",
+    pokja_name: "Pokja Infrastruktur Digital",
+    company_name: "PT Solusi Komputasi Nasional",
+    contract_value_idr: 4500000000,
+    review_role: "procurement",
+    bid_deadline: "15 Agustus 2026",
+    dok_pemilihan: `BAB III. SPESIFIKASI TEKNIS PERANGKAT SERVER HPC
+1. Menggunakan prosesor Intel Xeon Emerald Rapids dengan arsitektur UPI 4.0 dan C741 chipset.
+2. Dilengkapi akselerator GPU NVIDIA H100 SXM5 dengan interkoneksi eksklusif NVLink 4.0.
+3. Manajemen sistem out-of-band wajib menggunakan Dell iDRAC 10 Platinum.
+
+BAB IX. KETENTUAN JADWAL DAN PERSYARATAN
+1. Masa penyusunan dan pemasukan penawaran adalah 3 hari kerja sejak pengumuman lelang.
+2. Masa sanggah hasil lelang diberikan selama 2 hari kerja.
+3. Peserta wajib melampirkan Nomor Induk Berusaha (NIB) dan NPWP aktif.`,
+    pustaka: `Kredensial Dokumen Legal:
+1. NPWP Perusahaan: 01.888.777.6-543.000 (status terdaftar)
+2. Nomor Induk Berusaha (NIB): 9120001234567 (terdaftar OSS, status aktif)`,
+    contract_draft: `BAB X. SANKSI DAN DENDA KETERLAMBATAN
+1. Apabila Penyedia terlambat menyelesaikan pekerjaan, dikenakan denda keterlambatan sebesar 1/1000 per hari dari nilai kontrak tanpa batas maksimal.`,
+    adendum: "",
+    baseline_contract: "",
+    allow_external_processing: false,
+  };
+  openAuditDialog(sampleTender);
+  toast("Contoh tender simulasi berhasil dimuat. Klik 'Jalankan evaluasi' untuk memeriksa red flag.");
 }
 
 async function openSettingsDialog() {
@@ -268,6 +336,7 @@ function getFileIcon(filename) {
   const ext = (filename || "").slice((filename || "").lastIndexOf(".")).toLowerCase();
   if (ext === ".pdf") return "📄";
   if (ext === ".docx") return "📝";
+  if (ext === ".xlsx") return "📊";
   if (ext === ".json") return "📋";
   if (ext === ".csv") return "📊";
   return "📑";
@@ -300,7 +369,7 @@ function validateFile(file) {
   if (!SUPPORTED_EXTENSIONS.has(ext)) {
     return {
       valid: false,
-      message: `Format "${ext || "tanpa ekstensi"}" tidak didukung. Format didukung: PDF, DOCX, TXT, MD, CSV, JSON.`,
+      message: `Format "${ext || "tanpa ekstensi"}" tidak didukung. Format didukung: PDF, DOCX, XLSX, TXT, MD, CSV, JSON.`,
     };
   }
   if (file.size > MAX_DOCUMENT_BYTES) {
@@ -397,6 +466,7 @@ function clearUploadedFileLabels() {
   pendingReplace = null;
 }
 
+// File removal with textarea text sync (Requirement 3.3)
 function removeUploadedFile(field, fileId, quiet = false) {
   const files = getUploadedFiles(field);
   const index = files.findIndex((f) => f.id === fileId);
@@ -405,15 +475,8 @@ function removeUploadedFile(field, fileId, quiet = false) {
   files.splice(index, 1);
 
   const textarea = document.querySelector(`[name="${field}"]`);
-  if (textarea && removed) {
-    const block = `--- ${removed.name} ---\n${removed.text}`;
-    if (textarea.value.includes(block)) {
-      textarea.value = textarea.value.replace(block, "").replace(/\n{3,}/g, "\n\n").trim();
-    } else {
-      const escaped = removed.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      const regex = new RegExp(`(?:^|\n\n)--- ${escaped} ---[\s\S]*?(?=(?:\n\n--- [^\n]+ ---|$))`, "g");
-      textarea.value = textarea.value.replace(regex, "").trim();
-    }
+  if (textarea) {
+    textarea.value = files.map((f) => `--- ${f.name} ---\n${f.text}`).join("\n\n");
   }
 
   const input = document.querySelector(`[data-file-input="${field}"]`);
@@ -437,34 +500,18 @@ function dismissUploadError(field, errorId) {
 }
 
 function clearSlotSection(field) {
-  const files = getUploadedFiles(field);
-  const errors = getUploadErrors(field);
-  const textarea = document.querySelector(`[name="${field}"]`);
-  const input = document.querySelector(`[data-file-input="${field}"]`);
-
-  const hadContent = (files.length > 0) || (errors.length > 0) || (textarea && textarea.value.trim().length > 0);
-
   uploadedFiles[field] = [];
   uploadErrors[field] = [];
   dragCounters[field] = 0;
+  const textarea = document.querySelector(`[name="${field}"]`);
   if (textarea) textarea.value = "";
+  const input = document.querySelector(`[data-file-input="${field}"]`);
   if (input) input.value = "";
   renderFileNames(field);
-
-  if (hadContent) {
-    const sectionName = field === "dok_pemilihan"
-      ? "Dokumen pemilihan"
-      : field === "adendum"
-      ? "Adendum"
-      : field === "pustaka"
-      ? "Bukti/kredensial"
-      : field === "contract_draft"
-      ? "Draf kontrak"
-      : "Kontrak baseline";
-    toast(`${sectionName} berhasil dibersihkan.`);
-  }
+  toast(`Bagian ${field} dibersihkan.`);
 }
 
+// Render uploaded file objects with 3-line preview snippet (Requirement 3.3)
 function renderFileNames(field) {
   const container = document.getElementById(`${field}-files`);
   if (!container) return;
@@ -480,12 +527,16 @@ function renderFileNames(field) {
     <div class="uploaded-file-item" data-file-id="${escapeHtml(file.id)}">
       <div class="uploaded-file-info">
         <span class="uploaded-file-icon" aria-hidden="true">${getFileIcon(file.name)}</span>
-        <span class="uploaded-file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</span>
-        <span class="uploaded-file-meta">${escapeHtml(file.sizeFormatted)}${file.characters ? ` · ${new Intl.NumberFormat("id-ID").format(file.characters)} karakter` : ""}</span>
+        <div class="uploaded-file-details">
+          <div class="uploaded-file-name-row">
+            <strong class="uploaded-file-name" title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</strong>
+            <span class="uploaded-file-meta">${escapeHtml(file.sizeFormatted)}${file.characters ? ` · ${new Intl.NumberFormat("id-ID").format(file.characters)} kar` : ""}</span>
+          </div>
+          ${file.preview ? `<div class="uploaded-file-preview">"${escapeHtml(file.preview.slice(0, 160))}..."</div>` : ""}
+        </div>
       </div>
       <div class="uploaded-file-actions">
-        <button type="button" class="file-action-btn file-action-replace" data-action="replace-file" data-field="${escapeHtml(field)}" data-file-id="${escapeHtml(file.id)}" title="Ganti file ini">🔄 Ganti</button>
-        <button type="button" class="file-action-btn file-action-remove" data-action="remove-file" data-field="${escapeHtml(field)}" data-file-id="${escapeHtml(file.id)}" title="Hapus file ini">🗑️ Hapus</button>
+        <button type="button" class="file-action-btn file-action-remove" data-action="remove-file" data-field="${escapeHtml(field)}" data-file-id="${escapeHtml(file.id)}" title="Hapus file ini">✕</button>
       </div>
     </div>
   `).join("");
@@ -548,128 +599,77 @@ async function ingestFiles(fileList, field) {
             const data = await extractSingleDocument(file);
             return { ok: true, file, data };
           } catch (error) {
-            return { ok: false, file, message: error.message || "File tidak dapat dibaca." };
+            return { ok: false, file, error };
           }
         })
       );
       results.push(...batch);
     }
 
-    const successful = results.filter((r) => r.ok);
-    const failed = results.filter((r) => !r.ok);
-
-    const attemptedNames = new Set(rawFiles.map((f) => f.name));
-    uploadErrors[field] = currentErrors.filter((item) => item.name && !attemptedNames.has(item.name));
-
-    if (failed.length) {
-      uploadErrors[field].push(
-        ...failed.map((item) => ({
-          id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          name: item.file.name,
-          message: item.message,
-        }))
-      );
-    }
-
     let addedCount = 0;
-    if (successful.length) {
-      const additions = successful.map((item) => `--- ${item.data.filename} ---\n${item.data.text}`).join("\n\n");
-      if (textarea.value.length + additions.length + 2 > 1_000_000) {
-        uploadErrors[field].push({
-          id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          name: "",
-          message: "Gabungan teks melebihi 1.000.000 karakter; file ini tidak dimasukkan.",
+    for (const item of results) {
+      if (item.ok) {
+        addedCount += 1;
+        const text = item.data.text || "";
+        const preview = text.split("\n").filter((l) => l.trim()).slice(0, 3).join(" ");
+        currentFiles.push({
+          id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: item.file.name,
+          size: item.file.size,
+          sizeFormatted: formatFileSize(item.file.size),
+          characters: item.data.characters || text.length,
+          preview: preview,
+          text: text,
         });
       } else {
-        textarea.value = `${textarea.value.trim()}${textarea.value.trim() ? "\n\n" : ""}${additions}`;
-        for (const item of successful) {
-          uploadedFiles[field].push({
-            id: `${item.file.name}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            name: item.data.filename,
-            size: item.file.size,
-            sizeFormatted: formatFileSize(item.file.size),
-            characters: item.data.characters,
-            text: item.data.text,
-          });
-        }
-        addedCount = successful.length;
+        currentErrors.push({
+          id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: item.file?.name || "",
+          message: item.error.message || "Gagal membaca dokumen.",
+        });
       }
     }
 
+    // Reconstruct textarea value from all file objects
+    textarea.value = currentFiles.map((f) => `--- ${f.name} ---\n${f.text}`).join("\n\n");
     renderFileNames(field);
 
-    if (field === "dok_pemilihan") {
-      const packageInput = document.querySelector('[name="package_name"]');
-      if (addedCount === 1 && packageInput && !packageInput.value.trim()) {
-        packageInput.value = successful[0].data.filename.replace(/\.[^.]+$/, "");
-      }
+    if (addedCount > 0) {
+      toast(`${addedCount} dokumen berhasil diekstrak ke dalam slot.`);
     }
-
-    const sectionName = field === "dok_pemilihan"
-      ? "dokumen pemilihan"
-      : field === "adendum"
-      ? "adendum"
-      : field === "pustaka"
-      ? "bukti/kredensial"
-      : field === "contract_draft"
-      ? "draf kontrak"
-      : "kontrak baseline";
-
-    if (failed.length) {
-      const firstFailure = failed[0];
-      toast(`${addedCount ? `${addedCount} file terbaca, ` : ""}${failed.length} file bermasalah: ${firstFailure.file.name} (${firstFailure.message})`, "error");
-    } else if (addedCount) {
-      toast(`${addedCount} file berhasil dibaca ke bagian ${sectionName}.`);
-    }
-  } catch (error) {
-    toast(error.message || "File tidak dapat dibaca.", "error");
   } finally {
     activeUploads = Math.max(0, activeUploads - 1);
     if (zone) zone.classList.remove("is-reading");
-    const button = document.getElementById("submit-audit");
-    if (button && activeUploads === 0) {
-      button.disabled = false;
-      button.innerHTML = auditSubmitReadyMarkup;
+    if (submit && activeUploads === 0) {
+      submit.disabled = false;
+      submit.innerHTML = auditSubmitReadyMarkup;
     }
   }
 }
 
 async function exportData() {
+  const state = getState();
   try {
-    const state = getState();
     const data = await api.audits({ q: state.query, risk: state.riskFilter });
     const workbook = await api.exportWorkbook({ kind: "register", audits: data.audits || [] });
-    downloadWorkbook(workbook);
-    toast("Register audit Excel berhasil disiapkan.");
+    downloadBlob(workbook, "register-audit-bidsentry.xlsx");
+    toast("Register audit Excel berhasil diunduh.");
   } catch (error) {
     toast(error.message, "error");
   }
 }
 
-function downloadWorkbook(workbook) {
-  const binary = atob(workbook.content_base64 || "");
-  const bytes = new Uint8Array(binary.length);
-  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
-  const blob = new Blob([bytes], { type: workbook.content_type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = workbook.filename || "bidsentry-report.xlsx";
-  link.click();
-  requestAnimationFrame(() => URL.revokeObjectURL(url));
-}
-
 async function exportReview() {
+  const state = getState();
+  const review = getReviewSnapshot(state);
+  if (!review.isCustom) {
+    toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error");
+    return;
+  }
   try {
-    const state = getState();
-    const snapshot = getReviewSnapshot(state);
-    const workbook = await api.exportWorkbook({
-      kind: "review",
-      review: snapshot,
-      include_ai_insights: state.reviewInsightsVisited,
-    });
-    downloadWorkbook(workbook);
-    toast(state.reviewInsightsVisited ? "Excel Risk Review dan sheet AI Insights berhasil disiapkan." : "Excel Risk Review berhasil disiapkan.");
+    const workbook = await api.exportWorkbook({ kind: "review", review });
+    downloadBlob(workbook, `review-${review.id || "audit"}.xlsx`);
+    toast("Laporan Risk Review Excel berhasil diunduh.");
   } catch (error) {
     toast(error.message, "error");
   }
@@ -677,288 +677,262 @@ async function exportReview() {
 
 async function exportSelectedReview() {
   const state = getState();
-  const selected = state.audits.find((item) => item.audit_id === state.selectedAuditId);
+  const selected = (state.audits || []).find((item) => item.audit_id === state.selectedAuditId);
   if (!selected) {
-    toast("Pilih paket terlebih dahulu untuk mengekspor Risk Review.", "error");
+    toast("Pilih audit dari tabel terlebih dahulu.", "error");
     return;
   }
-  const isCurrentCustomReview = state.customReview?.audit_id === selected.audit_id;
-  const review = isCurrentCustomReview ? getReviewSnapshot(state) : {
-    package_name: selected.package_name,
-    tender_id: selected.tender_id,
-    agency: selected.agency,
-    verdict: selected.verdict || "REVIEW_REQUIRED",
-    risk_level: selected.risk_level,
-    risk_score: selected.risk_score,
-    contract_value_idr: selected.contract_value_idr,
-    findings: Array.isArray(selected.findings) ? selected.findings : [],
-    review_role: selected.review_role || "procurement",
-    integrations: {},
-  };
   try {
-    const workbook = await api.exportWorkbook({
-      kind: "review",
-      review,
-      include_ai_insights: isCurrentCustomReview && state.reviewInsightsVisited,
-    });
-    downloadWorkbook(workbook);
-    toast(`Risk Review Excel untuk ${selected.package_name} berhasil disiapkan.`);
+    const payload = auditMemoryCache.get(selected.audit_id) || selected;
+    const review = buildReviewPayload(payload);
+    const workbook = await api.exportWorkbook({ kind: "review", review });
+    downloadBlob(workbook, `risk-review-${selected.tender_id || selected.audit_id.slice(0, 8)}.xlsx`);
+    toast(`Risk Review "${selected.package_name}" berhasil diekspor.`);
   } catch (error) {
-    toast(error.message, "error");
+    toast(error.message || "Gagal mengekspor laporan.", "error");
   }
+}
+
+function buildReviewPayload(row) {
+  return {
+    ...row,
+    id: row.audit_id || "latest",
+    package_name: row.package_name || "Evaluasi dokumen",
+    verdict: row.executive_summary?.eligibility || row.verdict || "NEEDS_REVIEW",
+    summary: row.executive_summary?.executive_summary || row.review_recommendation || "Periksa temuan.",
+    findings: row.findings || [],
+  };
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  requestAnimationFrame(() => URL.revokeObjectURL(url));
+}
+
+// Sanggahan builder and filtering (Requirement 3.8)
+function filterObjectionFindings(findings, category = "ALL") {
+  const excludedStatuses = new Set(["NOT_SUPPORTED"]);
+  const excludedRuleIds = new Set(["ADM-NPWP", "ADM-NIB", "ADM-SBU", "ADM-KSWP"]);
+
+  return (findings || []).filter((f) => {
+    if (excludedStatuses.has(String(f.status || "").toUpperCase())) return false;
+    if (excludedRuleIds.has(f.id)) return false;
+    const note = (f.review_note || "").toLowerCase();
+    if (note.includes("kutipan ditolak") || note.includes("rejected")) return false;
+
+    if (category !== "ALL") {
+      const cat = (f.category || "").toLowerCase();
+      const id = (f.id || "").toLowerCase();
+      if (category === "spesifikasi" && !cat.includes("spesifikasi") && !id.includes("spec")) return false;
+      if (category === "jadwal" && !cat.includes("jadwal") && !id.includes("proc")) return false;
+      if (category === "integritas" && !cat.includes("integritas") && !id.includes("gov")) return false;
+      if (category === "keuangan" && !cat.includes("keuangan") && !id.includes("fin")) return false;
+      if (category === "kontrak" && !cat.includes("kontrak") && !id.includes("con")) return false;
+    }
+    return true;
+  });
 }
 
 async function openObjection() {
   const state = getState();
   const review = getReviewSnapshot(state);
-  if (!review.isCustom || !state.lastAuditDraft) { toast("Jalankan evaluasi terlebih dahulu.", "error"); return; }
-  try {
-    const result = await api.createSanggahan(buildSanggahanPayload(review, state, "markdown"));
-    const bytes = Uint8Array.from(atob(result.content_base64), (char) => char.charCodeAt(0));
-    document.getElementById("objection-draft").value = new TextDecoder().decode(bytes);
-    document.getElementById("objection-dialog")?.showModal();
-  } catch (error) { toast(error.message, "error"); }
+  if (!review.isCustom) {
+    toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error");
+    return;
+  }
+  updateObjectionDraftText("ALL");
+  document.getElementById("objection-dialog")?.showModal();
 }
 
-function buildSanggahanPayload(review, state, format) {
-  return {
-    tender_id: review.tender_id || "", package_name: review.package_name || "", company_name: review.company_name || "",
-    notice_number: review.notice_number || "", pokja_name: review.pokja_name || "",
-    source_text: [state.lastAuditDraft?.dok_pemilihan, state.lastAuditDraft?.adendum, state.lastAuditDraft?.contract_draft].filter(Boolean).join("\n"),
-    findings: review.findings || [], format,
-  };
+function updateObjectionDraftText(category = "ALL") {
+  const state = getState();
+  const review = getReviewSnapshot(state);
+  const rawFindings = review.findings || [];
+  const eligible = filterObjectionFindings(rawFindings, category);
+
+  const dateStr = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
+  const lines = [
+    "SURAT SANGGAHAN DOKUMEN PEMILIHAN PENGADAAN BARANG/JASA",
+    `Nomor: SANGGAH/${review.tender_id || "TDR"}/${new Date().getFullYear()}`,
+    "Lampiran: 1 (satu) Berkas Dokumen Pendukung",
+    `Perihal: Sanggahan atas Ketentuan Dokumen Pemilihan Paket "${review.package_name}"`,
+    "",
+    `Kepada Yth.`,
+    `Kelompok Kerja (Pokja) Pemilihan / Pejabat Pembuat Komitmen (PPK)`,
+    `${review.pokja_name || "Pokja Pemilihan Pengadaan"}`,
+    "Di Tempat",
+    "",
+    "Dengan hormat,",
+    `Sehubungan dengan pelaksanaan proses tender untuk paket pekerjaan "${review.package_name}" (Nomor Tender: ${review.tender_id || "—"}, Nomor Pengumuman: ${review.notice_number || "—"}), kami yang bertanda tangan di bawah ini:`,
+    "",
+    `Nama Perusahaan : ${review.company_name || "[Nama Badan Usaha Penyedia]"}`,
+    "Status Peserta  : Calon Penyedia Barang/Jasa Terdaftar",
+    "",
+    "Dengan ini mengajukan SANGGAHAN RESMI terhadap sejumlah ketentuan dalam Dokumen Pemilihan yang terindikasi membatasi persaingan usaha yang sehat dan bertentangan dengan peraturan pengadaan barang/jasa pemerintah.",
+    "",
+    "I. FAKTA DAN KETENTUAN YANG DISANGGAH",
+    "",
+  ];
+
+  if (!eligible.length) {
+    lines.push("Tidak ada temuan pelanggaran kritis yang terdeteksi pada kategori yang dipilih.");
+  } else {
+    eligible.forEach((f, idx) => {
+      lines.push(`${idx + 1}. Pokok Sanggahan: ${f.clause || f.category}`);
+      if (f.requirement_evidence) lines.push(`   Kutipan Dokumen : "${f.requirement_evidence}"`);
+      lines.push(`   Analisis Hukum  : ${f.review_note || "Klausul berpotensi melanggar ketentuan perundang-undangan."}`);
+      lines.push("");
+    });
+  }
+
+  lines.extend = function(arr) { arr.forEach((l) => this.push(l)); };
+  lines.extend([
+    "II. DASAR HUKUM SANGGAHAN",
+    "1. Perpres No. 16 Tahun 2018 jo. Perpres No. 12 Tahun 2021 Pasal 6 (Prinsip Pengadaan: Terbuka, Bersaing, Adil, dan Akuntabel).",
+    "2. Perpres No. 12 Tahun 2021 Pasal 19 ayat (1) (Larangan Penyebutan Merek/Spesifikasi Mengarah/Diskriminatif).",
+    "3. Perpres No. 12 Tahun 2021 Pasal 54 (Kecukupan Waktu Penyusunan Penawaran dan Masa Sanggah).",
+    "4. UU No. 5 Tahun 1999 tentang Larangan Praktek Monopoli dan Persaingan Usaha Tidak Sehat Pasal 22.",
+    "",
+    "III. PERMOHONAN PENYEDIA",
+    "Berdasarkan fakta dan dasar hukum di atas, kami memohon agar Pokja Pemilihan berkenan untuk:",
+    "1. Menerima dan mengabulkan sanggahan ini secara keseluruhan.",
+    "2. Melakukan perubahan/adendum dokumen pemilihan terhadap klausul-klausul yang diskriminatif.",
+    "3. Memberikan waktu perpanjangan penawaran yang memadai demi terciptanya kompetisi yang adil.",
+    "",
+    `Dibuat di Jakarta, ${dateStr}`,
+    `Hormat kami,`,
+    `${review.company_name || "[Nama Badan Usaha Penyedia]"}`,
+    "",
+    "",
+    "( Meterai Rp 10.000 & Tanda Tangan Direktur Utama )",
+  ]);
+
+  const textarea = document.getElementById("objection-draft");
+  if (textarea) textarea.value = lines.join("\n");
+}
+
+function downloadObjectionTxt() {
+  const text = document.getElementById("objection-draft")?.value || "";
+  if (!text) { toast("Tidak ada draf sanggahan.", "error"); return; }
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  downloadBlob(blob, "draf-sanggahan-resmi.txt");
+  toast("Draf sanggahan .TXT berhasil diunduh.");
 }
 
 async function downloadObjectionDocx() {
   const state = getState();
   const review = getReviewSnapshot(state);
-  if (!review.isCustom || !state.lastAuditDraft) { toast("Jalankan evaluasi terlebih dahulu.", "error"); return; }
+  if (!review.isCustom) { toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error"); return; }
   try {
-    const result = await api.createSanggahan(buildSanggahanPayload(review, state, "docx"));
+    const payload = {
+      tender_id: review.tender_id || "",
+      package_name: review.package_name || "",
+      company_name: review.company_name || "",
+      notice_number: review.notice_number || "",
+      pokja_name: review.pokja_name || "",
+      source_text: [state.lastAuditDraft?.dok_pemilihan, state.lastAuditDraft?.adendum, state.lastAuditDraft?.contract_draft].filter(Boolean).join("\n") || "Teks dokumen",
+      findings: filterObjectionFindings(review.findings || []),
+      format: "docx",
+    };
+    const result = await api.createSanggahan(payload);
     const bytes = Uint8Array.from(atob(result.content_base64 || ""), (char) => char.charCodeAt(0));
     const blob = new Blob([bytes], { type: result.content_type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = result.filename || "draf-sanggahan.docx";
-    link.click();
-    requestAnimationFrame(() => URL.revokeObjectURL(url));
-    toast("Draf sanggahan DOCX berhasil disiapkan untuk ditinjau.");
-  } catch (error) { toast(error.message, "error"); }
-}
-
-function openDispatchConfirmation(useSelectedAudit = false) {
-  if (dispatchInProgress) {
-    toast("Tunggu sampai tindak lanjut yang sedang berjalan selesai.", "error");
-    return;
-  }
-  const state = getState();
-  const review = getReviewSnapshot(state);
-  const selected = useSelectedAudit ? state.audits.find((item) => item.audit_id === state.selectedAuditId) : null;
-  pendingDispatchPayload = selected ? {
-    nama_paket: selected.package_name, verdict: selected.verdict, risk_score: selected.risk_score,
-    alasan_utama: (selected.findings || []).slice(0, 5).map((item) => item.clause || item.evidence),
-    tender_id: selected.tender_id,
-  } : {
-    nama_paket: review.package_name, verdict: review.verdict, risk_score: review.risk_score,
-    alasan_utama: (review.findings || []).slice(0, 5).map((item) => item.clause || item.evidence),
-    tender_id: review.tender_id,
-  };
-  const mode = state.integrations?.composio?.configured ? "Composio diatur; hasil aksi akan ditampilkan setelah layanan menjawab." : "Composio belum dikonfigurasi; aksi belum tersedia.";
-  const configured = Boolean(state.integrations?.composio?.configured);
-  document.getElementById("dispatch-confirm-copy").textContent = `${pendingDispatchPayload.nama_paket} · ${pendingDispatchPayload.verdict} · ${mode}`;
-  document.getElementById("dispatch-live-consent-row").hidden = !configured;
-  document.getElementById("dispatch-email-row").hidden = !configured;
-  document.getElementById("dispatch-email").value = "";
-  document.getElementById("dispatch-live-consent").checked = false;
-  document.getElementById("dispatch-results").hidden = true;
-  document.getElementById("dispatch-results").replaceChildren();
-  const button = document.getElementById("confirm-dispatch-button");
-  button.dataset.action = "confirm-dispatch";
-  button.disabled = !configured;
-  button.textContent = configured ? "Jalankan tindakan" : "Belum tersedia";
-  document.getElementById("dispatch-dialog")?.showModal();
-}
-
-function showDispatchResult(result) {
-  const panel = document.getElementById("dispatch-results");
-  if (!panel) return;
-  panel.replaceChildren();
-  panel.hidden = false;
-  const heading = document.createElement("strong");
-  heading.textContent = result.status === "unavailable"
-    ? "Konektor tidak tersedia · tidak ada tindakan dijalankan"
-    : result.status === "error"
-      ? "Konektor gagal · tidak ada hasil tindakan"
-      : result.status === "partial"
-        ? "Sebagian tindakan berhasil · periksa status tiap konektor"
-        : "Semua tindakan workspace selesai";
-  panel.append(heading);
-  const actions = result.actions && typeof result.actions === "object" ? Object.entries(result.actions) : [];
-  const labels = {
-    GOOGLEDOCS_CREATE_DOCUMENT: ["Google Docs", result.doc_url],
-    GOOGLECALENDAR_CREATE_EVENT: ["Google Calendar", result.event_url],
-    GMAIL_CREATE_EMAIL_DRAFT: ["Draf Gmail", result.draft_url],
-  };
-  if (actions.length) {
-    const list = document.createElement("ul");
-    for (const [key, action] of actions) {
-      const item = document.createElement("li");
-      const [label, link] = labels[key] || [key, null];
-      item.append(document.createTextNode(`${label}: ${action?.success ? "berhasil" : "gagal"}`));
-      if (action?.success && typeof link === "string") {
-        try {
-          const url = new URL(link);
-          if (url.protocol === "https:" && ["docs.google.com", "calendar.google.com", "mail.google.com"].includes(url.hostname)) {
-            const anchor = document.createElement("a");
-            anchor.href = url.href;
-            anchor.target = "_blank";
-            anchor.rel = "noopener noreferrer";
-            anchor.textContent = "Buka";
-            item.append(document.createTextNode(" · "), anchor);
-          }
-        } catch { /* Ignore connector links that are not safe web URLs. */ }
-      }
-      list.append(item);
-    }
-    panel.append(list);
-  }
-  const note = document.createElement("span");
-  note.textContent = "Periksa hasil di workspace tujuan. Draf email tidak dikirim oleh BidSentry.";
-  panel.append(note);
-}
-
-async function dispatchFollowUp() {
-  if (dispatchInProgress) return;
-  const button = document.getElementById("confirm-dispatch-button");
-  const recipient = document.getElementById("dispatch-email");
-  if (recipient?.value && !recipient.checkValidity()) {
-    recipient.reportValidity();
-    return;
-  }
-  if (button) { button.disabled = true; button.textContent = "Menyiapkan…"; }
-  dispatchInProgress = true;
-  try {
-    const result = await api.dispatch({
-      ...(pendingDispatchPayload || {}),
-      email_penerima: String(document.getElementById("dispatch-email")?.value || "").trim(),
-      allow_external_processing: Boolean(document.getElementById("dispatch-live-consent")?.checked),
-    });
-    showDispatchResult(result);
-    const statusMessage = result.status === "success"
-      ? "Semua tindakan workspace selesai. Periksa hasilnya sebelum digunakan."
-      : result.status === "partial"
-        ? "Sebagian tindakan workspace gagal. Periksa hasil tiap konektor."
-        : result.status === "unavailable"
-          ? "Composio belum dikonfigurasi; tidak ada tindakan yang dijalankan."
-          : "Konektor tidak berhasil menjalankan tindakan.";
-    toast(statusMessage, result.status === "partial" || result.status === "error" ? "error" : "success");
+    downloadBlob(blob, result.filename || "draf-sanggahan.docx");
+    toast("Draf sanggahan DOCX berhasil diunduh.");
   } catch (error) {
     toast(error.message, "error");
-    const panel = document.getElementById("dispatch-results");
-    if (panel) { panel.hidden = false; panel.textContent = error.message; }
-  } finally {
-    dispatchInProgress = false;
-    if (button) {
-      button.disabled = false;
-      button.dataset.action = "close-utility";
-      button.textContent = "Selesai";
-    }
   }
 }
 
-root.addEventListener("click", async (event) => {
-  const clearBtn = event.target.closest('[data-action="clear-section"]');
-  if (clearBtn) {
-    event.preventDefault();
-    event.stopPropagation();
-    clearSlotSection(clearBtn.dataset.field);
+// Global click event listeners
+document.addEventListener("click", async (event) => {
+  const toastClose = event.target.closest('[data-action="close-toast"]');
+  if (toastClose) {
+    toastNode.className = "toast";
     return;
   }
-  const removeBtn = event.target.closest('[data-action="remove-file"]');
-  if (removeBtn) {
-    event.preventDefault();
-    event.stopPropagation();
-    removeUploadedFile(removeBtn.dataset.field, removeBtn.dataset.fileId);
-    return;
-  }
-  const replaceBtn = event.target.closest('[data-action="replace-file"]');
-  if (replaceBtn) {
-    event.preventDefault();
-    event.stopPropagation();
-    pendingReplace = { field: replaceBtn.dataset.field, fileId: replaceBtn.dataset.fileId };
-    document.querySelector(`[data-file-input="${replaceBtn.dataset.field}"]`)?.click();
-    return;
-  }
-  const dismissBtn = event.target.closest('[data-action="dismiss-error"]');
-  if (dismissBtn) {
-    event.preventDefault();
-    event.stopPropagation();
-    dismissUploadError(dismissBtn.dataset.field, dismissBtn.dataset.errorId);
-    return;
-  }
+
   const dropZone = event.target.closest(".drop-zone");
   if (dropZone) {
     pendingReplace = null;
     document.querySelector(`[data-file-input="${dropZone.dataset.dropTarget}"]`)?.click();
     return;
   }
+
   const auditRow = event.target.closest(".audit-row");
   if (auditRow && !event.target.closest('[data-action="delete-audit"]')) {
     selectAudit(auditRow.dataset.auditId);
     return;
   }
+
   const target = event.target.closest("[data-action]");
   if (event.target.closest("#test-integrations")) {
     await testIntegrations();
     return;
   }
+
   if (!target) return;
   const action = target.dataset.action;
+
+  if (action === "load-sample-tender") loadSampleTender();
   if (action === "new-audit") openAuditDialog();
+  if (action === "add-more-docs") openAuditDialog(getState().lastAuditDraft);
   if (action === "open-settings") openSettingsDialog();
   if (action === "close-dialog") document.getElementById("audit-dialog")?.close();
   if (action === "close-utility") target.closest("dialog")?.close();
+  if (action === "close-confirm-delete") document.getElementById("confirm-delete-dialog")?.close();
+  if (action === "execute-delete-audit") executeDeleteAudit();
   if (action === "refresh") loadWorkspace();
   if (action === "theme-toggle") {
     const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
     document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem("bidsentry-theme", theme); } catch { /* Theme remains active for this page. */ }
+    try { localStorage.setItem("bidsentry-theme", theme); } catch {}
     render();
   }
   if (action === "export") exportData();
   if (action === "export-review") exportReview();
   if (action === "export-selected-review") exportSelectedReview();
-  if (action === "dispatch-selected") openDispatchConfirmation(true);
-  if (action === "open-dispatch") openDispatchConfirmation(false);
-  if (action === "confirm-dispatch") {
-    if (getState().integrations?.composio?.configured && !document.getElementById("dispatch-live-consent")?.checked) {
-      toast("Centang persetujuan sebelum mengirim ringkasan ke Composio.", "error");
-      return;
-    }
-    dispatchFollowUp();
-  }
   if (action === "open-objection") openObjection();
   if (action === "download-objection") downloadObjectionDocx();
-  if (action === "copy-objection") navigator.clipboard.writeText(document.getElementById("objection-draft")?.value || "").then(() => toast("Draf klarifikasi disalin."), () => toast("Clipboard tidak dapat diakses browser.", "error"));
+  if (action === "download-objection-txt") downloadObjectionTxt();
+  if (action === "copy-objection") {
+    navigator.clipboard.writeText(document.getElementById("objection-draft")?.value || "").then(
+      () => toast("Draf sanggahan disalin ke clipboard."),
+      () => toast("Clipboard tidak dapat diakses browser.", "error")
+    );
+  }
   if (action === "print-objection") window.print();
   if (action === "browse-file") document.querySelector(`[data-file-input="${target.dataset.fileTarget}"]`)?.click();
+  if (action === "clear-section") clearSlotSection(target.dataset.field);
+  if (action === "remove-file") removeUploadedFile(target.dataset.field, target.dataset.fileId);
+  if (action === "dismiss-error") dismissUploadError(target.dataset.field, target.dataset.errorId);
+
   if (action === "view-overview") { setState({ activeView: "overview" }); document.querySelector(".main-content")?.scrollTo({ top: 0, behavior: "smooth" }); }
   if (action === "focus-audits") { setState({ activeView: "audits" }); document.getElementById("audit-register")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
   if (action === "focus-review") { setState({ activeView: "review" }); document.getElementById("risk-review")?.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  if (action === "prev-page") setState({ historyPage: Math.max(1, (getState().historyPage || 1) - 1) });
+  if (action === "next-page") setState({ historyPage: (getState().historyPage || 1) + 1 });
+
   if (action === "review-tab") {
     const tab = target.dataset.tab === "insights" ? "insights" : "matrix";
     setState({ reviewTab: tab, reviewInsightsVisited: getState().reviewInsightsVisited || tab === "insights" });
   }
+
   if (action === "delete-audit") {
     event.preventDefault();
     event.stopPropagation();
     deleteAuditRecord(target.dataset.auditId, target.dataset.packageName);
     return;
   }
+
   if (action === "select-audit") selectAudit(target.dataset.auditId);
   if (action === "review-filter") setState({ reviewFilter: target.dataset.filter, expandedFindingId: null });
   if (action === "toggle-finding") setState({ expandedFindingId: getState().expandedFindingId === target.dataset.findingId ? null : target.dataset.findingId });
+
   if (action === "record-review-feedback") {
     target.disabled = true;
     try {
@@ -974,43 +948,57 @@ root.addEventListener("click", async (event) => {
       toast(error.message, "error");
     }
   }
-  if (action === "rerun-audit") openAuditDialog(getState().lastAuditDraft);
 });
 
-root.addEventListener("keydown", (event) => {
-  const tab = event.target.closest('[role="tab"]');
-  if (tab && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
-    const tabs = [...root.querySelectorAll('[role="tab"]')];
-    const currentIndex = tabs.indexOf(tab);
-    const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
-    event.preventDefault();
-    tabs[nextIndex]?.focus();
-    tabs[nextIndex]?.click();
-    return;
+// Change event listeners for filters & reviewer overrides
+document.addEventListener("change", (event) => {
+  if (event.target.id === "risk-filter") {
+    setState({ riskFilter: event.target.value, historyPage: 1 });
   }
-  const dropZone = event.target.closest(".drop-zone");
-  if (dropZone && (event.key === "Enter" || event.key === " ")) {
-    event.preventDefault();
-    document.querySelector(`[data-file-input="${dropZone.dataset.dropTarget}"]`)?.click();
-    return;
+  if (event.target.id === "verdict-filter") {
+    setState({ verdictFilter: event.target.value, historyPage: 1 });
   }
-  const row = event.target.closest(".audit-row");
-  if (row && (event.key === "Enter" || event.key === " ")) {
-    event.preventDefault();
-    selectAudit(row.dataset.auditId);
+  if (event.target.id === "objection-category-filter") {
+    updateObjectionDraftText(event.target.value);
   }
-  const reviewRow = event.target.closest(".review-row");
-  if (reviewRow && (event.key === "Enter" || event.key === " ")) {
-    event.preventDefault();
-    setState({ expandedFindingId: getState().expandedFindingId === reviewRow.dataset.findingId ? null : reviewRow.dataset.findingId });
+  if (event.target.dataset.action === "set-reviewer-override" || event.target.classList.contains("reviewer-override-select")) {
+    const fid = event.target.dataset.findingId;
+    const val = event.target.value;
+    const current = getState().reviewerOverrides || {};
+    const updated = { ...current, [fid]: val };
+    setState({ reviewerOverrides: updated });
+    toast(`Penetapan reviewer diperbarui: ${val === "IGNORED" ? "Diabaikan (False Positive)" : val === "ACCEPTED" ? "Diterima" : val === "CLARIFY" ? "Klarifikasi" : "Otomatis"}.`);
   }
 });
 
-// Prevent default drag/drop behavior on entire window to prevent accidental navigation
+// Search input with 300ms debounce (Requirement 3.5)
+document.addEventListener("input", (event) => {
+  if (event.target.id === "audit-search") {
+    const spinner = document.getElementById("search-spinner");
+    if (spinner) spinner.hidden = false;
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      setState({ query: event.target.value, historyPage: 1 });
+      const sp = document.getElementById("search-spinner");
+      if (sp) sp.hidden = true;
+    }, 300);
+  }
+});
+
+// File input handlers
+document.addEventListener("change", async (event) => {
+  const picker = event.target.closest?.(".file-picker");
+  if (!picker) return;
+  const field = picker.dataset.fileInput;
+  if (!field) return;
+  const files = [...(picker.files || [])];
+  if (files.length) await ingestFiles(files, field);
+  picker.value = "";
+});
+
+// Drag and drop event listeners
 ["dragenter", "dragover", "dragleave", "drop"].forEach((eventName) => {
-  window.addEventListener(eventName, (event) => {
-    event.preventDefault();
-  }, false);
+  window.addEventListener(eventName, (event) => event.preventDefault(), false);
 });
 
 document.addEventListener("dragenter", (event) => {
@@ -1054,45 +1042,12 @@ document.addEventListener("drop", (event) => {
   if (!field) return;
   setDragCounter(field, 0);
   zone.classList.remove("is-dragging");
-
-  const files = event.dataTransfer?.files;
-  if (files && files.length > 0) {
-    const input = document.querySelector(`[data-file-input="${field}"]`);
-    if (input) {
-      try {
-        const dt = new DataTransfer();
-        for (let i = 0; i < files.length; i++) {
-          dt.items.add(files[i]);
-        }
-        input.files = dt.files;
-      } catch {
-        // Fallback if DataTransfer is restricted
-      }
-    }
-    ingestFiles(files, field);
-  }
+  const files = [...(event.dataTransfer?.files || [])];
+  if (files.length) ingestFiles(files, field);
 });
 
-root.addEventListener("input", (event) => {
-  if (event.target.id === "audit-search") {
-    setState({ query: event.target.value }, { notify: false });
-    loadWorkspace({ includeOverview: false, includeHealth: false, includeFeedback: false });
-  }
-});
-
-root.addEventListener("change", (event) => {
-  if (event.target.id === "risk-filter") {
-    setState({ riskFilter: event.target.value }, { notify: false });
-    loadWorkspace({ includeOverview: false, includeHealth: false, includeFeedback: false });
-  }
-  const fileInput = event.target.closest("[data-file-input]");
-  if (fileInput) {
-    ingestFiles(fileInput.files, fileInput.dataset.fileInput);
-    fileInput.value = "";
-  }
-});
-
-root.addEventListener("submit", async (event) => {
+// Audit form submission with input preservation and automatic tab switch (Requirements 3.1 & 3.2)
+document.addEventListener("submit", async (event) => {
   if (event.target.id === "settings-form") {
     event.preventDefault();
     await saveSettings(event.target);
@@ -1100,11 +1055,16 @@ root.addEventListener("submit", async (event) => {
   }
   if (event.target.id !== "audit-form") return;
   event.preventDefault();
-  if (activeUploads) { toast("Tunggu sampai semua file selesai dibaca.", "error"); return; }
+
+  if (activeUploads) {
+    toast("Tunggu sampai semua file selesai dibaca.", "error");
+    return;
+  }
+
   const form = event.target;
   const values = new FormData(form);
   const payload = {
-    package_name: String(values.get("package_name") || "").trim(),
+    package_name: String(values.get("package_name") || "").trim() || "Audit dokumen",
     tender_id: String(values.get("tender_id") || "").trim(),
     notice_number: String(values.get("notice_number") || "").trim(),
     pokja_name: String(values.get("pokja_name") || "").trim(),
@@ -1115,41 +1075,69 @@ root.addEventListener("submit", async (event) => {
     pustaka: String(values.get("pustaka") || "").trim(),
     contract_draft: String(values.get("contract_draft") || "").trim(),
     baseline_contract: String(values.get("baseline_contract") || "").trim(),
+    bid_deadline: String(values.get("bid_deadline") || "").trim() || null,
     review_role: String(values.get("review_role") || "procurement"),
     allow_external_processing: values.get("allow_external_processing") === "on",
   };
+
   if (!payload.dok_pemilihan && !payload.adendum && !payload.pustaka && !payload.contract_draft && !payload.baseline_contract) {
     toast("Masukkan teks atau unggah minimal satu dokumen.", "error");
     return;
   }
+
   const submit = document.getElementById("submit-audit");
-  if (submit) { submit.disabled = true; submit.textContent = "Memeriksa…"; }
+  if (submit) {
+    submit.disabled = true;
+    submit.textContent = "Memeriksa dokumen…";
+  }
+
   try {
     const result = await api.evaluateAudit(payload);
     const localRow = {
-      ...result, tender_id: result.tender_id || result.audit_id.slice(0, 8).toUpperCase(), agency: result.pokja_name || "",
-      vendor_name: result.company_name || "", source: "local_audit_log", risk_method: result.risk.method,
+      ...result,
+      tender_id: result.tender_id || result.audit_id.slice(0, 8).toUpperCase(),
+      agency: result.pokja_name || "",
+      vendor_name: result.company_name || "",
+      source: "local_audit_log",
+      risk_method: result.risk.method,
       summary: { ...result.summary, findings: result.findings.length },
     };
+
     document.getElementById("audit-dialog")?.close();
-    form.reset();
-    clearUploadedFileLabels();
+
+    // Preserve form inputs (Requirement 3.2: DO NOT reset form or wipe files)
     setState({ query: "", riskFilter: "ALL", lastAuditDraft: payload });
     await loadWorkspace({ preserveSelection: false });
     auditMemoryCache.set(result.audit_id, result);
-    const otherRows = getState().audits.filter((row) => row.audit_id !== localRow.audit_id);
+
+    const otherRows = (getState().audits || []).filter((row) => row.audit_id !== localRow.audit_id);
     setState({
-      audits: [localRow, ...otherRows], selectedAuditId: localRow.audit_id,
+      audits: [localRow, ...otherRows],
+      selectedAuditId: localRow.audit_id,
       currentAudit: result,
-      customReview: result, reviewFilter: "ALL", expandedFindingId: null, activeView: "review",
-      reviewTab: "insights", reviewInsightsVisited: true,
+      customReview: result,
+      reviewFilter: "ALL",
+      expandedFindingId: null,
+      activeView: "review",
+      reviewTab: "matrix",
+      reviewInsightsVisited: true,
+      reviewerOverrides: {},
     });
-    try { setState({ reviewFeedback: await api.reviewFeedback(result.audit_id) }); }
-    catch { setState({ reviewFeedback: null }); }
-    document.getElementById("risk-review")?.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    try {
+      setState({ reviewFeedback: await api.reviewFeedback(result.audit_id) });
+    } catch {
+      setState({ reviewFeedback: null });
+    }
+
+    // Automatic smooth scroll to findings (Requirement 3.1)
+    setTimeout(() => {
+      document.getElementById("risk-review")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+
     toast(`Evaluasi selesai: ${result.executive_summary?.eligibility || result.verdict}.`);
   } catch (error) {
-    toast(error.message, "error");
+    toast(error.message || "Pemeriksaan gagal dijalankan.", "error");
   } finally {
     const button = document.getElementById("submit-audit");
     if (button && activeUploads === 0) {
