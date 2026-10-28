@@ -604,6 +604,53 @@ td { height: 59px; padding: 9px 11px; border-bottom: 1px solid #f0f0ec; color: #
 :root[data-theme="dark"] .review-table td:first-child small,
 :root[data-theme="dark"] .review-table td:nth-child(2) small { color: var(--muted-2); }
 
+/* Table & History Row Dark Mode */
+:root[data-theme="dark"] thead,
+:root[data-theme="dark"] .table-wrap thead { background: #191e18; }
+:root[data-theme="dark"] th { border-top-color: var(--line); border-bottom-color: var(--line); color: var(--muted); }
+:root[data-theme="dark"] td { border-bottom-color: var(--line); color: var(--muted); }
+:root[data-theme="dark"] .audit-row:hover { background: #232a21; }
+:root[data-theme="dark"] .audit-row.is-selected { background: #283425; box-shadow: inset 2px 0 #7ca471; }
+:root[data-theme="dark"] .audit-row.is-selected td { color: var(--ink); }
+:root[data-theme="dark"] .audit-row.is-selected .package-cell strong { color: #e7efe3; }
+:root[data-theme="dark"] .empty-row { color: var(--muted-2); }
+
+/* Score Gauge Ring Dark Mode */
+:root[data-theme="dark"] .score-ring::before { background: #20251f; }
+
+/* Metric Top Icons Dark Mode */
+:root[data-theme="dark"] .icon-blue { background: #1c2438; color: #8fa0f8; }
+:root[data-theme="dark"] .icon-green { background: #172a1c; color: #76c996; }
+:root[data-theme="dark"] .icon-red { background: #3b1d19; color: #f58d7f; }
+:root[data-theme="dark"] .icon-amber { background: #362a14; color: #e7b75b; }
+
+/* Integration Symbols Dark Mode */
+:root[data-theme="dark"] .symbol-local { background: #1f2c1c; color: #8ec07c; }
+:root[data-theme="dark"] .symbol-langflow { background: #281f3d; color: #b897e6; }
+:root[data-theme="dark"] .symbol-composio { background: #352614; color: #e0a957; }
+:root[data-theme="dark"] .symbol-bob { background: #1d273d; color: #7d96eb; }
+:root[data-theme="dark"] .distribution-track { background: #272d25; }
+:root[data-theme="dark"] .integration-list > div { border-top-color: var(--line); }
+
+/* Review Workspace & Controls Dark Mode */
+:root[data-theme="dark"] .addendum-control { background: #20251f; border-color: var(--line); }
+:root[data-theme="dark"] .addendum-control strong { color: var(--ink); }
+:root[data-theme="dark"] .addendum-control small { color: var(--muted); }
+:root[data-theme="dark"] .review-expanded td { background: #1d221c !important; }
+:root[data-theme="dark"] .redline-original { background: #38211e; border-color: #59312c; color: #f5aaa1; }
+:root[data-theme="dark"] .redline-proposal { background: #1d3322; border-color: #2f5236; color: #a4e4b5; }
+
+/* Settings & Notes Dark Mode */
+:root[data-theme="dark"] .settings-state { background: #262d25; color: #c2cdbb; }
+:root[data-theme="dark"] .settings-security-note { background: #20251f; color: var(--muted); border: 1px solid var(--line); }
+:root[data-theme="dark"] .upload-review-note { background: #20251f; color: var(--muted); border: 1px solid var(--line); }
+:root[data-theme="dark"] .insights-empty { background: #20251f; border-color: var(--line); }
+:root[data-theme="dark"] .insights-icon { background: #281f3d; color: #b897e6; }
+:root[data-theme="dark"] .icon-button-danger { background: #20251f; color: var(--muted); border-color: var(--line); }
+:root[data-theme="dark"] .pill-ignored { background: #2c322b; color: #9ea49b; }
+:root[data-theme="dark"] .pill-override { background: #1f3825; color: #8fd4a1; }
+:root[data-theme="dark"] .is-muted { background: #262d25; color: var(--muted); }
+
 @media print {
   body * { visibility: hidden !important; }
   #objection-dialog[open], #objection-dialog[open] * { visibility: visible !important; }
