@@ -576,8 +576,13 @@ td { height: 59px; padding: 9px 11px; border-bottom: 1px solid #f0f0ec; color: #
 :root[data-theme="dark"] .penalty-warning { border-color: #743b36; background: #422522; color: #ffaaa1; }
 :root[data-theme="dark"] .status-warn { background: #40351e; color: #eac77c; }
 :root[data-theme="dark"] .status-muted { background: #2c302a; color: #b4baae; }
+.eligibility-badge { display: inline-flex; align-items: center; font-weight: 700; font-size: 13px; letter-spacing: .02em; }
+.eligibility-badge.is-go { color: #2e7d32; }
+.eligibility-badge.is-no-go { color: #c62828; }
+.eligibility-badge.is-review { color: #b26a00; }
 :root[data-theme="dark"] .eligibility-badge.is-go { color: #9ad7a8; }
 :root[data-theme="dark"] .eligibility-badge.is-no-go { color: #ff9b90; }
+:root[data-theme="dark"] .eligibility-badge.is-review { color: #fed078; }
 :root[data-theme="dark"] .review-summary-copy { color: var(--muted) !important; }
 :root[data-theme="dark"] blockquote { border-left-color: #687a60; color: #d8ddd2; }
 :root[data-theme="dark"] .score-panel { border-color: var(--line); }

@@ -225,3 +225,98 @@ def test_managed_soc_conflict_of_interest_and_unrealistic_timeline() -> None:
     assert "Zero-Trust" in unr["review_note"]
 
     assert result["verdict"] == "NO-GO"
+
+
+def test_probe_engine_13_audit_scenarios() -> None:
+    engine = EvaluationEngine()
+
+    # P1: Clean integrity pact wording must not trigger COI, verdict BELUM CUKUP BUKTI for missing NPWP
+    r1 = engine.evaluate(EvaluationRequest(dok_pemilihan="Peserta menyatakan tidak ada benturan kepentingan dengan Pokja.\nPenyedia wajib menyerahkan NPWP."))
+    assert "GOV-CONFLICT-INTEREST" not in {f["id"] for f in r1["findings"]}
+    assert r1["verdict"] == "BELUM CUKUP BUKTI"
+
+    # P2: Generic sentence with no numbers must not trigger overbudget finding or fabricate numbers
+    r2 = engine.evaluate(EvaluationRequest(dok_pemilihan="HPS tidak boleh melebihi pagu anggaran yang tersedia."))
+    assert "FIN-OVER-BUDGET" not in {f["id"] for f in r2["findings"]}
+    assert r2["findings"] == []
+    assert r2["verdict"] == "GO"
+
+    # P3: SBU issued 2023, valid until 2030 -> picked 2030 expiry date
+    r3 = engine.evaluate(EvaluationRequest(dok_pemilihan="Peserta wajib memiliki SBU.", pustaka="SBU diterbitkan 12 Januari 2023, berlaku sampai 12 Januari 2030"))
+    sbu = next(f for f in r3["findings"] if f["id"] == "ADM-SBU")
+    assert sbu["status"] == "TERPENUHI"
+    assert "2030" in sbu["review_note"]
+    assert r3["verdict"] == "GO"
+
+    # P4: 12 months == 1 year warranty
+    r4 = engine.evaluate(EvaluationRequest(dok_pemilihan="Garansi minimal 1 tahun.", pustaka="Garansi 12 bulan."))
+    war = next(f for f in r4["findings"] if f["id"] == "ADM-WARRANTY")
+    assert war["status"] == "TERPENUHI"
+    assert r4["verdict"] == "GO"
+
+    # P5: KSWP 'tidak terkonfirmasi' -> GAP/HIGH
+    r5 = engine.evaluate(EvaluationRequest(dok_pemilihan="Wajib melampirkan KSWP.", pustaka="KSWP: tidak terkonfirmasi"))
+    kswp = next(f for f in r5["findings"] if f["id"] == "ADM-KSWP")
+    assert kswp["status"] == "GAP"
+    assert r5["verdict"] == "NO-GO"
+
+    # P6: Uncapped penalty detected with and without contract value
+    r6a = engine.evaluate(EvaluationRequest(dok_pemilihan="Denda keterlambatan 1/1000 per hari dari nilai kontrak."))
+    pen_a = next(f for f in r6a["findings"] if f["id"] == "CON-PENALTY")
+    assert pen_a["status"] == "GAP"
+    assert r6a["verdict"] == "NO-GO"
+
+    r6b = engine.evaluate(EvaluationRequest(dok_pemilihan="Denda keterlambatan 1/1000 per hari dari nilai kontrak.", contract_value_idr=1_000_000_000))
+    pen_b = next(f for f in r6b["findings"] if f["id"] == "CON-PENALTY")
+    assert pen_b["status"] == "GAP"
+    assert r6b["verdict"] == "NO-GO"
+
+    # P7: Requirements uploaded, zero evidence uploaded -> BELUM CUKUP BUKTI, NOT GO
+    r7 = engine.evaluate(EvaluationRequest(dok_pemilihan="Wajib melampirkan NPWP.\nWajib SBU.\nWajib jaminan penawaran 1%.\nWajib KSWP.\nGaransi 2 tahun."))
+    assert r7["verdict"] == "BELUM CUKUP BUKTI"
+    assert all(f["status"] == "REVIEW" for f in r7["findings"])
+
+    # P8: Bid bond amount extracted cleanly (85M, not HPS 8.5M)
+    r8 = engine.evaluate(EvaluationRequest(dok_pemilihan="Jaminan penawaran sebesar Rp 85.000.000 (1% dari HPS Rp 8.500.000.000).", pustaka="Jaminan penawaran Rp 85.000.000 dari Bank X"))
+    bnd = next(f for f in r8["findings"] if f["id"] == "ADM-BOND")
+    assert bnd["status"] == "TERPENUHI"
+    assert "85,000,000" in bnd["review_note"]
+    assert r8["verdict"] == "GO"
+
+    # P9: Wrapped multiline NPWP correctly detected
+    r9 = engine.evaluate(EvaluationRequest(dok_pemilihan="Wajib NPWP.", pustaka="Kami melampirkan NPWP perusahaan:\n01.234.567.8-901.000"))
+    npw = next(f for f in r9["findings"] if f["id"] == "ADM-NPWP")
+    assert npw["status"] == "TERPENUHI"
+    assert r9["verdict"] == "GO"
+
+    # P10: Dynamic billing rate markup without fabricated numbers or fake positions
+    r10 = engine.evaluate(EvaluationRequest(dok_pemilihan="Solution Architect Rp 100.000.000 per bulan"))
+    mrk = next(f for f in r10["findings"] if f["id"] == "FIN-MARKUP-RATE")
+    assert mrk["status"] == "GAP"
+    assert "100.000.000" in mrk["review_note"]
+    assert "150.000.000" not in mrk["review_note"]
+    assert "Project Manager" not in mrk["review_note"]
+    assert r10["verdict"] == "NO-GO"
+
+    # P11: Timeline 3 days not softened by "clean baseline"
+    r11 = engine.evaluate(EvaluationRequest(dok_pemilihan="Dokumen ini clean baseline.\npenyusunan dokumen penawaran hanya 3 hari kerja"))
+    tm = next(f for f in r11["findings"] if f["id"] == "PROC-TIMELINE-COMPRESSED")
+    assert tm["status"] == "GAP"
+    assert tm["severity"] == "HIGH"
+    assert r11["verdict"] == "NO-GO"
+
+    # P12: Sanggahan draft contains specifications and timeline objections, excludes bidder's expired SBU
+    src12 = ("Spesifikasi wajib Intel Xeon Emerald Rapids.\npenyusunan dokumen penawaran hanya 3 hari kerja\nWajib SBU.")
+    r12 = engine.evaluate(EvaluationRequest(dok_pemilihan=src12, pustaka="SBU berlaku sampai 1 Januari 2020"))
+    md = build_sanggahan_markdown(
+        tender_id="T1", package_name="P", company_name="PT A", notice_number="N", pokja_name="Pokja",
+        source_text=src12, findings=r12["findings"],
+    )
+    assert "Penguncian Merek Prosesor" in md
+    assert "Jadwal lelang mepet" in md
+    assert "Masa berlaku SBU" not in md
+
+    # P13: Clean input without false positives
+    r13 = engine.evaluate(EvaluationRequest(adendum="Perubahan jadwal pemasukan penawaran."))
+    assert r13["findings"] == []
+    assert r13["verdict"] == "GO"
