@@ -88,6 +88,8 @@ class Settings:
     composio_user_id: str
     composio_timeout_seconds: float
     bob_mcp_config_path: Path
+    access_token: str = ""
+    audit_retention_days: int = 90
 
     @property
     def composio_entity_id(self) -> str:
@@ -136,6 +138,12 @@ class Settings:
         if llm_provider not in {"", "openai", "gemini", "watsonx"}:
             raise ValueError("LLM_PROVIDER must be one of openai, gemini, or watsonx.")
 
+        access_token = os.environ.get("BIDSENTRY_ACCESS_TOKEN", "").strip()
+        try:
+            audit_retention_days = int(os.environ.get("AUDIT_RETENTION_DAYS", "90"))
+        except ValueError:
+            audit_retention_days = 90
+
         return cls(
             workspace_root=WORKSPACE_ROOT,
             static_root=WORKSPACE_ROOT / "web",
@@ -160,4 +168,6 @@ class Settings:
             composio_user_id=os.environ.get("COMPOSIO_USER_ID", os.environ.get("COMPOSIO_ENTITY_ID", "default")).strip() or "default",
             composio_timeout_seconds=composio_timeout,
             bob_mcp_config_path=WORKSPACE_ROOT / "bob" / "mcp.json",
+            access_token=access_token,
+            audit_retention_days=audit_retention_days,
         )

@@ -1,10 +1,20 @@
-import { api } from "./api.js";
+import { api, setAuthToken } from "./api.js";
 import { getState, setState, subscribe } from "./state.js";
 import { renderApp, escapeHtml } from "./render.js";
 import { getReviewSnapshot } from "./review.js";
 
 const root = document.getElementById("app");
 const toastNode = document.getElementById("toast");
+const auditMemoryCache = new Map();
+
+window.addEventListener("bidsentry:auth-required", () => {
+  const token = window.prompt("Autentikasi diperlukan. Masukkan Token Akses (BIDSENTRY_ACCESS_TOKEN):");
+  if (token) {
+    setAuthToken(token);
+    toast("Token akses telah disimpan di sesi memori.");
+    loadWorkspace();
+  }
+});
 const uploadedFiles = { dok_pemilihan: [], adendum: [], pustaka: [], contract_draft: [], baseline_contract: [] };
 const uploadErrors = { dok_pemilihan: [], adendum: [], pustaka: [], contract_draft: [], baseline_contract: [] };
 const dragCounters = {};
@@ -54,20 +64,12 @@ async function selectAudit(auditId) {
   if (!auditId) return;
   const state = getState();
   const cachedRow = (state.audits || []).find((row) => row.audit_id === auditId);
-  let payload = null;
-  try {
-    const stored = localStorage.getItem(`bidsentry-payload-${auditId}`);
-    if (stored) payload = JSON.parse(stored);
-  } catch {}
-
-  if (!payload && cachedRow) {
-    payload = cachedRow;
-  }
+  const payload = auditMemoryCache.get(auditId) || cachedRow || null;
 
   setState({
     selectedAuditId: auditId,
-    currentAudit: payload || cachedRow || null,
-    customReview: payload || cachedRow || null,
+    currentAudit: payload,
+    customReview: payload,
     reviewFilter: "ALL",
     expandedFindingId: null,
   });
@@ -75,9 +77,7 @@ async function selectAudit(auditId) {
   try {
     const full = await api.getAudit(auditId);
     if (full) {
-      try {
-        localStorage.setItem(`bidsentry-payload-${auditId}`, JSON.stringify(full));
-      } catch {}
+      auditMemoryCache.set(auditId, full);
       if (getState().selectedAuditId === auditId) {
         setState({
           currentAudit: full,
@@ -139,7 +139,7 @@ async function deleteAuditRecord(auditId, packageName = "Audit ini") {
 
   try {
     await api.deleteAudit(auditId);
-    try { localStorage.removeItem(`bidsentry-payload-${auditId}`); } catch {}
+    auditMemoryCache.delete(auditId);
     toast(`Pemeriksaan "${packageName}" berhasil dihapus.`);
     const state = getState();
     const remainingAudits = (state.audits || []).filter((row) => row.audit_id !== auditId);
@@ -1136,7 +1136,7 @@ root.addEventListener("submit", async (event) => {
     clearUploadedFileLabels();
     setState({ query: "", riskFilter: "ALL", lastAuditDraft: payload });
     await loadWorkspace({ preserveSelection: false });
-    try { localStorage.setItem(`bidsentry-payload-${result.audit_id}`, JSON.stringify(result)); } catch {}
+    auditMemoryCache.set(result.audit_id, result);
     const otherRows = getState().audits.filter((row) => row.audit_id !== localRow.audit_id);
     setState({
       audits: [localRow, ...otherRows], selectedAuditId: localRow.audit_id,

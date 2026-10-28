@@ -15,7 +15,7 @@ from bidsentry.audits.financial import parse_idr_number
 from bidsentry.audits.penalty_calculator import calculate_penalty_scenarios
 from bidsentry.config import Settings
 from bidsentry.forensics.adendum_diff import diff_addendum
-from bidsentry.lib.pii import mask_text
+from bidsentry.lib.pii import mask_text, mask_value, recover_unmasked_quote
 from bidsentry.schemas.evaluation import ContextualExtractionResponse
 from bidsentry.services.langflow_service import LangflowService
 
@@ -658,7 +658,7 @@ class EvaluationEngine:
                 "Do not decide final legal compliance; human reviewer will verify."
             ],
             "documents": {"dok_pemilihan": mask_text(request.dok_pemilihan), "adendum": mask_text(request.adendum), "pustaka": mask_text(request.pustaka), "contract_draft": mask_text(request.contract_draft)},
-            "local_findings": findings,
+            "local_findings": mask_value(findings),
         }
         result = self.langflow.run_structured_prompt(json.dumps(prompt_data, ensure_ascii=False), consent=True)
         if result.get("status") != "success" or not result.get("text"):
@@ -670,6 +670,7 @@ class EvaluationEngine:
             return {"status": "invalid_response", "items": [], "message": "Respons provider bukan JSON yang valid."}
         buckets = ("brand_lockin_signals", "timeline_anomalies", "addendum_changes", "personnel_qualifications", "sla_uptime")
         items: list[dict[str, Any]] = []
+        rejected_quotes_count = 0
         for key in buckets:
             values = parsed.get(key, []) if isinstance(parsed, dict) else []
             if not isinstance(values, list):
@@ -678,11 +679,25 @@ class EvaluationEngine:
                 if not isinstance(item, dict):
                     continue
                 quote = item.get("quote")
-                if not isinstance(quote, str) or not quote or quote not in request.all_document_text:
+                if not isinstance(quote, str) or not quote:
+                    continue
+                verified_quote = recover_unmasked_quote(quote, request.all_document_text)
+                if not verified_quote:
+                    rejected_quotes_count += 1
                     continue
                 source = item.get("source", "")
-                verified_source = str(source)[:160] if isinstance(source, str) and source and source in request.all_document_text else "Sumber perlu dikonfirmasi"
-                items.append({"category": key, "quote": quote, "source": verified_source, "summary": str(item.get("summary", ""))[:500]})
+                verified_source = recover_unmasked_quote(str(source), request.all_document_text) or "Sumber perlu dikonfirmasi"
+                items.append({"category": key, "quote": verified_quote, "source": str(verified_source)[:160], "summary": str(item.get("summary", ""))[:500]})
         scope = parsed.get("scope")
-        verified_scope = str(scope)[:1000] if isinstance(scope, str) and scope and scope in request.all_document_text else None
-        return {"status": "success", "provider": result.get("provider"), "scope": verified_scope, "items": items}
+        verified_scope = recover_unmasked_quote(str(scope), request.all_document_text) if (isinstance(scope, str) and scope) else None
+        msg = f"{rejected_quotes_count} kutipan AI ditolak karena tidak cocok dengan sumber." if rejected_quotes_count > 0 else None
+        res_payload: dict[str, Any] = {
+            "status": "success",
+            "provider": result.get("provider"),
+            "scope": verified_scope,
+            "items": items,
+            "rejected_quotes_count": rejected_quotes_count,
+        }
+        if msg:
+            res_payload["message"] = msg
+        return res_payload

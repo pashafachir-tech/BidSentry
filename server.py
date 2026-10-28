@@ -12,7 +12,7 @@ import argparse
 from dataclasses import replace
 
 from bidsentry.config import Settings
-from bidsentry.asgi import create_asgi_app
+from bidsentry.asgi import create_asgi_app, _is_loopback_host
 from bidsentry.services.audit_service import AuditService
 from bidsentry.evaluators.engine import EvaluationEngine, EvaluationRequest
 from bidsentry.types.schemas import AuditRequest
@@ -26,6 +26,11 @@ def run(port: int | None = None, langflow_url: str | None = None) -> None:
         settings = replace(settings, port=port)
     if langflow_url is not None:
         settings = replace(settings, langflow_url=langflow_url.rstrip("/"))
+    if not settings.access_token and not _is_loopback_host(settings.host):
+        raise SystemExit(
+            f"FATAL: Server menolak start pada HOST '{settings.host}' tanpa BIDSENTRY_ACCESS_TOKEN. "
+            "Konfigurasikan token akses atau gunakan host loopback (127.0.0.1)."
+        )
     uvicorn.run(create_asgi_app(settings), host=settings.host, port=settings.port, access_log=False)
 
 

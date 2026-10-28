@@ -37,6 +37,10 @@ class Application:
 def create_application(settings: Settings | None = None) -> Application:
     config = settings or Settings.from_environment()
     audit_log = AuditLog(config.audit_log_path)
+    try:
+        audit_log.purge_older_than(config.audit_retention_days)
+    except Exception:
+        pass
     langflow = LangflowService(config)
     evaluation_engine = EvaluationEngine(config, langflow)
     return Application(

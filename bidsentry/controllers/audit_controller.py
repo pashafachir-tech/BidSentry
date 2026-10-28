@@ -61,7 +61,6 @@ class AuditController:
             "adendum_reconciliation": result.get("adendum_reconciliation", {}),
             "contextual_extraction": result.get("contextual_extraction", {}),
             "integrations": {"langflow": integration.get("status", "not_requested")},
-            "evaluation": result,
         })
         return result
 

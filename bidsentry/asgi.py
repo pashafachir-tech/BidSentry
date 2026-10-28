@@ -44,8 +44,76 @@ SECURITY_HEADERS = {
 }
 
 
+def _is_loopback_host(host: str) -> bool:
+    h = host.strip().casefold()
+    if h in {"127.0.0.1", "localhost", "::1"}:
+        return True
+    if h in {"0.0.0.0", ""}:
+        return False
+    try:
+        return ipaddress.ip_address(h).is_loopback
+    except ValueError:
+        return False
+
+
+SENSITIVE_ROUTES = [
+    ("PUT", "/api/settings/integrations"),
+    ("POST", "/api/settings/integrations"),
+    ("GET", "/api/settings/integrations"),
+    ("GET", "/api/settings/integrations/test"),
+    ("POST", "/api/dispatch"),
+    ("POST", "/api/review-feedback"),
+    ("DELETE", "/api/audits"),
+]
+
+
+def _is_sensitive_route(method: str, path: str) -> bool:
+    m = method.upper()
+    for s_method, s_path in SENSITIVE_ROUTES:
+        if m == s_method:
+            if path == s_path or path.startswith(s_path + "/") or (s_path == "/api/audits" and path.startswith("/api/audits")):
+                return True
+    return False
+
+
+def _is_local_request(request: Request, configured_port: int) -> bool:
+    client_host = request.client.host if request.client else ""
+    try:
+        if not ipaddress.ip_address(client_host).is_loopback:
+            return False
+    except ValueError:
+        return False
+    host = urllib.parse.urlsplit("//" + request.headers.get("host", ""))
+    allowed_hosts = {"localhost", "127.0.0.1", "::1"}
+    if host.hostname not in allowed_hosts or host.username or host.password:
+        return False
+    origin = request.headers.get("origin")
+    if not origin:
+        return True
+    parsed = urllib.parse.urlsplit(origin)
+    if parsed.scheme not in {"http", "https"} or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password:
+        return False
+    return parsed.hostname in allowed_hosts
+
+
+def _can_access_sensitive_route(request: Request, settings: Settings) -> bool:
+    if settings.access_token:
+        auth_header = request.headers.get("authorization", "").strip()
+        bearer_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+        cookie_token = request.cookies.get("bidsentry_token", "").strip()
+        if bearer_token == settings.access_token or cookie_token == settings.access_token:
+            return True
+    return _is_local_request(request, settings.port)
+
+
 def create_asgi_app(settings: Settings | None = None) -> FastAPI:
-    application = create_application(settings)
+    app_settings = settings or Settings.from_environment()
+    if not app_settings.access_token and not _is_loopback_host(app_settings.host):
+        raise SystemExit(
+            f"FATAL: Server menolak start pada HOST '{app_settings.host}' tanpa BIDSENTRY_ACCESS_TOKEN. "
+            "Konfigurasikan token akses atau gunakan host loopback (127.0.0.1)."
+        )
+    application = create_application(app_settings)
     router = ApiRouter(application)
 
     @asynccontextmanager
@@ -90,7 +158,42 @@ def create_asgi_app(settings: Settings | None = None) -> FastAPI:
     api.include_router(audit_stream_router)
 
     @api.middleware("http")
-    async def apply_security_headers(request: Request, call_next: RequestResponseEndpoint) -> Response:
+    async def enforce_security(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        path = request.url.path
+        request_id = str(uuid.uuid4())
+
+        # 1. Host header validation in local mode (reject external host headers to prevent DNS rebinding)
+        if not application.settings.access_token:
+            host_header = request.headers.get("host", "").strip()
+            parsed_host = urllib.parse.urlsplit("//" + host_header)
+            hostname = (parsed_host.hostname or "").casefold()
+            allowed_hosts = {"localhost", "127.0.0.1", "::1"}
+            if not hostname or (hostname not in allowed_hosts and not hostname.endswith(".localhost")):
+                return JSONResponse(
+                    failure("INVALID_HOST", f"Host '{host_header}' tidak diizinkan pada mode lokal.", request_id),
+                    status_code=400,
+                )
+
+        # 2. Access Token Authentication for all /api/* routes (except /api/health)
+        if application.settings.access_token and path.startswith("/api/") and path != "/api/health":
+            auth_header = request.headers.get("authorization", "").strip()
+            bearer_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
+            cookie_token = request.cookies.get("bidsentry_token", "").strip()
+            configured_token = application.settings.access_token
+            if bearer_token != configured_token and cookie_token != configured_token:
+                return JSONResponse(
+                    failure("UNAUTHORIZED", "Token akses tidak valid atau belum diberikan.", request_id),
+                    status_code=401,
+                )
+
+        # 3. Sensitive routes guard
+        if _is_sensitive_route(request.method, path):
+            if not _can_access_sensitive_route(request, application.settings):
+                return JSONResponse(
+                    failure("FORBIDDEN", "Operasi sensitif hanya diizinkan dari browser lokal atau dengan token akses yang sah.", request_id),
+                    status_code=403,
+                )
+
         response = await call_next(request)
         for key, value in SECURITY_HEADERS.items():
             response.headers.setdefault(key, value)
@@ -103,9 +206,6 @@ def create_asgi_app(settings: Settings | None = None) -> FastAPI:
         path = request.url.path
         if path == "/" or path.startswith("/web/"):
             return _static_response(application.settings, path)
-
-        if path in {"/api/settings/integrations"} and request.method in {"PUT", "POST"} and not _is_local_settings_request(request, application.settings.port):
-            return JSONResponse(failure("FORBIDDEN", "Pengaturan hanya dapat diubah dari browser lokal.", request_id), status_code=403)
 
         try:
             if path == "/api/documents/extract" and request.method == "POST":
@@ -184,32 +284,3 @@ def _static_response(settings: Settings, url_path: str) -> Response:
     if resolved.suffix == ".js":
         content_type = "text/javascript"
     return FileResponse(resolved, media_type=content_type, headers={"Cache-Control": "no-store"})
-
-
-def _is_local_settings_request(request: Request, configured_port: int) -> bool:
-    client_host = request.client.host if request.client else ""
-    try:
-        if not ipaddress.ip_address(client_host).is_loopback:
-            return False
-    except ValueError:
-        return False
-    host = urllib.parse.urlsplit("//" + request.headers.get("host", ""))
-    allowed_hosts = {"localhost", "127.0.0.1", "::1"}
-    if host.hostname not in allowed_hosts or host.username or host.password:
-        return False
-    try:
-        if (host.port or 80) != configured_port:
-            return False
-    except ValueError:
-        return False
-    origin = request.headers.get("origin")
-    if not origin:
-        return True
-    parsed = urllib.parse.urlsplit(origin)
-    if parsed.scheme not in {"http", "https"} or parsed.path or parsed.query or parsed.fragment or parsed.username or parsed.password:
-        return False
-    try:
-        origin_port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    except ValueError:
-        return False
-    return parsed.hostname == host.hostname and origin_port == configured_port

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
+import uuid
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +88,24 @@ class AuditLog:
                 }
         return None
 
+    def _write_atomic(self, lines: list[str]) -> None:
+        content = "\n".join(lines) + ("\n" if lines else "")
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path = self.path.with_name(f"{self.path.name}.tmp.{uuid.uuid4().hex}")
+        try:
+            with temp_path.open("w", encoding="utf-8") as stream:
+                stream.write(content)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp_path, self.path)
+        except Exception:
+            if temp_path.is_file():
+                try:
+                    temp_path.unlink()
+                except OSError:
+                    pass
+            raise
+
     def delete_audit(self, audit_id: str) -> bool:
         if not self.path.is_file() or not audit_id:
             return False
@@ -106,8 +126,36 @@ class AuditLog:
                     pass
                 kept_lines.append(line)
             if found:
-                self.path.write_text("\n".join(kept_lines) + ("\n" if kept_lines else ""), encoding="utf-8")
+                self._write_atomic(kept_lines)
             return found
+
+    def purge_older_than(self, days: int) -> int:
+        if days <= 0 or not self.path.is_file():
+            return 0
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        with self._lock:
+            try:
+                lines = self.path.read_text(encoding="utf-8").splitlines()
+            except OSError:
+                return 0
+            kept_lines = []
+            purged = 0
+            for line in lines:
+                try:
+                    item = json.loads(line)
+                    if isinstance(item, dict) and "created_at" in item:
+                        created = datetime.fromisoformat(str(item["created_at"]))
+                        if created.tzinfo is None:
+                            created = created.replace(tzinfo=timezone.utc)
+                        if created < cutoff:
+                            purged += 1
+                            continue
+                except Exception:
+                    pass
+                kept_lines.append(line)
+            if purged > 0:
+                self._write_atomic(kept_lines)
+            return purged
 
     def finding_exists(self, audit_id: str, finding_id: str) -> bool:
         return any(

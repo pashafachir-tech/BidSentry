@@ -11,7 +11,7 @@ from typing import Any
 from pydantic import BaseModel
 
 from bidsentry.config import Settings
-from bidsentry.lib.pii import mask_text
+from bidsentry.lib.pii import mask_text, mask_value
 from bidsentry.schemas.audit_contracts import GroundedProviderResponse
 from bidsentry.schemas.evaluation import ContextualExtractionResponse
 from bidsentry.types.schemas import AuditRequest
@@ -100,7 +100,7 @@ class LangflowService:
             "review_role": request.review_role,
             "package_name": request.package_name,
             "documents": {key: mask_text(value) for key, value in request.documents().items()},
-            "local_findings": local_result.get("findings", []),
+            "local_findings": mask_value(local_result.get("findings", [])),
         }
         endpoint = self.settings.langflow_url + "/api/v1/run/" + urllib.parse.quote(self.settings.langflow_flow_id, safe="")
         payload = json.dumps({"input_value": json.dumps(input_data, ensure_ascii=False), "input_type": "chat", "output_type": "chat", "stream": False}, ensure_ascii=False).encode("utf-8")

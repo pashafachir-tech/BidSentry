@@ -1,13 +1,36 @@
 const API_ROOT = "/api";
 
+let currentAuthToken = "";
+
+export function setAuthToken(token) {
+  currentAuthToken = (token || "").trim();
+}
+
+export function getAuthToken() {
+  return currentAuthToken;
+}
+
 async function request(path, options = {}) {
   const timeoutSignal = AbortSignal.timeout(options.timeout ?? 30000);
+  const headers = {
+    Accept: "application/json",
+    ...(options.body ? { "Content-Type": "application/json" } : {}),
+    ...(currentAuthToken ? { Authorization: `Bearer ${currentAuthToken}` } : {}),
+    ...options.headers,
+  };
   try {
     const response = await fetch(`${API_ROOT}${path}`, {
       ...options,
       signal: options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal,
-      headers: { Accept: "application/json", ...(options.body ? { "Content-Type": "application/json" } : {}), ...options.headers },
+      headers,
     });
+    if (response.status === 401) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("bidsentry:auth-required", { detail: { path } }));
+      }
+      const body = await response.json().catch(() => null);
+      throw new Error(body?.error?.message || "Token akses tidak valid atau belum diberikan (401).");
+    }
     const body = await response.json().catch(() => null);
     if (!response.ok) throw new Error(body?.error?.message || `Permintaan gagal (${response.status}).`);
     return body?.data;

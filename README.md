@@ -30,7 +30,14 @@ data/sample_tenders/         Clearly labelled synthetic regression fixtures
 tests/benchmark_eval.py      Measured local P/R/F1 and latency per page
 ```
 
-The dashboard register contains only real audit metadata written to the local audit log. Source text is not written to that log. The current result remains in browser memory for the active session.
+The dashboard register contains audit metadata written to the local audit log (`audit_log.jsonl`). While full unparsed document text is not archived in the log, verbatim evidence quotations associated with findings are retained for traceability and objection draft generation. Active review payloads are maintained in browser memory and requested from the API on demand.
+
+## Security and Authentication
+
+- **Access Token:** Set `BIDSENTRY_ACCESS_TOKEN=<secret_token>` in `.env` to protect API endpoints. When configured, all `/api/*` routes (except `/api/health`) require `Authorization: Bearer <secret_token>` or a valid session cookie.
+- **Loopback Enforcement:** When running without an access token, the server binds strictly to loopback (`127.0.0.1`) and validates the `Host` header to protect against DNS rebinding. The server refuses to start on non-loopback interfaces (e.g. `0.0.0.0`) unless `BIDSENTRY_ACCESS_TOKEN` is configured.
+- **Sensitive Operations:** Operations affecting configuration (`/api/settings/integrations`), automated dispatch (`/api/dispatch`), and audit deletion (`DELETE /api/audits`) are guarded and only permitted from verified local browser origins or authenticated token bearers.
+- **Data Retention & Privacy:** Old audit logs are automatically purged on startup based on `AUDIT_RETENTION_DAYS` (default: 90 days). External AI processing requires explicit reviewer consent, and all outbound document payloads undergo strict PII redaction (email, phone, bank account, NPWP, and NIK).
 
 ## Evaluation workflow
 
