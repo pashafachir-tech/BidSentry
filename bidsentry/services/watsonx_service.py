@@ -29,8 +29,44 @@ class WatsonxService:
     @property
     def is_configured(self) -> bool:
         """Return True if IBM watsonx.ai credentials and project ID are set."""
-        api_key = self.settings.llm_api_key or ""
-        return bool(api_key and self.settings.watsonx_project_id)
+        api_key = getattr(self.settings, "watsonx_api_key", "") or getattr(self.settings, "llm_api_key", "") or ""
+        project_id = getattr(self.settings, "watsonx_project_id", "")
+        return bool(api_key and project_id)
+
+    def test_connection(self) -> dict[str, Any]:
+        """Test watsonx connection or return clear status."""
+        if not self.is_configured:
+            return {
+                "status": "unconfigured",
+                "configured": False,
+                "model_id": self.default_model_id,
+                "message": "Kredensial IBM watsonx.ai belum diatur. Mode fallback lokal aktif.",
+            }
+        try:
+            from ibm_watsonx_ai import Credentials
+            from ibm_watsonx_ai.foundation_models import ModelInference
+            api_key = getattr(self.settings, "watsonx_api_key", "") or getattr(self.settings, "llm_api_key", "")
+            url = getattr(self.settings, "watsonx_url", "https://us-south.ml.cloud.ibm.com")
+            project_id = getattr(self.settings, "watsonx_project_id", "")
+            creds = Credentials(url=url, api_key=api_key)
+            model = ModelInference(
+                model_id=self.default_model_id,
+                credentials=creds,
+                project_id=project_id,
+            )
+            return {
+                "status": "connected",
+                "configured": True,
+                "model_id": self.default_model_id,
+                "message": f"Terhubung ke IBM watsonx ({self.default_model_id}).",
+            }
+        except Exception as exc:
+            return {
+                "status": "error",
+                "configured": True,
+                "model_id": self.default_model_id,
+                "message": f"Koneksi gagal: {exc}",
+            }
 
     def status(self) -> dict[str, Any]:
         """Return current configuration and model status."""

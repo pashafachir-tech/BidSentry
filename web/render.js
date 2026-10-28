@@ -252,6 +252,15 @@ export function renderDialogs(state) {
           <div class="form-grid"><label class="form-label">URL server<input name="langflow_url" type="url" maxlength="2048" required placeholder="http://localhost:7860"></label><label class="form-label">Flow ID<input name="langflow_flow_id" maxlength="240" placeholder="ID flow Langflow"></label><label class="form-label">API key<input name="langflow_api_key" type="password" autocomplete="new-password" maxlength="4096" placeholder="Tempel key baru atau biarkan kosong"></label><label class="form-label">Timeout (detik)<input name="langflow_timeout_seconds" type="number" min="1" max="120" step="1" required></label></div>
           <label class="settings-clear"><input name="clear_langflow_api_key" type="checkbox"><span>Hapus API key Langflow yang tersimpan</span></label>
         </section>
+        <section class="settings-section"><div class="settings-section-heading"><div><h3>IBM watsonx.ai (Granite-3-8B)</h3><p>Model fondasi IBM Granite untuk penalaran semantik KAK, deteksi lock-in, dan ekstraksi entitas pengadaan.</p></div><span class="settings-state" id="watsonx-key-status">Memeriksa…</span></div>
+          <div class="form-grid">
+            <label class="form-label">API key IBM Cloud<input name="watsonx_api_key" type="password" autocomplete="new-password" maxlength="4096" placeholder="Tempel key baru atau biarkan kosong"></label>
+            <label class="form-label">Project ID watsonx<input name="watsonx_project_id" maxlength="240" placeholder="ID Project watsonx.ai"></label>
+            <label class="form-label form-field-wide">URL Layanan watsonx<input name="watsonx_url" type="text" inputmode="url" spellcheck="false" maxlength="2048" placeholder="https://us-south.ml.cloud.ibm.com"></label>
+            <label class="form-label">Model ID<input name="watsonx_model_id" maxlength="200" placeholder="ibm/granite-3-8b-instruct"></label>
+          </div>
+          <label class="settings-clear"><input name="clear_watsonx_api_key" type="checkbox"><span>Hapus API key IBM watsonx yang tersimpan</span></label>
+        </section>
         <section class="settings-section"><div class="settings-section-heading"><div><h3>Composio</h3><p>Menyiapkan dokumen, kalender, dan draf email setelah reviewer mengonfirmasi tindak lanjut.</p></div><span class="settings-state" id="composio-key-status">Memeriksa…</span></div>
           <div class="form-grid"><label class="form-label">API key<input name="composio_api_key" type="password" autocomplete="new-password" maxlength="4096" placeholder="Tempel key baru atau biarkan kosong"></label><label class="form-label">User ID<input name="composio_user_id" maxlength="200" required></label><label class="form-label form-field-wide">URL eksekusi<input name="composio_base_url" type="text" inputmode="url" spellcheck="false" maxlength="2048" required></label><label class="form-label">Timeout per aksi (detik)<input name="composio_timeout_seconds" type="number" min="1" max="120" step="1" required></label></div>
           <label class="settings-clear"><input name="clear_composio_api_key" type="checkbox"><span>Hapus API key Composio yang tersimpan</span></label>

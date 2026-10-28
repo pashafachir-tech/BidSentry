@@ -252,13 +252,21 @@ async function openSettingsDialog() {
     set("langflow_flow_id", settings.langflow.flow_id);
     set("langflow_api_key", "");
     set("langflow_timeout_seconds", settings.langflow.timeout_seconds);
+    set("watsonx_api_key", "");
+    set("watsonx_project_id", settings.watsonx?.project_id || "");
+    set("watsonx_url", settings.watsonx?.url || "https://us-south.ml.cloud.ibm.com");
+    set("watsonx_model_id", settings.watsonx?.model_id || "ibm/granite-3-8b-instruct");
     set("composio_api_key", "");
     set("composio_user_id", settings.composio.user_id);
     set("composio_base_url", settings.composio.base_url);
     set("composio_timeout_seconds", settings.composio.timeout_seconds);
     form.elements.namedItem("clear_langflow_api_key").checked = false;
+    form.elements.namedItem("clear_watsonx_api_key").checked = false;
     form.elements.namedItem("clear_composio_api_key").checked = false;
     document.getElementById("langflow-key-status").textContent = settings.langflow.api_key_saved ? "API key tersimpan" : "API key belum diatur";
+    document.getElementById("watsonx-key-status").textContent = settings.watsonx?.api_key_saved
+      ? "API key tersimpan"
+      : "Belum diatur (Fallback Lokal Aktif)";
     document.getElementById("composio-key-status").textContent = settings.composio.api_key_saved ? "API key tersimpan" : "Belum dikonfigurasi";
     document.getElementById("settings-file-status").textContent = settings.config_file_exists
       ? "Disimpan ke file .env lokal dan dibaca tanpa restart. API key tidak pernah ditampilkan kembali."
@@ -278,6 +286,11 @@ async function saveSettings(form) {
     langflow_api_key: String(values.get("langflow_api_key") || ""),
     clear_langflow_api_key: values.get("clear_langflow_api_key") === "on",
     langflow_timeout_seconds: Number(values.get("langflow_timeout_seconds")),
+    watsonx_api_key: String(values.get("watsonx_api_key") || ""),
+    clear_watsonx_api_key: values.get("clear_watsonx_api_key") === "on",
+    watsonx_project_id: String(values.get("watsonx_project_id") || "").trim(),
+    watsonx_url: String(values.get("watsonx_url") || "").trim(),
+    watsonx_model_id: String(values.get("watsonx_model_id") || "").trim(),
     composio_api_key: String(values.get("composio_api_key") || ""),
     clear_composio_api_key: values.get("clear_composio_api_key") === "on",
     composio_user_id: String(values.get("composio_user_id") || "").trim(),
@@ -305,12 +318,14 @@ async function testIntegrations() {
   button.disabled = true;
   button.textContent = "Menguji…";
   output.hidden = false;
-  output.textContent = "Menguji akses Langflow dan Composio tanpa menjalankan aksi.";
+  output.textContent = "Menguji akses IBM watsonx, Langflow, dan Composio tanpa menjalankan aksi.";
   try {
     const result = await api.testIntegrations();
+    const watsonx = result?.watsonx || {};
     const langflow = result?.langflow || {};
     const composio = result?.composio || {};
     output.textContent = [
+      `IBM watsonx: ${watsonx.status || "unconfigured"} — ${watsonx.message || "Fallback lokal aktif."}`,
       `Langflow: ${langflow.status || "unknown"} — ${langflow.message || "Tidak ada detail."}`,
       `Composio: ${composio.status || "unknown"} — ${composio.message || "Tidak ada detail."}`,
       composio.linked_toolkits?.length ? `Toolkit aktif: ${composio.linked_toolkits.join(", ")}` : "",

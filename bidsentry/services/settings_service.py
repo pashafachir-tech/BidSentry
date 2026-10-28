@@ -24,6 +24,10 @@ MANAGED_DEFAULTS = {
     "COMPOSIO_BASE_URL": "https://backend.composio.dev/api/v3.1/tools/execute/{action}",
     "COMPOSIO_USER_ID": "default",
     "COMPOSIO_TIMEOUT_SECONDS": "30",
+    "WATSONX_API_KEY": "",
+    "WATSONX_PROJECT_ID": "",
+    "WATSONX_URL": "https://us-south.ml.cloud.ibm.com",
+    "WATSONX_MODEL_ID": "ibm/granite-3-8b-instruct",
 }
 
 
@@ -54,6 +58,13 @@ class SettingsService:
                 "user_id": settings.composio_user_id,
                 "timeout_seconds": settings.composio_timeout_seconds,
             },
+            "watsonx": {
+                "configured": bool((getattr(settings, "watsonx_api_key", "") or getattr(settings, "llm_api_key", "")) and getattr(settings, "watsonx_project_id", "")),
+                "api_key_saved": bool(getattr(settings, "watsonx_api_key", "") or getattr(settings, "llm_api_key", "")),
+                "project_id": getattr(settings, "watsonx_project_id", ""),
+                "url": getattr(settings, "watsonx_url", "https://us-south.ml.cloud.ibm.com"),
+                "model_id": getattr(settings, "watsonx_model_id", "ibm/granite-3-8b-instruct") or "ibm/granite-3-8b-instruct",
+            },
         }
 
     def save(self, payload: Any) -> Settings:
@@ -68,6 +79,7 @@ class SettingsService:
             "langflow_enabled", "langflow_url", "langflow_flow_id", "langflow_api_key", "clear_langflow_api_key",
             "langflow_timeout_seconds", "composio_base_url", "composio_user_id", "composio_entity_id", "composio_api_key",
             "clear_composio_api_key", "composio_timeout_seconds",
+            "watsonx_api_key", "watsonx_project_id", "watsonx_url", "watsonx_model_id", "clear_watsonx_api_key",
         }
         unknown = sorted(set(payload) - allowed)
         if unknown:
@@ -87,6 +99,10 @@ class SettingsService:
             "composio_user_id": ("COMPOSIO_USER_ID", 200),
             "composio_entity_id": ("COMPOSIO_USER_ID", 200),
             "composio_api_key": ("COMPOSIO_API_KEY", 4096),
+            "watsonx_api_key": ("WATSONX_API_KEY", 4096),
+            "watsonx_project_id": ("WATSONX_PROJECT_ID", 240),
+            "watsonx_url": ("WATSONX_URL", 2048),
+            "watsonx_model_id": ("WATSONX_MODEL_ID", 200),
         }
         for field, (key, maximum) in string_fields.items():
             if field not in payload:
@@ -104,7 +120,7 @@ class SettingsService:
                 continue
             values[key] = value
 
-        for field, key in (("clear_langflow_api_key", "LANGFLOW_API_KEY"), ("clear_composio_api_key", "COMPOSIO_API_KEY")):
+        for field, key in (("clear_langflow_api_key", "LANGFLOW_API_KEY"), ("clear_composio_api_key", "COMPOSIO_API_KEY"), ("clear_watsonx_api_key", "WATSONX_API_KEY")):
             clear = payload.get(field, False)
             if not isinstance(clear, bool):
                 raise ValidationError(f"'{field}' harus berupa pilihan ya/tidak.", [{"field": field, "issue": "expected_boolean"}])
@@ -127,6 +143,8 @@ class SettingsService:
                 raise ValidationError("Pengaturan berisi karakter yang tidak diizinkan.", [{"field": key, "issue": "invalid_characters"}])
 
         self._validate_url(values["LANGFLOW_URL"], "langflow_url")
+        if values.get("WATSONX_URL"):
+            self._validate_url(values["WATSONX_URL"], "watsonx_url")
         base_url = values["COMPOSIO_BASE_URL"]
         self._validate_url(base_url, "composio_base_url")
         if "{action}" not in base_url:

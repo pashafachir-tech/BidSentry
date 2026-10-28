@@ -62,12 +62,14 @@ class ApiRouter:
             elif method == "GET" and path == "/api/settings/integrations/test":
                 from composio_dispatcher import test_composio_connection
                 data = {
+                    "watsonx": self.app.watsonx.test_connection(),
                     "langflow": self.app.langflow.test_connection(),
                     "composio": test_composio_connection(self.app.settings),
                 }
             elif method == "PUT" and path == "/api/settings/integrations":
                 self.app.settings = self.app.settings_service.save(payload)
                 self.app.langflow.settings = self.app.settings
+                self.app.watsonx.settings = self.app.settings
                 data = self.app.settings_service.public_settings(self.app.settings, self.app.settings_service.env_path.is_file())
             elif method == "GET" and path == "/api/overview":
                 data = self.app.portfolio.overview()

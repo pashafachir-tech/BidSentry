@@ -90,6 +90,8 @@ class Settings:
     bob_mcp_config_path: Path
     access_token: str = ""
     audit_retention_days: int = 90
+    watsonx_api_key: str = ""
+    watsonx_model_id: str = "ibm/granite-3-8b-instruct"
 
     @property
     def composio_entity_id(self) -> str:
@@ -170,6 +172,8 @@ class Settings:
             bob_mcp_config_path=WORKSPACE_ROOT / "bob" / "mcp.json",
             access_token=access_token,
             audit_retention_days=audit_retention_days,
+            watsonx_api_key=os.environ.get("WATSONX_API_KEY", "").strip(),
+            watsonx_model_id=os.environ.get("WATSONX_MODEL_ID", "ibm/granite-3-8b-instruct").strip() or "ibm/granite-3-8b-instruct",
         )
 
 
