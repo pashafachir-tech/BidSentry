@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import parse_qs
 
+from bidsentry import __version__
 from bidsentry.app import Application
 from bidsentry.generators.clarification_doc import (
     build_clarification_docx,
@@ -53,7 +54,7 @@ class ApiRouter:
         try:
             if method == "GET" and path == "/api/health":
                 integrations = self._integrations()
-                data = {"status": "ok", "engine": "local-rules", "integrations": integrations}
+                data = {"status": "ok", "version": __version__, "engine": "local-rules", "integrations": integrations}
             elif method == "GET" and path == "/api/integrations":
                 data = self._integrations()
             elif method == "GET" and path == "/api/settings/integrations":
