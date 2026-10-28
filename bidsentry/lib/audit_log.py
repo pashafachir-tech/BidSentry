@@ -17,8 +17,56 @@ class AuditLog:
         self.path = path
         self._lock = threading.Lock()
 
+    @property
+    def sources_dir(self) -> Path:
+        return self.path.parent / "audit_sources"
+
+    def save_source_text(self, audit_id: str, source_text: str, retention_days: int = 90) -> None:
+        if not audit_id or not source_text:
+            return
+        target_dir = self.sources_dir
+        target_dir.mkdir(parents=True, exist_ok=True)
+        if retention_days > 0:
+            cutoff = datetime.now(timezone.utc).timestamp() - (retention_days * 86400)
+            try:
+                for f in target_dir.glob("*.txt"):
+                    if f.is_file() and f.stat().st_mtime < cutoff:
+                        f.unlink(missing_ok=True)
+            except OSError:
+                pass
+        safe_name = "".join(c for c in audit_id if c.isalnum() or c in ("-", "_"))
+        if safe_name:
+            source_file = target_dir / f"{safe_name}.txt"
+            with self._lock:
+                source_file.write_text(source_text, encoding="utf-8")
+
+    def get_source_text(self, audit_id: str) -> str | None:
+        if not audit_id:
+            return None
+        safe_name = "".join(c for c in audit_id if c.isalnum() or c in ("-", "_"))
+        if not safe_name:
+            return None
+        source_file = self.sources_dir / f"{safe_name}.txt"
+        if not source_file.is_file():
+            return None
+        try:
+            return source_file.read_text(encoding="utf-8")
+        except OSError:
+            return None
+
+    def has_source_text(self, audit_id: str) -> bool:
+        if not audit_id:
+            return False
+        safe_name = "".join(c for c in audit_id if c.isalnum() or c in ("-", "_"))
+        if not safe_name:
+            return False
+        source_file = self.sources_dir / f"{safe_name}.txt"
+        return source_file.is_file() and source_file.stat().st_size > 0
+
     def append(self, event: dict[str, Any]) -> None:
-        record = {"schema_version": "1.0", "created_at": datetime.now(timezone.utc).isoformat(), **event}
+        # Document text is deliberately excluded from audit_log.jsonl for privacy compliance
+        cleaned_event = {k: v for k, v in event.items() if k != "source_text"}
+        record = {"schema_version": "1.0", "created_at": datetime.now(timezone.utc).isoformat(), **cleaned_event}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
         with self._lock, self.path.open("a", encoding="utf-8") as stream:
@@ -65,6 +113,8 @@ class AuditLog:
                 if isinstance(event.get("evaluation"), dict):
                     return event["evaluation"]
                 risk = event.get("risk") if isinstance(event.get("risk"), dict) else {}
+                source_text = self.get_source_text(target) or event.get("source_text", "")
+                has_source = bool(source_text) or bool(event.get("has_source_text"))
                 return {
                     "audit_id": event.get("audit_id"),
                     "created_at": event.get("created_at"),
@@ -85,6 +135,8 @@ class AuditLog:
                     "adendum_reconciliation": event.get("adendum_reconciliation", {}),
                     "penalty_simulation": event.get("penalty_simulation", {}),
                     "contextual_extraction": event.get("contextual_extraction", {}),
+                    "source_text": source_text,
+                    "has_source_text": has_source,
                 }
         return None
 

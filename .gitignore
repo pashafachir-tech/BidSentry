@@ -37,6 +37,7 @@ yarn-error.log*
 logs/
 log/
 audit_log.jsonl
+audit_sources/
 *.jsonl
 srv_out.txt
 srv_err.txt

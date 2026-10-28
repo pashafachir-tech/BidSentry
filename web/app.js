@@ -744,6 +744,11 @@ async function openObjection() {
     toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error");
     return;
   }
+  const hasSource = Boolean(review.has_source_text || review.source_text || state.lastAuditDraft?.dok_pemilihan);
+  if (!hasSource && !review.audit_id && !review.id) {
+    toast("Teks sumber asli tidak tersedia untuk audit ini (sudah kedaluwarsa atau dihapus). Draf sanggahan memerlukan teks sumber asli untuk verifikasi kutipan.", "error");
+    return;
+  }
   updateObjectionDraftText("ALL");
   document.getElementById("objection-dialog")?.showModal();
 }
@@ -827,16 +832,21 @@ async function downloadObjectionDocx() {
   const state = getState();
   const review = getReviewSnapshot(state);
   if (!review.isCustom) { toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error"); return; }
+  const hasSource = Boolean(review.has_source_text || review.source_text || state.lastAuditDraft?.dok_pemilihan);
+  if (!hasSource && !review.audit_id && !review.id) {
+    toast("Teks sumber asli tidak tersedia untuk audit ini (sudah kedaluwarsa atau dihapus). Draf sanggahan memerlukan teks sumber asli untuk verifikasi kutipan.", "error");
+    return;
+  }
   try {
     const eligibleFindings = filterObjectionFindings(review.findings || []);
-    const sourceQuotes = eligibleFindings.map((f) => f.requirement_evidence || f.evidence || "").filter(Boolean).join("\n\n");
     const payload = {
+      audit_id: review.audit_id || review.id || "",
       tender_id: review.tender_id || "",
       package_name: review.package_name || "",
       company_name: review.company_name || "",
       notice_number: review.notice_number || "",
       pokja_name: review.pokja_name || "",
-      source_text: [state.lastAuditDraft?.dok_pemilihan, state.lastAuditDraft?.adendum, state.lastAuditDraft?.contract_draft, sourceQuotes].filter(Boolean).join("\n\n") || "Teks dokumen",
+      source_text: review.source_text || [state.lastAuditDraft?.dok_pemilihan, state.lastAuditDraft?.adendum, state.lastAuditDraft?.contract_draft].filter(Boolean).join("\n") || "",
       findings: eligibleFindings,
       format: "docx",
     };

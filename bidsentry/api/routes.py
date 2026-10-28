@@ -202,21 +202,39 @@ class ApiRouter:
         binary_content = content.encode("utf-8") if isinstance(content, str) else content
         return {"filename": filename, "content_type": mime_types[output_format], "content_base64": base64.b64encode(binary_content).decode("ascii"), "draft_only": True}
 
-    @staticmethod
-    def _generate_sanggahan_document(payload: Any) -> dict[str, Any]:
+    def _generate_sanggahan_document(self, payload: Any) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise ValidationError("Request sanggahan harus berupa objek.", [{"field": "$", "issue": "expected_object"}])
-        allowed = {"tender_id", "package_name", "company_name", "notice_number", "pokja_name", "source_text", "findings", "legal_citations", "format"}
+        allowed = {"tender_id", "package_name", "company_name", "notice_number", "pokja_name", "source_text", "audit_id", "findings", "legal_citations", "format"}
         unknown = sorted(set(payload) - allowed)
         if unknown:
             raise ValidationError("Kolom sanggahan tidak dikenal.", [{"field": key, "issue": "unknown_field"} for key in unknown])
         source_text = payload.get("source_text", "")
+        audit_id = str(payload.get("audit_id", "")).strip()
+        if (not source_text or not str(source_text).strip()) and audit_id:
+            audit = self.app.audit_log.get_audit(audit_id)
+            if audit and audit.get("source_text"):
+                source_text = audit["source_text"]
+
+        if not isinstance(source_text, str) or not source_text.strip() or len(source_text) > 5_000_000:
+            raise ValidationError(
+                "Teks sumber asli tidak tersedia untuk audit ini. Draf sanggahan memerlukan teks sumber asli untuk verifikasi kutipan.",
+                [{"field": "source_text", "issue": "source_text_unavailable"}]
+            )
+
         findings = payload.get("findings", [])
         output_format = payload.get("format", "docx")
-        if not isinstance(source_text, str) or len(source_text) > 5_000_000:
-            raise ValidationError("Teks sumber tidak valid atau terlalu besar.", [{"field": "source_text", "issue": "invalid_value"}])
         if not isinstance(findings, list) or len(findings) > 1000 or any(not isinstance(item, dict) for item in findings):
             raise ValidationError("Daftar temuan tidak valid.", [{"field": "findings", "issue": "invalid_value"}])
+
+        from bidsentry.generators.sanggahan_builder import _eligible
+        eligible = _eligible(findings, source_text)
+        if findings and not eligible:
+            raise ValidationError(
+                "Semua kutipan temuan ditolak karena tidak ditemukan secara persis di teks sumber asli.",
+                [{"field": "findings", "issue": "no_grounded_findings"}]
+            )
+
         if output_format not in {"docx", "pdf", "markdown", "html"}:
             raise ValidationError("Format harus docx, pdf, markdown, atau html.", [{"field": "format", "issue": "invalid_value"}])
         for key in ("tender_id", "package_name", "company_name", "notice_number", "pokja_name"):
@@ -226,7 +244,7 @@ class ApiRouter:
         if not isinstance(citations, list) or any(not isinstance(item, dict) for item in citations):
             raise ValidationError("legal_citations harus berupa daftar objek.", [{"field": "legal_citations", "issue": "invalid_value"}])
         kwargs = {key: payload.get(key, "") for key in ("tender_id", "package_name", "company_name", "notice_number", "pokja_name")}
-        kwargs.update(source_text=source_text, findings=findings, legal_citations=citations)
+        kwargs.update(source_text=source_text, findings=eligible, legal_citations=citations)
         builders = {"docx": build_sanggahan_docx, "pdf": build_sanggahan_pdf, "markdown": build_sanggahan_markdown, "html": build_sanggahan_html}
         content = builders[output_format](**kwargs)
         mime_types = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "pdf": "application/pdf", "markdown": "text/markdown; charset=utf-8", "html": "text/html; charset=utf-8"}

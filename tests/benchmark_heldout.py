@@ -193,23 +193,41 @@ def _write_markdown_report(summary: dict[str, Any], path: Path, section_title: s
 
     # If this is post-fix, append comparison and error analysis
     if "Pasca-Perbaikan" in section_title:
+        base_v_acc = 0.75
+        base_t_rate = 7.0 / 9.0
+        base_m_prec = 0.821
+        base_m_rec = 0.893
+        base_m_f1 = 0.856
+
+        curr_v_acc = summary["verdict_accuracy"]
+        curr_t_rate = summary["trap_evasion_rate"]
+        curr_m_prec = summary["macro_precision"]
+        curr_m_rec = summary["macro_recall"]
+        curr_m_f1 = summary["macro_f1"]
+
+        d_v_acc = (curr_v_acc - base_v_acc) * 100
+        d_t_rate = (curr_t_rate - base_t_rate) * 100
+        d_m_prec = (curr_m_prec - base_m_prec) * 100
+        d_m_rec = (curr_m_rec - base_m_rec) * 100
+        d_m_f1 = (curr_m_f1 - base_m_f1) * 100
+
         md_lines.extend([
             "## Perbandingan Sebelum vs Sesudah (Before vs After)",
             "",
             "| Metrik Evaluasi | Baseline (Sebelum) | Pasca-Perbaikan (Sesudah) | Delta Perubahan | Keterangan Evaluasi |",
             "|---|---:|---:|---:|---|",
-            "| **Verdict Accuracy** | 75.0% (18/24) | 100.0% (24/24) | **+25.0%** | Perbaikan penanganan status default dan verdict `TIDAK ADA SYARAT TERBACA` |",
-            "| **Trap Evasion Rate** | 77.8% (7/9) | 100.0% (9/9) | **+22.2%** | Eliminasi false positive pada klausul kesetaraan dan negasi integritas |",
-            "| **Macro Precision** | 82.1% | 100.0% | **+17.9%** | Seluruh 13 aturan deteksi mencapai presisi 100% tanpa over-triggering |",
-            "| **Macro Recall** | 89.3% | 100.0% | **+10.7%** | Rekonstruksi kalimat lintas baris (cross-line) menangkap bukti terputus |",
-            "| **Macro F1 Score** | 85.6% | 100.0% | **+14.4%** | Keseimbangan deteksi red flag dan proteksi klausul sah |",
+            f"| **Verdict Accuracy** | {base_v_acc * 100:.1f}% (18/24) | {curr_v_acc * 100:.1f}% ({round(curr_v_acc * summary['total_documents'])}/{summary['total_documents']}) | **{d_v_acc:+.1f}%** | Perbaikan penanganan status default dan verdict `TIDAK ADA SYARAT TERBACA` |",
+            f"| **Trap Evasion Rate** | {base_t_rate * 100:.1f}% (7/9) | {curr_t_rate * 100:.1f}% ({summary.get('trap_docs_clean', 0)}/{summary.get('trap_docs_total', 0)}) | **{d_t_rate:+.1f}%** | Eliminasi false positive pada klausul kesetaraan dan negasi integritas |",
+            f"| **Macro Precision** | {base_m_prec * 100:.1f}% | {curr_m_prec * 100:.1f}% | **{d_m_prec:+.1f}%** | Aturan deteksi terkalibrasi tanpa over-triggering |",
+            f"| **Macro Recall** | {base_m_rec * 100:.1f}% | {curr_m_rec * 100:.1f}% | **{d_m_rec:+.1f}%** | Rekonstruksi kalimat lintas baris (cross-line) menangkap bukti terputus |",
+            f"| **Macro F1 Score** | {base_m_f1 * 100:.1f}% | {curr_m_f1 * 100:.1f}% | **{d_m_f1:+.1f}%** | Keseimbangan deteksi red flag dan proteksi klausul sah |",
             "",
             "## Analisis Temuan dan Error Analysis",
             "",
-            "1. **Peningkatan NIB (`ADM-NIB`)**: Presisi dan recall naik dari 0% ke 100%. Aturan disesuaikan dengan PP No. 5/2021 yang menyatakan NIB berlaku selama masa operasional usaha tanpa masa kedaluwarsa berkala, dengan memverifikasi keberadaan format 13 digit OSS.",
-            "2. **Peningkatan SBU (`ADM-SBU`)**: Presisi dan recall naik dari 50% ke 100%. Implementasi *cross-line sentence reconstruction* berhasil merekatkan baris teks yang terpotong enter/newline dari dokumen PDF tanpa kehilangan metadata baris asli.",
-            "3. **Eliminasi False Positive Brand Lock-in (`SPEC-LOCKIN-GPU`)**: Presisi naik dari 50% ke 100%. Frasa kesetaraan teknis (*'atau setara'*, *'equivalent'*) kini dikenali sebagai pengecualian sah sesuai Pasal 19 ayat (1) Perpres 12/2021 sehingga tidak memicu alarm palsu pada vendor sah.",
-            "4. **Koreksi Negasi Integritas (`GOV-CONFLICT-INTEREST`)**: Presisi naik dari 50% ke 100%. Regex negasi diperbaiki untuk mengakui kalimat pakta integritas normatif (*'bebas dari benturan kepentingan'*) sehingga tidak disalahartikan sebagai pelanggaran afiliasi pejabat.",
+            "1. **Peningkatan NIB (`ADM-NIB`)**: Presisi dan recall disesuaikan dengan PP No. 5/2021 yang menyatakan NIB berlaku selama masa operasional usaha tanpa masa kedaluwarsa berkala, dengan memverifikasi keberadaan format 13 digit OSS.",
+            "2. **Peningkatan SBU (`ADM-SBU`)**: Implementasi *cross-line sentence reconstruction* berhasil merekatkan baris teks yang terpotong enter/newline dari dokumen PDF tanpa kehilangan metadata baris asli.",
+            "3. **Eliminasi False Positive Brand Lock-in (`SPEC-LOCKIN-GPU`)**: Frasa kesetaraan teknis (*'atau setara'*, *'equivalent'*) kini dikenali sebagai pengecualian sah sesuai Pasal 19 ayat (1) Perpres 12/2021 sehingga tidak memicu alarm palsu pada vendor sah.",
+            "4. **Koreksi Negasi Integritas (`GOV-CONFLICT-INTEREST`)**: Regex negasi diperbaiki untuk mengakui kalimat pakta integritas normatif (*'bebas dari benturan kepentingan'*) sehingga tidak disalahartikan sebagai pelanggaran afiliasi pejabat.",
             "5. **Verdict 'TIDAK ADA SYARAT TERBACA'**: Dokumen tanpa klausul pengadaan atau dokumen kosong kini secara eksplisit mengeluarkan verdict konservatif `TIDAK ADA SYARAT TERBACA` dengan peringatan OCR/dokumen tidak memuat bab teknis, alih-alih meloloskan dengan status GO palsu.",
             "",
         ])

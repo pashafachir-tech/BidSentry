@@ -4,6 +4,31 @@ Dokumen ini mencatat riwayat perbaikan menyeluruh pada repositori BidSentry berd
 
 ---
 
+## [v2.1.1] - Validasi Sumber Eksak, Kebijakan Verdict Deterministik & Benchmark Mandiri
+
+### 1. Grounding Kutipan Server-Side & Keamanan Log Audit
+- **Penyimpanan Teks Sumber Terpisah**: Teks sumber asli disimpan di direktori server khusus (`audit_sources/{audit_id}.txt`) yang dipurging otomatis mengikuti `AUDIT_RETENTION_DAYS`, tanpa mencemari log metadata audit `audit_log.jsonl` (menjaga kepatuhan privasi).
+- **Validasi Exact Substring Anti-Halusinasi**: Draf surat sanggahan memvalidasi seluruh kutipan bukti klausul secara eksak terhadap teks sumber asli. Kutipan rekayasa atau tidak berdasar ditolak keras (`ValidationError: no_grounded_findings`).
+- **Penanganan Audit Lampau Tanpa Teks Sumber**: Jika berkas sumber tidak tersedia (audit riwayat lama atau terhapus retensi), tombol draf sanggahan dinonaktifkan di antarmuka web dengan penjelasan gamblang.
+- **Unit Testing Grounding**: Menambahkan `tests/test_source_grounding.py` (3 skenario pengujian penolakan kutipan palsu dan audit tanpa berkas sumber).
+
+### 2. Penghitungan Metrik Benchmark Dinamis
+- **Eliminasi String Persentase Statis**: Refaktorisasi generator laporan pada `tests/benchmark_heldout.py` agar seluruh angka, delta, dan rasio diformat dinamis secara komputasional langsung dari objek hasil run.
+- **Pengujian Integritas Templat**: Menambahkan `tests/test_benchmark_templates.py` yang memvalidasi ketiadaan angka atau rasio statis pada templat tabel laporan.
+
+### 3. Verifikasi Data Resmi pada Evidence Scorecard
+- **Sitasi Resmi LKPP 2024**: Memperbarui angka belanja pengadaan dengan sumber resmi portal LKPP ([https://www.lkpp.go.id/](https://www.lkpp.go.id/)), Tahun 2024, kutipan persis: *"Total pagu belanja pengadaan barang/jasa nasional tercatat sebesar Rp 1.165,14 Triliun (dengan RUP terumumkan pada SiRUP per April 2024 mencapai Rp 1.043,45 Triliun)."*
+- **Penetapan Status Jujur**: Mengganti estimasi waktu manusia dan willingness-to-pay hipotesis dengan tanda tegas **`BELUM DIVERIFIKASI`** / **`BELUM DIKUMPULKAN`**.
+
+### 4. Kebijakan Verdict Terstandarisasi & Pembekuan Validation Set v1
+- **Kebijakan Verdict Deterministik**: Mendokumentasikan kebijakan pada `docs/MODEL_CARD.md`: vonis `NO-GO` secara ketat hanya dipicu oleh cacat fatal yang terkonfirmasi (`GAP`); kekurangan dokumen bukti atau izin kedaluwarsa dialihkan ke status `BELUM CUKUP BUKTI`.
+- **Hasil Validation Set v1 (10 Dokumen Frozen)**: Label pada `data/test_blind/` dibekukan tanpa penyetelan ulang. Evaluasi sekali jalan menghasilkan Verdict Accuracy **90.0% (9/10)**, Trap Evasion **100.0% (3/3)**, Macro Precision 16.0%, Macro Recall 30.8%, Macro F1 21.1%.
+
+### 5. Parser Anggaran Prosa Bebas & Dataset Pengujian Narasi Baru
+- **Ekstraksi Anggaran Naratif**: Memperluas parser `engine.py` untuk mengekstrak Pagu DIPA, BoQ, dan HPS dari kalimat prosa bebas non-tabel tanpa memicu false positive pada kalimat normatif perundang-undangan.
+- **Narrative Budget Test Set (5 Dokumen Baru)**: Menguji pada dokumen terpisah di `data/test_narrative_budget/` dengan evaluator mandiri `tests/benchmark_budget_narrative.py`. Hasil: Verdict Accuracy **80.0% (4/5)**, Trap Evasion **100.0% (1/1)**.
+
+
 ## [v2.1.0] - Iterasi Pemulihan & Bukti Penilaian Rubrik
 
 ### Fase 1: Keamanan & Privasi Dokumen

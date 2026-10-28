@@ -41,6 +41,12 @@ class AuditController:
             "provider": contextual.get("provider"),
         }
         result["integrations"] = {"langflow": integration}
+        result["has_source_text"] = bool(request.all_document_text)
+        if request.all_document_text:
+            self.audit_log.save_source_text(
+                result["audit_id"],
+                request.all_document_text,
+            )
         self.audit_log.append({
             "event_type": "audit.completed",
             "audit_id": result["audit_id"],
@@ -60,6 +66,7 @@ class AuditController:
             "penalty_simulation": result.get("penalty_simulation", {}),
             "adendum_reconciliation": result.get("adendum_reconciliation", {}),
             "contextual_extraction": result.get("contextual_extraction", {}),
+            "has_source_text": bool(request.all_document_text),
             "integrations": {"langflow": integration.get("status", "not_requested")},
         })
         return result

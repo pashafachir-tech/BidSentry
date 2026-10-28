@@ -76,4 +76,5 @@ class PortfolioService:
             "contextual_extraction": event.get("contextual_extraction") or event.get("evaluation", {}).get("contextual_extraction") or {},
             "source": "local_audit_log", "risk_method": risk.get("method", "deterministic evidence checks"),
             "engine_duration_ms": event.get("engine_duration_ms"),
+            "has_source_text": bool(event.get("source_text")),
         }

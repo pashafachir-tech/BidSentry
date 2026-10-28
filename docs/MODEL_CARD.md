@@ -47,7 +47,33 @@ Jika LLM mengembalikan kutipan yang mengandung placeholder redaksi (misal `[NIK-
 
 ---
 
-## 3. Batasan Sistem (System Limitations)
+## 3. Kebijakan Penetapan Verdict (Verdict Policy)
+Sistem memisahkan secara ketat antara pelanggaran hukum terkonfirmasi vs status administratif yang masih memerlukan klarifikasi:
+
+1. **`NO-GO` (Hanya untuk Cacat Fatal yang Pasti)**:
+   - Diberikan **hanya** jika terdapat temuan kesenjangan pasti (`status == "GAP"`):
+     * Penguncian merek atau spesifikasi diskriminatif tanpa klausul kesetaraan (Pasal 19 Perpres 12/2021).
+     * Jadwal lelang di bawah batas minimum kewajaran LKPP (Pasal 54 Perpres 12/2021).
+     * Klausul denda keterlambatan tanpa batas kumulatif (*uncapped poison pill*).
+     * Total biaya BoQ melebihi Pagu Anggaran yang tersedia (defisit anggaran).
+     * Mark-up tarif man-month konsultan di atas batas pedoman remunerasi nasional.
+     * Dokumen legalitas penyedia yang terbukti telah kedaluwarsa sebelum batas akhir penawaran.
+     * Terindikasi adanya benturan kepentingan personal/afiliasi yang dilarang.
+   - Ketiadaan dokumen penawaran atau masa berlaku yang hampir habis **dilarang keras** memicu status `NO-GO`.
+
+2. **`BELUM CUKUP BUKTI` (Status Terpisah untuk Bukti Kosong & Dokumen Mendekati Kedaluwarsa)**:
+   - **Bukti Kosong / Belum Diunggah**: Ketika mengevaluasi draf KAK PPK, slot dokumen penawaran penyedia (NPWP, NIB, SBU, Jaminan) berstatus `REVIEW` karena berkas penyedia memang belum diunggah. Status ini menandakan perlunya kelengkapan berkas, bukan vonis pembatalan paket.
+   - **Dokumen Mendekati Kedaluwarsa (`EXPIRING`)**: Dokumen legalitas yang masa berlakunya masih aktif namun kurang dari 30 hari sebelum batas penawaran diberi status `EXPIRING` dengan rekomendasi *BELUM CUKUP BUKTI* agar penyedia menyertakan bukti perpanjangan, bukan vonis diskualifikasi seketika.
+
+3. **`GO`**:
+   - Seluruh persyaratan administratif dan teknis yang terbaca telah diverifikasi pemenuhannya dari bukti yang disertakan, dan tidak ada cacat yang pasti.
+
+4. **`TIDAK ADA SYARAT TERBACA`**:
+   - Dokumen tidak memuat bab persyaratan kualifikasi, teknis, atau kontrak yang dapat diidentifikasi oleh aturan sistem (misal: berkas pindaian gambar tanpa teks OCR atau notulensi rapat umum).
+
+---
+
+## 4. Batasan Sistem (System Limitations)
 1. **Bukan Nasihat Hukum (Not Legal Advice)**: BidSentry adalah alat bantu telaah administratif dan teknis. Hasil evaluasi tidak memiliki kekuatan hukum pembatalan lelang dan tidak menggantikan wewenang Pokja Pemilihan atau Pengadilan Tata Usaha Negara.
 2. **Indeks Triase Risiko Bukan Vonis Fraud**: Skor risiko (0–100) dan klasifikasi (LOW / MEDIUM / HIGH / CRITICAL) merupakan indeks triase untuk membantu auditor atau penyedia memprioritaskan telaah dokumen, bukan penetapan adanya tindak pidana korupsi.
 3. **Ketergantungan Ekstraksi Teks**: Sistem bergantung pada keterbacaan teks digital. PDF hasil pindai (scan) tanpa lapisan OCR tidak dapat dianalisis secara akurat dan akan menampilkan status `TIDAK ADA SYARAT TERBACA`.

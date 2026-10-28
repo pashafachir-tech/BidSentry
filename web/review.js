@@ -146,6 +146,9 @@ export function renderReview(state) {
   const body = state.reviewTab === "insights" ? `<div class="insights-grid">${renderContextual(result.contextual_extraction)}${renderAdendum(result)}</div>` : `
     <div class="review-matrix-card"><div class="matrix-heading"><div><p class="eyebrow">MATRIKS KEPATUHAN</p><h3>Persyaratan dan bukti</h3><p>Klik baris untuk melihat kutipan, catatan, dan mengubah penetapan reviewer.</p></div><div class="matrix-filters" role="group" aria-label="Filter status">${filters}</div></div><div class="review-table-wrap"><table class="review-table"><thead><tr><th>ID / KATEGORI</th><th>KETENTUAN</th><th>STATUS</th><th>BUKTI PENYEDIA</th></tr></thead><tbody>${visible.length ? visible.map((row) => renderFinding(row, state, review)).join("") : `<tr><td colspan="4" class="review-empty">${review.isCustom ? "Tidak ada temuan pada filter ini." : "Jalankan evaluasi untuk melihat hasil pemeriksaan."}</td></tr>`}</tbody></table></div><div class="review-table-footer"><span>${number(visible.length)} dari ${number(findings.length)} temuan</span><span>${number(counts.GAP)} kesenjangan · ${number(counts.REVIEW)} perlu diperiksa</span></div></div>
     ${renderPenalty(result.penalty_simulation)}${renderAdendum(result)}`;
+  const hasSource = Boolean(review.has_source_text || review.source_text || state.lastAuditDraft?.dok_pemilihan);
+  const disabledObjectionAttr = !hasSource ? 'disabled title="Teks sumber asli tidak tersedia untuk audit ini (sudah kedaluwarsa atau dihapus). Draf sanggahan memerlukan teks sumber asli untuk verifikasi kutipan."' : '';
+
   return `<section class="review-workspace" id="risk-review" aria-label="Pemeriksaan persyaratan dan bukti">
     <div class="review-heading">
       <div>
@@ -157,12 +160,12 @@ export function renderReview(state) {
         ${review.isCustom ? `
           <button class="button button-secondary button-small" data-action="add-more-docs" title="Tambah dokumen dan jalankan ulang pemeriksaan">+ Tambah dokumen & jalankan ulang</button>
           <button class="button button-quiet button-small" data-action="export-review">Ekspor hasil</button>
-          <button class="button button-secondary button-small" data-action="open-objection">Buat draf sanggahan</button>
+          <button class="button button-secondary button-small" data-action="open-objection" ${disabledObjectionAttr}>Buat draf sanggahan</button>
         ` : ""}
       </div>
     </div>
     <div class="review-summary-card"><div class="review-verdict"><p class="eyebrow">RINGKASAN EKSEKUTIF</p><h3>${escapeHtml(review.package_name)}</h3><p>${escapeHtml(review.tender_id || "")}${review.pokja_name ? ` · ${escapeHtml(review.pokja_name)}` : ""}</p><div class="review-verdict-row"><span class="review-risk risk-${riskClass}">${escapeHtml(risk)}</span><strong class="eligibility-badge ${badgeClass}">${escapeHtml(status)}</strong></div><p class="review-summary-copy">${escapeHtml(review.summary)}</p><small>${escapeHtml(summary.qualification || "Hasil triase berdasarkan teks yang diberikan, bukan penetapan kelayakan.")}</small></div><div class="review-kpis"><div><span>Jumlah temuan</span><strong>${number(findings.length)}</strong></div><div><span>Perlu bukti</span><strong>${number(summary.missing_mandatory_documents || 0)}</strong></div><div><span>Kegagalan administrasi</span><strong>${number(summary.critical_administrative_failures || 0)}</strong></div><div><span>Potensi selisih skenario</span><strong>${summary.potential_financial_exposure_idr ? rupiah(summary.potential_financial_exposure_idr) : "—"}</strong></div></div></div>
-    ${tabs}<div class="review-tab-panel">${body}</div><div class="review-tools-grid"><article class="review-tool-card review-action-card"><div><p class="eyebrow">TINDAK LANJUT</p><h3>Siapkan pemeriksaan Pokja</h3><p>Ekspor hasil atau buat draf surat dari kutipan yang cocok persis dengan sumber.</p></div>${review.isCustom ? `<button class="button button-primary button-small" data-action="open-objection">Buat draf sanggahan</button>` : `<button class="button button-primary button-small" data-action="new-audit">Mulai pemeriksaan</button>`}</article></div>
+    ${tabs}<div class="review-tab-panel">${body}</div><div class="review-tools-grid"><article class="review-tool-card review-action-card"><div><p class="eyebrow">TINDAK LANJUT</p><h3>Siapkan pemeriksaan Pokja</h3><p>Ekspor hasil atau buat draf surat dari kutipan yang cocok persis dengan sumber.</p></div>${review.isCustom ? `<button class="button button-primary button-small" data-action="open-objection" ${disabledObjectionAttr}>Buat draf sanggahan</button>` : `<button class="button button-primary button-small" data-action="new-audit">Mulai pemeriksaan</button>`}</article></div>
     <p class="review-caveat">Skor dan label membantu triase. Sistem tidak memverifikasi data ke pemerintah, menetapkan kepatuhan, atau memberikan nasihat hukum.</p></section>`;
 }
 

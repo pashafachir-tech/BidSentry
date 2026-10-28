@@ -561,9 +561,21 @@ class EvaluationEngine:
             ))
 
         # 15. Financial & Budget Checks (Over Budget, Billing Rate Mark-Up, Double Counting, Personnel Qualification)
-        # 15.1. Over Budget Check (Total BoQ > Pagu Anggaran)
-        pagu_match = re.search(r"(?:PAGU\s+ANGGARAN|Pagu\s+Anggaran)[\s\S]{0,60}?(?:Rp\.?\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{7,})", request.dok_pemilihan, re.I)
-        boq_match = re.search(r"(?:TOTAL\s+BIAYA|Total\s+BoQ|Total\s+Biaya)[\s\S]{0,60}?(?:Rp\.?\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{7,})", request.dok_pemilihan, re.I)
+        # 15.1. Over Budget Check (Total BoQ > Pagu Anggaran) - Enhanced for free narrative prose & tables
+        pagu_match = re.search(
+            r"(?i)(?:pagu\s+anggaran|pagu\s+dipa|pagu\s+dana|pagu\s+indikatif|alokasi\s+pagu|anggaran\s+yang\s+(?:tersedia|dialokasikan)|nilai\s+pagu)"
+            r"[\s\S]{0,100}?"
+            r"(?:sebesar|mencapai|adalah|senilai)?[\s\S]{0,30}?"
+            r"(?:rp\.?\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{7,})",
+            request.dok_pemilihan,
+        )
+        boq_match = re.search(
+            r"(?i)(?:total\s+(?:rincian\s+)?biaya|total\s+boq|total\s+hps|harga\s+perkiraan\s+sendiri|rekapitulasi\s+(?:perhitungan\s+)?(?:teknis\s+)?(?:boq|biaya)|total\s+kebutuhan\s+(?:anggaran|biaya)|bill\s+of\s+quantities[\s\S]{0,80}?(?:total|mencapai)[\s\S]{0,60}?(?:biaya)?)"
+            r"[\s\S]{0,100}?"
+            r"(?:sebesar|mencapai|adalah|senilai)?[\s\S]{0,30}?"
+            r"(?:rp\.?\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{7,})",
+            request.dok_pemilihan,
+        )
 
         pagu_val: float | None = None
         boq_val: float | None = None
@@ -585,8 +597,17 @@ class EvaluationEngine:
             pagu_fmt = f"{int(round(pagu_val)):,}".replace(",", ".")
             def_fmt = f"{int(round(deficit)):,}".replace(",", ".")
             pct_fmt = f"{pct:.1f}".replace(".", ",")
-            pagu_line = _line_find(requirement_lines, r"Pagu\s+Anggaran") or ("Dokumen pemilihan", f"Pagu Anggaran: Rp {pagu_fmt}")
-            boq_line = _line_find(requirement_lines, r"TOTAL\s+BIAYA|Total\s+BoQ|Total\s+Biaya|SELISIH\s*\(OVER\s+BUDGET\)") or ("Dokumen pemilihan", f"Total BoQ: Rp {boq_fmt}")
+            pagu_line = _line_find(requirement_lines, r"(?i)pagu\s+(?:anggaran|dipa|dana|indikatif)|alokasi\s+pagu|anggaran\s+yang\s+(?:tersedia|dialokasikan)|nilai\s+pagu")
+            if not pagu_line and pagu_match:
+                pagu_line = ("Dokumen pemilihan", pagu_match.group(0).strip())
+            elif not pagu_line:
+                pagu_line = ("Dokumen pemilihan", f"Pagu Anggaran: Rp {pagu_fmt}")
+
+            boq_line = _line_find(requirement_lines, r"(?i)total\s+(?:rincian\s+)?biaya|total\s+boq|total\s+hps|harga\s+perkiraan|rekapitulasi.*biaya|bill\s+of\s+quantities")
+            if not boq_line and boq_match:
+                boq_line = ("Dokumen pemilihan", boq_match.group(0).strip())
+            elif not boq_line:
+                boq_line = ("Dokumen pemilihan", f"Total BoQ: Rp {boq_fmt}")
             findings.append(_finding(
                 "FIN-OVER-BUDGET",
                 "Total BoQ Melebihi Pagu Anggaran (Over Budget)",
@@ -756,9 +777,12 @@ class EvaluationEngine:
             bool(addendum.get("changes") or addendum.get("obsolete_criteria")),
         ])
 
-        # Verdict calculation
+        # Verdict calculation per Model Card policy:
+        # NO-GO is STRICTLY for confirmed flaws (status == "GAP").
+        # EXPIRING and missing proof (status == "REVIEW") use BELUM CUKUP BUKTI.
+        confirmed_gaps = sum(item["status"] == "GAP" for item in findings)
         critical_flaws = sum(item["severity"] == "HIGH" and item["status"] == "GAP" for item in findings)
-        gap_count = sum(item["status"] in ("GAP", "EXPIRING") for item in findings)
+        expiring_count = sum(item["status"] == "EXPIRING" for item in findings)
         review_count = sum(item["status"] == "REVIEW" for item in findings)
         missing_mandatory = sum(
             1 for item in findings
@@ -768,12 +792,17 @@ class EvaluationEngine:
         if recognized_clauses_count == 0 and not findings:
             verdict = "TIDAK ADA SYARAT TERBACA"
             exec_note = "TIDAK ADA SYARAT TERBACA: Dokumen mungkin berupa pindaian gambar tanpa OCR, atau tidak memuat bab teknis/administrasi yang dapat dikenali mesin."
-        elif critical_flaws > 0 or gap_count > 0:
+        elif confirmed_gaps > 0:
             verdict = "NO-GO"
-            exec_note = f"NO-GO: {critical_flaws or gap_count} kesenjangan/red flag kritis terkonfirmasi dari teks; {missing_mandatory} syarat administratif masih perlu bukti."
-        elif missing_mandatory > 0 or review_count > 0:
+            exec_note = f"NO-GO: {confirmed_gaps} kesenjangan/red flag kritis terkonfirmasi dari teks; {missing_mandatory} syarat administratif masih perlu bukti."
+        elif expiring_count > 0 or missing_mandatory > 0 or review_count > 0:
             verdict = "BELUM CUKUP BUKTI"
-            exec_note = f"BELUM CUKUP BUKTI: {missing_mandatory or review_count} persyaratan memerlukan bukti pemenuhan dokumen dari penyedia sebelum dapat dinyatakan layak (GO)."
+            details = []
+            if expiring_count > 0:
+                details.append(f"{expiring_count} dokumen kualifikasi mendekati masa kedaluwarsa (≤ 30 hari)")
+            if missing_mandatory > 0 or review_count > 0:
+                details.append(f"{missing_mandatory or review_count} persyaratan memerlukan bukti pemenuhan dokumen dari penyedia")
+            exec_note = f"BELUM CUKUP BUKTI: {'; '.join(details)} sebelum dapat dinyatakan layak (GO)."
         else:
             verdict = "GO"
             exec_note = "GO: Seluruh persyaratan yang teridentifikasi telah terpenuhi berdasarkan bukti yang disertakan."
