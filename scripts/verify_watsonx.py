@@ -13,6 +13,8 @@ import time
 from pathlib import Path
 
 WORKSPACE_ROOT = Path(__file__).resolve().parent.parent
+if str(WORKSPACE_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORKSPACE_ROOT))
 STATUS_DOC_PATH = WORKSPACE_ROOT / "docs" / "INTEGRATION_STATUS.md"
 MCP_CONFIG_PATH = WORKSPACE_ROOT / "bob" / "mcp.json"
 
@@ -31,17 +33,25 @@ def read_env_file() -> dict[str, str]:
     return env_vars
 
 def verify_watsonx() -> dict[str, str]:
+    from bidsentry.config import Settings
+    from bidsentry.services.watsonx_service import WatsonxService
+
+    settings = Settings.from_environment()
+    watsonx_svc = WatsonxService(settings)
+    svc_status = watsonx_svc.status()
+
     file_env = read_env_file()
     api_key = os.environ.get("WATSONX_API_KEY") or os.environ.get("LLM_API_KEY") or file_env.get("WATSONX_API_KEY") or file_env.get("LLM_API_KEY") or ""
     project_id = os.environ.get("WATSONX_PROJECT_ID") or file_env.get("WATSONX_PROJECT_ID") or ""
-    url = os.environ.get("WATSONX_URL") or file_env.get("WATSONX_URL") or "https://us-south.ml.cloud.ibm.com"
-    model_id = os.environ.get("LLM_MODEL_NAME") or file_env.get("LLM_MODEL_NAME") or "ibm/granite-3-8b-instruct"
+    url = os.environ.get("WATSONX_URL") or file_env.get("WATSONX_URL") or settings.watsonx_url or "https://us-south.ml.cloud.ibm.com"
+    model_id = os.environ.get("LLM_MODEL_NAME") or file_env.get("LLM_MODEL_NAME") or watsonx_svc.default_model_id
 
     result = {
         "status": "BELUM DIVERIFIKASI (UNCONFIGURED)",
         "message": "SKIPPED - Kredensial IBM watsonx tidak dikonfigurasi pada lingkungan lokal.",
         "latency_ms": "—",
         "model_id": model_id,
+        "service_backend": f"WatsonxService initialized (configured={watsonx_svc.is_configured})",
         "instructions": "Setel WATSONX_API_KEY dan WATSONX_PROJECT_ID pada environment atau file .env lokal untuk mengaktifkan ekstraksi semantik via IBM Granite.",
     }
 

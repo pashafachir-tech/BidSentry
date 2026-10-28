@@ -860,6 +860,35 @@ async function downloadObjectionDocx() {
   }
 }
 
+async function exportMinutesDoc() {
+  const state = getState();
+  const review = getReviewSnapshot(state);
+  if (!review.isCustom) { toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error"); return; }
+  try {
+    const payload = {
+      tender_id: review.tender_id || "TND-2026",
+      vendor_name: review.company_name || "Penyedia Peserta",
+      format: "docx",
+      findings: review.findings || [],
+      legal_mappings: [],
+    };
+    const res = await fetch("/api/v1/audit/minutes-eval-doc", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error?.message || "Gagal membuat Berita Acara.");
+    const result = data.data;
+    const bytes = Uint8Array.from(atob(result.content_base64 || ""), (char) => char.charCodeAt(0));
+    const blob = new Blob([bytes], { type: result.content_type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+    downloadBlob(blob, result.filename || "berita-acara-evaluasi.docx");
+    toast("Berita Acara Hasil Pemilihan (BAHP) DOCX berhasil diunduh.");
+  } catch (err) {
+    toast(err.message, "error");
+  }
+}
+
 // Global click event listeners
 document.addEventListener("click", async (event) => {
   const toastClose = event.target.closest('[data-action="close-toast"]');
@@ -905,9 +934,15 @@ document.addEventListener("click", async (event) => {
     try { localStorage.setItem("bidsentry-theme", theme); } catch {}
     render();
   }
+  if (action === "set-perspective") {
+    const perspective = target.dataset.perspective || "pokja";
+    setState({ userPerspective: perspective });
+    toast(`Beralih ke Perspektif ${perspective === "pokja" ? "Panitia / Pokja" : "Peserta / Vendor"}.`);
+  }
   if (action === "export") exportData();
   if (action === "export-review") exportReview();
   if (action === "export-selected-review") exportSelectedReview();
+  if (action === "export-minutes") exportMinutesDoc();
   if (action === "open-objection") openObjection();
   if (action === "download-objection") downloadObjectionDocx();
   if (action === "download-objection-txt") downloadObjectionTxt();

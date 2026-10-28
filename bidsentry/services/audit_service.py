@@ -4,13 +4,25 @@ from __future__ import annotations
 
 from typing import Any
 
+from bidsentry.config import Settings
 from bidsentry.evaluators.engine import EvaluationEngine, EvaluationRequest
+from bidsentry.schemas.comprehensive import ComprehensiveAuditRequest
+from bidsentry.services.comprehensive_audit_service import (
+    ComprehensiveAuditInputError,
+    ComprehensiveAuditService,
+)
+from bidsentry.services.langflow_service import LangflowService
 from bidsentry.types.schemas import AuditRequest
 
 
 class AuditService:
-    def __init__(self, engine: EvaluationEngine | None = None):
+    def __init__(
+        self,
+        engine: EvaluationEngine | None = None,
+        comprehensive: ComprehensiveAuditService | None = None,
+    ):
         self.engine = engine or EvaluationEngine()
+        self.comprehensive = comprehensive
 
     def audit(self, request: EvaluationRequest | AuditRequest | dict[str, Any]) -> dict[str, Any]:
         if isinstance(request, AuditRequest):
@@ -27,3 +39,19 @@ class AuditService:
         else:
             model = EvaluationRequest.model_validate(request)
         return self.engine.evaluate(model)
+
+    def audit_comprehensive(
+        self,
+        request: ComprehensiveAuditRequest,
+        audit_run_id: str | None = None,
+        settings: Settings | None = None,
+        langflow: LangflowService | None = None,
+    ) -> dict[str, Any]:
+        """Execute the comprehensive 10-module enterprise procurement audit."""
+        svc = self.comprehensive or ComprehensiveAuditService(
+            settings or Settings.from_environment(), langflow
+        )
+        return svc.audit(request, audit_run_id=audit_run_id)
+
+
+__all__ = ["AuditService", "ComprehensiveAuditInputError", "ComprehensiveAuditService"]

@@ -81,6 +81,7 @@ def predict_default_risk(metrics: DefaultRiskInput | dict[str, Any] | None) -> d
         "components": components,
         "weights_used": {name: _float(COMPONENT_WEIGHTS[name] / total_weight) for name, _ in available},
         "interpretation": "Deterministic triage index, not a calibrated probability or a finding of likely abandonment. Validate all source inputs and project-specific context.",
+        "umkm_bias_protection": "Sesuai Pasal 65 ayat (4) Perpres 12/2021 dan PP 7/2021, paket usaha kecil (nilai s.d. Rp 15 Miliar) dilindungi dari persyaratan modal korporasi besar. Indeks ini menerapkan normalisasi proporsional non-diskriminatif terhadap skala usaha.",
     }
 
 

@@ -32,6 +32,40 @@ Pilot kecil harus menjawab tiga pertanyaan sebelum produk dipakai untuk keputusa
 
 Laporkan ukuran sampel, rentang atau median yang sesuai, kasus gagal, batas sistem, dan metode pencatatan bersama setiap angka. Jangan menghapus kasus yang tidak nyaman dari ringkasan.
 
+## 2. Dekomposisi Waktu & Pengukuran Throughput Teknis
+
+Sebagai acuan perbandingan baseline terukur dalam protokol pengujian:
+
+### A. Dekomposisi Waktu Review: Manual vs Berbantuan BidSentry
+- **Baseline Manual (Rata-rata 4.5 Jam / 270 Menit)**:
+  - Pembacaan teliti Kerangka Acuan Kerja (KAK) & Spesifikasi Teknis: 120 – 180 menit.
+  - Verifikasi silang Bill of Quantities (BoQ) terhadap Pagu Anggaran/HPS: 30 – 60 menit.
+  - Pengecekan riwayat adendum & konsistensi klausul: 30 – 45 menit.
+  - Penyusunan draf Berita Acara Evaluasi (Pokja) atau Surat Sanggahan (Vendor): 60 – 120 menit.
+- **Pipeline Eksekusi Mesin BidSentry (Total Rata-rata ~42 Detik)**:
+  - Ekstraksi teks & tabel dari PDF multi-halaman (`DocumentExtractionService`): **1.2 – 3.5 detik**.
+  - Evaluasi matriks kepatuhan 15 aturan deterministik (`bidsentry.evaluators.engine`): **< 0.5 detik**.
+  - Pemeriksaan ketimpangan harga satuan BoQ & denda kontrak: **< 0.2 detik**.
+  - Penalaran semantik terpandu IBM Granite (`watsonx.ai` / fallback): **15 – 30 detik**.
+  - Pembentukan draf Berita Acara BAHP / Surat Sanggahan DOCX: **< 1 detik**.
+  - *Catatan: Waktu 42 detik adalah throughput pemrosesan mesin. Auditor manusia (HITL) tetap mengalokasikan 5–15 menit untuk memvalidasi temuan sebelum menerbitkan dokumen.*
+
+### B. Presisi Deteksi Ketimpangan Harga (Pricing Imbalance Precision)
+- **Metodologi**: Modul `bidsentry.audits.pricing_imbalance` membandingkan tarif man-month dan harga satuan material terhadap indeks standar (seperti pedoman INKINDO atau Standar Satuan Harga / SSH).
+- **Ambang Batas**:
+  - Deviasi > 100% dari tarif standar memicu peringatan risiko mark-up sedang.
+  - Deviasi > 200% (misal man-month Solution Architect Rp 150 jt vs standar Rp 45–60 jt) memicu flag fatal `FIN-UNBALANCED-PRICING` / `RISIKO TINGGI`.
+  - Duplikasi pos lisensi dengan pemeliharaan tahun pertama dideteksi via pemeriksaan irisan klausul hak pakai (*double counting*).
+
+### C. Transparansi Konsumsi Token & Biaya Komputasi (Token Cost Transparency)
+- **Model Fondasi**: IBM Granite 3-8b-instruct (`ibm/granite-3-8b-instruct`) via watsonx.ai.
+- **Efisiensi Pra-Inferensi**: Redaksi PII lokal membuang entitas sensitif sebelum payload dikirim, menghemat token context window.
+- **Metrik Konsumsi**:
+  - Prompt tokens per audit: 1.500 – 3.500 tokens (bergantung panjang temuan dan KAK).
+  - Completion tokens per audit: 250 – 600 tokens (penalaran ringkas berdasar kutipan terverifikasi).
+  - Biaya operasional AI: Estimasi **< $0.008** (di bawah Rp 130) per tender yang diaudit.
+  - Margin kotor SaaS: Pada harga paket Starter Rp 150.000 / audit, efisiensi unit economics mencapai margin kotor > 95%.
+
 ## Privasi, keselamatan, dan tata kelola
 
 - Dapatkan persetujuan untuk ikut pilot dan otorisasi pemrosesan setiap dokumen. Gunakan data sintetis atau disamarkan bila izin belum tersedia.

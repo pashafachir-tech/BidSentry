@@ -66,6 +66,13 @@ svg { width: 17px; height: 17px; flex: 0 0 auto; }
 .topbar-text-action { min-height: 31px; padding-inline: 9px; }
 .live-indicator { display: flex; align-items: center; gap: 8px; color: #77796f; font-size: 10px; font-weight: 750; letter-spacing: .1em; }
 .live-indicator i { width: 6px; height: 6px; margin: 0; }
+.perspective-toggle { display: inline-flex; background: rgba(0,0,0,0.06); padding: 2px; border-radius: 8px; border: 1px solid var(--line-strong); }
+.perspective-btn { border: none; background: transparent; padding: 4px 10px; font-size: 11px; font-weight: 600; color: #62645a; border-radius: 6px; cursor: pointer; transition: all 0.15s ease; }
+.perspective-btn:hover { color: var(--ink); }
+.perspective-btn.is-active { background: #fff; color: var(--ink); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+:root[data-theme="dark"] .perspective-toggle { background: rgba(255,255,255,0.06); }
+:root[data-theme="dark"] .perspective-btn { color: #a1a39a; }
+:root[data-theme="dark"] .perspective-btn.is-active { background: #2a3128; color: #e5ece0; }
 .icon-button { width: 33px; height: 33px; display: grid; place-items: center; border: 1px solid var(--line-strong); border-radius: 9px; background: rgba(255,255,255,.76); color: #62645a; cursor: pointer; transition: .15s ease; }
 .icon-button:hover { border-color: #bbbdb2; color: var(--ink); background: #fff; }
 .icon-button svg { width: 15px; height: 15px; }

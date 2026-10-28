@@ -40,12 +40,14 @@ def compare_proposals(vendors: list[dict[str, Any]], minimum_tokens: int = 100) 
                 "dense_embedding_cosine": round(vector_score, 5) if vector_score is not None else None,
                 "screening_result": "HIGH_SIMILARITY_REVIEW" if suspicious else ("INSUFFICIENT_TEXT" if not enough_data else "NO_HIGH_SIMILARITY_SIGNAL"),
                 "interpretation": "Kemiripan dapat berasal dari dokumen acuan, templat, atau persyaratan yang sama; perlu telaah manusia dan pembanding sumber.",
+                "legal_caveat": "Indikator kemiripan merupakan sinyal anomali bukti untuk telaah auditor manusia (Human-in-the-Loop); bukan putusan hukum persekongkolan tender sesuai Pasal 22 UU 5/1999.",
             })
     return {
         "status": "screened" if len(vendors) > 1 else "insufficient_comparison_data",
         "compared_vendor_count": len(vendors),
         "comparisons": comparisons,
         "method": "Exact word 5-gram overlap; dense cosine is calculated only when compatible vectors are explicitly supplied.",
+        "legal_notice": "AI tidak menetapkan status hukum kolusi secara sepihak. Seluruh temuan berstatus Indikator Kesamaan Bukti yang wajib diverifikasi Pokja/APIP.",
     }
 
 

@@ -4,7 +4,7 @@ const initialState = {
   activeView: "overview", reviewFilter: "ALL", expandedFindingId: null,
   reviewTab: "matrix", reviewInsightsVisited: false,
   adendumActive: true, exposureDays: 35, customReview: null, lastAuditDraft: null,
-  reviewFeedback: null,
+  reviewFeedback: null, userPerspective: "pokja",
 };
 
 let state = { ...initialState };

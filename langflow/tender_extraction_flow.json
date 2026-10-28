@@ -1020,7 +1020,7 @@
                 "placeholder": "",
                 "real_time_refresh": true,
                 "required": false,
-                "show": false,
+                "show": true,
                 "title_case": false,
                 "toggle": false,
                 "tool_mode": false,
@@ -1157,7 +1157,7 @@
                 "trace_as_metadata": true,
                 "track_in_telemetry": false,
                 "type": "str",
-                "value": ""
+                "value": "ibm/granite-3-8b-instruct"
               },
               "ollama_base_url": {
                 "_input_type": "StrInput",
@@ -1196,7 +1196,7 @@
                 "override_skip": false,
                 "placeholder": "",
                 "required": false,
-                "show": false,
+                "show": true,
                 "title_case": false,
                 "tool_mode": false,
                 "trace_as_metadata": true,
@@ -1223,7 +1223,7 @@
                 "trace_as_metadata": true,
                 "track_in_telemetry": false,
                 "type": "str",
-                "value": ""
+                "value": "watsonx"
               },
               "stream": {
                 "_input_type": "BoolInput",

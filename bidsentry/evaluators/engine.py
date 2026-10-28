@@ -458,16 +458,16 @@ class EvaluationEngine:
         min_sanggah_days = int(get_threshold("min_sanggah_days", 5))
 
         timeline_redflag = _line_find(requirement_lines, r"compressed\s+timeline|jadwal\s+mepet|terlalu\s+mepet")
-        bid_prep_match = _line_find(requirement_lines, r"(?:penyusunan\s+dokumen\s+penawaran|pemasukan\s+penawaran)[\s\S]{0,120}?(?:hanya\s+)?(\d+)\s*hari\s*kerja")
-        sanggah_match = _line_find(requirement_lines, r"masa\s+sanggah[\s\S]{0,120}?(?:hanya\s+)?(\d+)\s*hari\s*kerja")
+        bid_prep_match = _line_find(requirement_lines, r"(?:penyusunan\s+dokumen\s+penawaran|pemasukan\s+penawaran)[\s\S]{0,120}?(?:hanya\s+)?(\d+)(?:\s*\([A-Za-z]+\))?\s*hari\s*kerja")
+        sanggah_match = _line_find(requirement_lines, r"masa\s+sanggah[\s\S]{0,120}?(?:hanya\s+)?(\d+)(?:\s*\([A-Za-z]+\))?\s*hari\s*kerja")
 
         timeline_issues: list[str] = []
         if bid_prep_match:
-            days = re.search(r"(\d+)\s*hari\s*kerja", bid_prep_match[1], re.I)
+            days = re.search(r"(\d+)(?:\s*\([A-Za-z]+\))?\s*hari\s*kerja", bid_prep_match[1], re.I)
             if days and int(days.group(1)) < min_bidding_days:
                 timeline_issues.append(f"Masa penyusunan penawaran hanya {days.group(1)} hari kerja (standar LKPP minimal {min_bidding_days} hari kerja)")
         if sanggah_match:
-            days = re.search(r"(\d+)\s*hari\s*kerja", sanggah_match[1], re.I)
+            days = re.search(r"(\d+)(?:\s*\([A-Za-z]+\))?\s*hari\s*kerja", sanggah_match[1], re.I)
             if days and int(days.group(1)) < min_sanggah_days:
                 timeline_issues.append(f"Masa sanggah hanya {days.group(1)} hari kerja (standar LKPP minimal {min_sanggah_days} hari kerja)")
 

@@ -12,15 +12,15 @@ _PATTERNS = (
     # Indonesian phone numbers (+62, 62, 08)
     (re.compile(r"(?:\+62[\s.-]?|\b62[\s.-]?|\b0)8[1-9](?:[0-9\s.-]{5,11}[0-9])\b"), "[PHONE-REDACTED]"),
     # Bank account numbers with label
-    (re.compile(r"(?i)\b((?:(?:no\.?\s*)?rek(?:ening)?|rekening(?:\s+bank)?)\s*[:#.]?\s*)(\d{8,18})\b"), r"\1[ACCOUNT-REDACTED]"),
+    (re.compile(r"(?i)\b((?:(?:no\.?\s*)?rek(?:ening)?|rekening(?:\s+bank)?)(?:[\s\w]{0,25}?)[:#.]?\s*)(\d{8,18})\b"), r"\1[ACCOUNT-REDACTED]"),
     # Formatted NPWP
     (re.compile(r"\b\d{2}\.\d{3}\.\d{3}\.\d-\d{3}\.\d{3}\b"), "[NPWP-REDACTED]"),
     # Unformatted NPWP with label
-    (re.compile(r"(?i)\b(NPWP\s*[:#.]?\s*)(\d{15,16})\b"), r"\1[NPWP-REDACTED]"),
-    # NIK with label
-    (re.compile(r"(?i)\b((?:NIK|KTP|no\.?\s*identitas)\s*[:#.]?\s*)(\d{16})\b"), r"\1[NIK-REDACTED]"),
+    (re.compile(r"(?i)\b(NPWP(?:[\s\w]{0,25}?)[:#.]?\s*)(\d{15,16})\b"), r"\1[NPWP-REDACTED]"),
+    # NIK with label (including role labels like NIK Direktur/Pengurus/Pemohon)
+    (re.compile(r"(?i)\b((?:NIK|KTP|no\.?\s*identitas)(?:[\s\w]{0,25}?)[:#.]?\s*)(\d{16})\b"), r"\1[NIK-REDACTED]"),
     # 10-15 digit identifier strictly near indicator labels (never bare money amounts)
-    (re.compile(r"(?i)\b((?:NPWP|NIK|KTP|telp(?:on)?|hp|wa|rek(?:ening)?)\s*[:#.]?\s*)(\d{10,15})\b"), r"\1[NUMBER-REDACTED]"),
+    (re.compile(r"(?i)\b((?:NPWP|NIK|KTP|telp(?:on)?|hp|wa|rek(?:ening)?)(?:[\s\w]{0,25}?)[:#.]?\s*)(\d{10,15})\b"), r"\1[NUMBER-REDACTED]"),
 )
 
 

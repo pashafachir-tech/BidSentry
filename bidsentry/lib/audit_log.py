@@ -11,6 +11,8 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Any
 
+from bidsentry.core.audit_trail import HashChainedAuditTrail, ImmutableAuditDigest
+
 
 class AuditLog:
     def __init__(self, path: Path):
@@ -264,3 +266,6 @@ class AuditLog:
             },
             "note": "Catatan reviewer yang dimasukkan pengguna; bukan akurasi, adjudikasi independen, atau metrik dampak.",
         }
+
+
+__all__ = ["AuditLog", "HashChainedAuditTrail", "ImmutableAuditDigest"]

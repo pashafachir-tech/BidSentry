@@ -16,6 +16,7 @@ from bidsentry.services.document_extraction_service import DocumentExtractionSer
 from bidsentry.services.langflow_service import LangflowService
 from bidsentry.services.portfolio_service import PortfolioService
 from bidsentry.services.settings_service import SettingsService
+from bidsentry.services.watsonx_service import WatsonxService
 from bidsentry.services.workbook_export_service import WorkbookExportService
 
 
@@ -27,6 +28,7 @@ class Application:
     dispatch: DispatchController
     documents: DocumentExtractionService
     langflow: LangflowService
+    watsonx: WatsonxService
     audit_log: AuditLog
     comprehensive_audit: ComprehensiveAuditService
     settings_service: SettingsService
@@ -42,6 +44,7 @@ def create_application(settings: Settings | None = None) -> Application:
     except Exception:
         pass
     langflow = LangflowService(config)
+    watsonx = WatsonxService(config)
     evaluation_engine = EvaluationEngine(config, langflow)
     return Application(
         settings=config,
@@ -50,6 +53,7 @@ def create_application(settings: Settings | None = None) -> Application:
         dispatch=DispatchController(DispatchService(config), audit_log),
         documents=DocumentExtractionService(),
         langflow=langflow,
+        watsonx=watsonx,
         audit_log=audit_log,
         comprehensive_audit=ComprehensiveAuditService(config, langflow),
         settings_service=SettingsService(config.workspace_root / ".env"),

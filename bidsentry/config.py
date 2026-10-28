@@ -171,3 +171,11 @@ class Settings:
             access_token=access_token,
             audit_retention_days=audit_retention_days,
         )
+
+
+def get_async_engine_settings() -> "AsyncEngineSettings":
+    from bidsentry.core.config import AsyncEngineSettings
+    return AsyncEngineSettings()
+
+
+__all__ = ["Settings", "load_env_file", "get_async_engine_settings"]
