@@ -124,7 +124,7 @@ Pengadaan barang dan jasa pemerintah (PBJP) di Indonesia mengelola alokasi angga
 - **Pengujian Dokumen PDF Multi-Halaman Nyata (Real PDF Test Fixtures)**:
   - Tersedia berkas uji PDF realistis di `data/sample_tenders/pdf_tenders/`: `paket_konstruksi_rab_kompleks.pdf` (tabel BoQ multi-halaman dengan 15 item pekerjaan) dan `paket_pengadaan_it_server_kak.pdf` (dokumen KAK lengkap dengan klausul diskriminatif merek dan denda tanpa batas).
   - Tervalidasi otomatis melalui `DocumentExtractionService` pada [`tests/test_pdf_real_extraction.py`](file:///d:/bidsentry/tests/test_pdf_real_extraction.py).
-- **Pengujian E2E Otomatis**: Dilengkapi smoke test Playwright pada [`tests/e2e_smoke.py`](file:///d:/bidsentry/tests/e2e_smoke.py) yang memvalidasi interaksi UI lengkap dan menyimpan screenshot hasil di [`docs/screenshots/e2e_results.png`](file:///d:/bidsentry/docs/screenshots/e2e_results.png).
+- **Pengujian E2E Otomatis**: Dilengkapi smoke test Playwright pada [`tests/e2e_smoke.py`](file:///d:/bidsentry/tests/e2e_smoke.py) yang memvalidasi interaksi UI lengkap, transisi dialog, dan verifikasi tabel temuan secara headless.
 - **Automated CI Workflow**: GitHub Actions pipeline aktif di [`.github/workflows/ci.yml`](file:///d:/bidsentry/.github/workflows/ci.yml) yang menjalankan seluruh unit test (63 passed tests) dan regression benchmark.
 
 ### B. Hasil Benchmark Objektif (Tiga Dataset Terpisah)

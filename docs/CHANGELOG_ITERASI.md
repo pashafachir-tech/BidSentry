@@ -62,7 +62,7 @@ Dokumen ini mencatat riwayat perbaikan menyeluruh pada repositori BidSentry berd
 - **Penetapan Reviewer Manusia (Status Override)**: Menyediakan dropdown status per temuan [Otomatis | Diterima | Diabaikan | Klarifikasi] yang secara dinamis memperbarui rekomendasi verdict keseluruhan (Human-in-the-Loop).
 - **Pagination & Filter Riwayat**: Menambahkan pagination (50 item per halaman) serta penyaringan riwayat berdasarkan status verdict dan tingkat risiko.
 - **Dukungan Berkas Excel BoQ (.xlsx)**: Mengintegrasikan parser `.xlsx` bawaan (`openpyxl`) untuk mendeteksi rincian anggaran biaya dan perbandingan defisit terhadap pagu, disertai notifikasi ramah jika dokumen berupa PDF hasil pindai murni.
-- **Pengujian E2E Smoke Test**: Menambahkan skrip pengujian Playwright `tests/e2e_smoke.py` dan menyimpan bukti visual di `docs/screenshots/e2e_results.png`.
+- **Pengujian E2E Smoke Test**: Menambahkan skrip pengujian Playwright `tests/e2e_smoke.py` untuk memvalidasi interaksi UI lengkap dari browser headless.
 
 ### Fase 4: Paket Bukti Rubrik Penilaian Juri
 - **Lembar Bukti Lengkap**: Menyusun `docs/EVIDENCE_SCORECARD.md` yang memetakan solusi terhadap 6 area rubrik (Problem Clarity 20%, Innovation/Feasibility/Monetization 25%, User Impact 15%, Technical Execution & Prototype 20%, Responsible AI 10%, Participation 5%).
