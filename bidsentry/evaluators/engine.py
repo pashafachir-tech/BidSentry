@@ -14,7 +14,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from bidsentry.audits.financial import parse_idr_number
 from bidsentry.audits.penalty_calculator import calculate_penalty_scenarios
 from bidsentry.config import Settings
+from bidsentry.evaluators.rules_loader import (
+    get_billing_rate_limits,
+    get_brand_equivalency_phrases,
+    get_threshold,
+)
 from bidsentry.forensics.adendum_diff import diff_addendum
+from bidsentry.forensics.contract_diff import diff_contracts
 from bidsentry.lib.pii import mask_text, mask_value, recover_unmasked_quote
 from bidsentry.schemas.evaluation import ContextualExtractionResponse
 from bidsentry.services.langflow_service import LangflowService
@@ -35,6 +41,7 @@ class EvaluationRequest(BaseModel):
     pustaka: str = Field(default="", max_length=1_000_000)
     contract_draft: str = Field(default="", max_length=1_000_000)
     baseline_contract: str = Field(default="", max_length=1_000_000)
+    bid_deadline: str | None = Field(default=None, max_length=50)
     allow_external_processing: bool = False
 
     @field_validator("contract_value_idr")
@@ -50,19 +57,52 @@ class EvaluationRequest(BaseModel):
 
 
 def _lines(text: str, source: str) -> list[tuple[str, str]]:
+    """Parse text into reconstructed sentences/lines with source line references."""
     result: list[tuple[str, str]] = []
-    current = source
-    number = 0
-    for raw in text.splitlines():
-        header = re.match(r"^---\s+(.+?)\s+---$", raw.strip())
+    current_source = source
+    buffer: list[str] = []
+    start_line = 1
+    raw_lines = text.splitlines()
+
+    for idx, raw in enumerate(raw_lines, start=1):
+        stripped = raw.strip()
+        header = re.match(r"^---\s+(.+?)\s+---$", stripped)
         if header:
-            current = header.group(1).strip() or source
-            number = 0
+            if buffer:
+                end_line = idx - 1
+                lbl = f"{current_source} · baris teks {start_line}-{end_line}" if start_line != end_line else f"{current_source} · baris teks {start_line}"
+                result.append((lbl, " ".join(buffer)))
+                buffer = []
+            current_source = header.group(1).strip() or source
+            start_line = idx + 1
             continue
-        number += 1
-        value = raw.strip()
-        if value:
-            result.append((f"{current} · baris teks {number}", value))
+
+        if not stripped:
+            if buffer:
+                end_line = idx - 1
+                lbl = f"{current_source} · baris teks {start_line}-{end_line}" if start_line != end_line else f"{current_source} · baris teks {start_line}"
+                result.append((lbl, " ".join(buffer)))
+                buffer = []
+            start_line = idx + 1
+            continue
+
+        is_bullet = bool(re.match(r"^(?:[0-9]+[.)]|[a-zA-Z][.)]|[-*•]|\([0-9a-zA-Z]+\)|BAB\b|Pasal\b)", stripped, re.I))
+        if buffer and (is_bullet or re.search(r"[.:;?!]$", buffer[-1])):
+            end_line = idx - 1
+            lbl = f"{current_source} · baris teks {start_line}-{end_line}" if start_line != end_line else f"{current_source} · baris teks {start_line}"
+            result.append((lbl, " ".join(buffer)))
+            buffer = [stripped]
+            start_line = idx
+        else:
+            if not buffer:
+                start_line = idx
+            buffer.append(stripped)
+
+    if buffer:
+        end_line = len(raw_lines)
+        lbl = f"{current_source} · baris teks {start_line}-{end_line}" if start_line != end_line else f"{current_source} · baris teks {start_line}"
+        result.append((lbl, " ".join(buffer)))
+
     return result
 
 
@@ -72,6 +112,9 @@ def _line_find(lines: list[tuple[str, str]], pattern: str) -> tuple[str, str] | 
 
 
 def _to_date(value: str) -> date | None:
+    if not value or not isinstance(value, str):
+        return None
+    value = value.strip()
     months = {
         "januari": 1, "februari": 2, "maret": 3, "april": 4, "mei": 5, "juni": 6,
         "juli": 7, "agustus": 8, "september": 9, "oktober": 10, "november": 11, "desember": 12,
@@ -85,12 +128,13 @@ def _to_date(value: str) -> date | None:
         if re.fullmatch(r"\d{1,2}[-/]\d{1,2}[-/]\d{4}", value):
             day, month, year = (int(part) for part in re.split(r"[-/]", value))
             return date(year, month, day)
-        parts = value.split()
+        parts = re.split(r"[-/\s]+", value)
         if len(parts) == 3:
-            day, month_name, year = parts
-            month = months.get(month_name.casefold())
-            if month:
-                return date(int(year), month, int(day))
+            day_str, month_str, year_str = parts
+            month_clean = month_str.rstrip(".").casefold()
+            month = months.get(month_clean)
+            if month and day_str.isdigit() and year_str.isdigit():
+                return date(int(year_str), month, int(day_str))
     except (ValueError, TypeError):
         pass
     return None
@@ -98,15 +142,15 @@ def _to_date(value: str) -> date | None:
 
 def _parse_date(text: str) -> date | None:
     # 1. Prioritize explicit expiry keyword
-    expiry_pattern = r"(?:berlaku\s+(?:sampai|hingga)|s\.d\.|sampai\s+dengan|hingga|s/d|expir(?:y|ed|ation)[\s:]*)\s*(\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})"
+    expiry_pattern = r"(?:berlaku\s+(?:sampai|hingga)|s\.d\.|sampai\s+dengan|hingga|s/d|expir(?:y|ed|ation)[\s:]*)\s*(\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}(?:[-/\s]+)[A-Za-z]+(?:\.|\b)(?:[-/\s]+)\d{4})"
     m = re.search(expiry_pattern, text, re.I)
     if m:
         d = _to_date(m.group(1))
         if d:
             return d
 
-    # 2. Collect all dates and return the latest (representing valid-until date rather than issued-date)
-    candidates = re.findall(r"\b(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{1,2}\s+[A-Za-z]+\s+\d{4})\b", text)
+    # 2. Collect all dates and return the latest
+    candidates = re.findall(r"\b(?:\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}|\d{1,2}(?:[-/\s]+)[A-Za-z]+(?:\.|\b)(?:[-/\s]+)\d{4})\b", text)
     parsed = [d for val in candidates if (d := _to_date(val)) is not None]
     if parsed:
         return max(parsed)
@@ -157,17 +201,21 @@ class EvaluationEngine:
 
     def evaluate(self, request: EvaluationRequest) -> dict[str, Any]:
         started = time.perf_counter()
+        ref_date = _to_date(request.bid_deadline) if request.bid_deadline else date.today()
+        if not ref_date:
+            ref_date = date.today()
+
         requirement_lines = _lines(request.dok_pemilihan, "Dokumen pemilihan") + _lines(request.adendum, "Adendum")
         evidence_lines = _lines(request.pustaka, "Bukti penyedia")
         contract_lines = _lines(request.contract_draft or request.dok_pemilihan, "Draf kontrak")
         findings: list[dict[str, Any]] = []
-        # NPWP: syntax and length check only; no tax-registry query is performed.
-        npwp_req = _line_find(requirement_lines, r"\bNPWP\b")
-        npwp_evidence = _line_find(evidence_lines, r"\bNPWP\b")
+
+        # 1. NPWP: syntax and length check only; no tax-registry query is performed.
+        npwp_req = _line_find(requirement_lines, r"\bNPWP\b|nomor\s+pokok\s+wajib\s+pajak")
+        npwp_evidence = _line_find(evidence_lines, r"\bNPWP\b|nomor\s+pokok\s+wajib\s+pajak")
         if npwp_req or npwp_evidence:
             digits = re.sub(r"\D", "", npwp_evidence[1]) if npwp_evidence else ""
             if len(digits) not in {15, 16} and request.pustaka:
-                # Handle wrapped PDF text where digits appear on the following line
                 npwp_full = re.search(r"(?:NPWP[\s\S]{0,30}?)?(\b\d{2}[.\s]?\d{3}[.\s]?\d{3}[.\s]?\d{1}[-.\s]?\d{3}[.\s]?\d{3}\b|\b\d{15,16}\b)", request.pustaka, re.I)
                 if npwp_full:
                     cand = re.sub(r"\D", "", npwp_full.group(1))
@@ -175,9 +223,18 @@ class EvaluationEngine:
                         digits = cand
                         npwp_evidence = ("Bukti penyedia", npwp_full.group(0).strip())
             valid = len(digits) in {15, 16}
-            findings.append(_finding("ADM-NPWP", "Format NPWP", "Administrasi", "TERPENUHI" if valid else "GAP" if npwp_evidence else "REVIEW", npwp_req, npwp_evidence, "Pemeriksaan format/ panjang nomor saja; status registrasi NPWP tidak diperiksa ke sistem pemerintah.", "HIGH" if npwp_req and npwp_evidence and not valid else "MEDIUM"))
+            findings.append(_finding(
+                "ADM-NPWP",
+                "Format NPWP",
+                "Administrasi",
+                "TERPENUHI" if valid else "GAP" if npwp_evidence else "REVIEW",
+                npwp_req,
+                npwp_evidence,
+                "Pemeriksaan format/ panjang nomor saja; status registrasi NPWP tidak diperiksa ke sistem pemerintah.",
+                "HIGH" if npwp_req and npwp_evidence and not valid else "MEDIUM"
+            ))
 
-        # KSWP status is based on text evidence and must be checked against the issuing source.
+        # 2. KSWP status is based on text evidence and must be checked against the issuing source.
         kswp_pattern = r"\bKSWP\b|konfirmasi\s+status\s+(?:wajib\s+)?pajak|status\s+(?:perpajakan|pajak)"
         kswp_req = _line_find(requirement_lines, kswp_pattern)
         kswp_evidence = _line_find(evidence_lines, kswp_pattern)
@@ -186,23 +243,66 @@ class EvaluationEngine:
             pos_match = re.search(r"\bvalid\b|\baktif\b|\bterkonfirmasi\b", kswp_evidence[1], re.I) if kswp_evidence else None
             valid = bool(kswp_evidence and pos_match and not neg_match)
             status = "TERPENUHI" if valid else "GAP" if (kswp_evidence and neg_match) else "REVIEW"
-            findings.append(_finding("ADM-KSWP", "Status KSWP/perpajakan", "Administrasi", status, kswp_req, kswp_evidence, "Status yang tertulis belum diverifikasi langsung melalui layanan Direktorat Jenderal Pajak.", "HIGH" if status == "GAP" and kswp_req else "MEDIUM"))
+            findings.append(_finding(
+                "ADM-KSWP",
+                "Status KSWP/perpajakan",
+                "Administrasi",
+                status,
+                kswp_req,
+                kswp_evidence,
+                "Status yang tertulis belum diverifikasi langsung melalui layanan Direktorat Jenderal Pajak.",
+                "HIGH" if status == "GAP" and kswp_req else "MEDIUM"
+            ))
 
-        # SBU/NIB validity checks; identify dates only when the credential is present.
-        for code, label, pattern in (("ADM-SBU", "Masa berlaku SBU", r"\bSBU\b"), ("ADM-NIB", "Masa berlaku NIB", r"\bNIB\b")):
-            req = _line_find(requirement_lines, pattern)
-            evidence = _line_find(evidence_lines, pattern)
-            if req or evidence:
-                expiry = _parse_date(evidence[1]) if evidence else None
-                if expiry:
-                    status = "GAP" if expiry < date.today() else "TERPENUHI"
-                    note = f"Tanggal yang terbaca: {expiry.isoformat()}. Status penerbit/registry tidak diperiksa secara daring."
+        # 3. NIB check per PP No. 5/2021: check existence of 13-digit number (valid during business operation)
+        nib_req = _line_find(requirement_lines, r"\bNIB\b|nomor\s+induk\s+berusaha")
+        nib_evidence = _line_find(evidence_lines, r"\bNIB\b|nomor\s+induk\s+berusaha")
+        if nib_req or nib_evidence:
+            nib_search_text = (nib_evidence[1] if nib_evidence else "") + " " + request.pustaka
+            nib_match = re.search(r"\b\d{13}\b", nib_search_text)
+            if nib_match:
+                status = "TERPENUHI"
+                note = f"NIB terdeteksi ({nib_match.group(0)}). Sesuai PP No. 5 Tahun 2021, NIB berlaku selama pelaku usaha menjalankan kegiatan usaha tanpa perlu perpanjangan berkala."
+                severity = "MEDIUM"
+            elif nib_evidence:
+                status = "GAP"
+                note = "Bukti NIB tidak memuat format standar 13 digit atau tidak terkonfirmasi pada sistem OSS."
+                severity = "HIGH" if nib_req else "MEDIUM"
+            else:
+                status = "REVIEW"
+                note = "Dokumen NIB (13 digit) belum dilampirkan pada slot bukti penyedia."
+                severity = "HIGH" if nib_req else "MEDIUM"
+            findings.append(_finding("ADM-NIB", "Keberadaan Nomor Induk Berusaha (NIB)", "Administrasi", status, nib_req, nib_evidence, note, severity))
+
+        # 4. SBU validity check against bid_deadline
+        sbu_req = _line_find(requirement_lines, r"\bSBU\b|sertifikat\s+badan\s+usaha")
+        sbu_evidence = _line_find(evidence_lines, r"\bSBU\b|sertifikat\s+badan\s+usaha")
+        if sbu_req or sbu_evidence:
+            expiry = _parse_date(sbu_evidence[1]) if sbu_evidence else None
+            if expiry:
+                if expiry < ref_date:
+                    status = "GAP"
+                    severity = "HIGH"
+                    note = f"Masa berlaku SBU kedaluwarsa pada {expiry.isoformat()} (sebelum batas penawaran {ref_date.isoformat()}). Status registry tidak diperiksa secara daring."
+                elif (expiry - ref_date).days <= 30:
+                    status = "EXPIRING"
+                    severity = "HIGH"
+                    note = f"Masa berlaku SBU hingga {expiry.isoformat()} (kedaluwarsa dalam {(expiry - ref_date).days} hari dari batas penawaran {ref_date.isoformat()}). Segera siapkan perpanjangan."
                 else:
-                    status = "REVIEW"
-                    note = "Tanggal kedaluwarsa tidak terbaca; minta bukti resmi yang mencantumkan masa berlaku."
-                findings.append(_finding(code, label, "Administrasi", status, req, evidence, note, "HIGH" if status == "GAP" and req else "MEDIUM"))
+                    status = "TERPENUHI"
+                    severity = "MEDIUM"
+                    note = f"Masa berlaku SBU hingga {expiry.isoformat()} (aktif pada batas penawaran {ref_date.isoformat()}). Status registry tidak diperiksa secara daring."
+            elif sbu_evidence:
+                status = "REVIEW"
+                severity = "MEDIUM"
+                note = "Tanggal kedaluwarsa SBU tidak terbaca; minta bukti resmi yang mencantumkan masa berlaku."
+            else:
+                status = "REVIEW"
+                severity = "HIGH" if sbu_req else "MEDIUM"
+                note = "Bukti SBU belum dilampirkan pada slot bukti penyedia."
+            findings.append(_finding("ADM-SBU", "Masa berlaku SBU", "Administrasi", status, sbu_req, sbu_evidence, note, severity))
 
-        # Bid-bond amount check, comparing explicit amounts or a stated percentage.
+        # 5. Bid-bond amount check, comparing explicit amounts or a stated percentage.
         bond_req = _line_find(requirement_lines, r"jaminan\s+penawaran|bid\s+bond")
         bond_evidence = _line_find(evidence_lines, r"jaminan\s+penawaran|bid\s+bond")
         if bond_req or bond_evidence:
@@ -243,7 +343,7 @@ class EvaluationEngine:
             note = f"Nilai terdeteksi: syarat {required:,.0f} IDR; bukti {offered:,.0f} IDR." if required is not None and offered is not None else "Nilai jaminan atau dasar perhitungannya belum dapat dibaca dari teks."
             findings.append(_finding("ADM-BOND", "Nilai jaminan penawaran", "Administrasi", status, bond_req, bond_evidence, note, "HIGH" if status == "GAP" else "MEDIUM"))
 
-        # Warranty/guarantee duration comparison.
+        # 6. Warranty/guarantee duration comparison.
         warranty_req = _line_find(requirement_lines, r"garansi|masa\s+jaminan|warranty|jaminan\s+pemeliharaan")
         warranty_evidence = _line_find(evidence_lines, r"garansi|masa\s+jaminan|warranty|jaminan\s+pemeliharaan")
         if warranty_req or warranty_evidence:
@@ -253,23 +353,52 @@ class EvaluationEngine:
             note = f"Durasi terbaca: syarat {required_days} hari; penawaran {offered_days} hari." if required_days is not None and offered_days is not None else "Durasi garansi tidak dapat dibandingkan dari teks yang tersedia."
             findings.append(_finding("ADM-WARRANTY", "Lama garansi/jaminan", "Administrasi", status, warranty_req, warranty_evidence, note, "HIGH" if status == "GAP" else "MEDIUM"))
 
+        # 7. Addendum reconciliation
         addendum = diff_addendum(request.dok_pemilihan, request.adendum) if request.dok_pemilihan and request.adendum else {"status": "not_provided", "changes": [], "obsolete_criteria": [], "counts": {}}
+        obsolete = addendum.get("obsolete_criteria", [])
+        for index, criterion in enumerate(obsolete, start=1):
+            findings.append(_finding(f"ADD-{index:03d}", "Perubahan persyaratan adendum", "Adendum", "SUPERSEDED" if criterion.get("reason", "").startswith("Redaksi") else "REVIEW", ("Dokumen pemilihan", criterion.get("criterion", "")), ("Adendum", next((row.get("adendum_requirement") for row in addendum["changes"] if row["item_id"] == criterion["item_id"] and row.get("adendum_requirement")), "Tidak ditemukan")), criterion["reason"]))
+
+        # 8. Penalty simulation and uncapped penalty detection
         contract_clause_source = request.contract_draft or request.dok_pemilihan
         has_penalty_clause = bool(re.search(r"denda|sanksi\s+keterlambatan|liquidated\s+damages", contract_clause_source, re.I))
         penalty = calculate_penalty_scenarios(request.contract_value_idr or 0, contract_clause_source) if (request.contract_value_idr is not None or has_penalty_clause) else {"status": "contract_value_required", "alerts": [], "scenarios": [], "clause_quote": None}
         if request.contract_value_idr is None:
             penalty["status"] = "contract_value_required"
+
         for alert in penalty.get("alerts", []):
             if alert == "PENALTY_CLAUSE_NOT_FOUND":
                 continue
             quote = penalty.get("clause_quote")
-            findings.append(_finding("CON-PENALTY", "Klausul denda keterlambatan", "Kontrak", "GAP" if alert == "CRITICAL_POISON_PILL" else "REVIEW", _line_find(contract_lines, r"denda|sanksi\s+keterlambatan"), ("Draf kontrak", quote) if quote else None, "Klausul denda tanpa batas maksimum (uncapped penalty) terdeteksi. Minta penelaahan Pokja/PPK dan penasihat hukum; ini sinyal untuk diperiksa, bukan kesimpulan hukum.", "HIGH" if alert == "CRITICAL_POISON_PILL" else "MEDIUM"))
+            if alert == "CRITICAL_POISON_PILL":
+                findings.append(_finding(
+                    "CON-PENALTY",
+                    "Klausul denda keterlambatan tanpa batas maksimal",
+                    "Kontrak",
+                    "GAP",
+                    _line_find(contract_lines, r"denda|sanksi\s+keterlambatan"),
+                    ("Draf kontrak", quote) if quote else None,
+                    "Klausul denda tanpa batas maksimum (uncapped penalty) terdeteksi. Sesuai Pasal 56 ayat (2) Perpres 12/2021 dan simulasi standar LKPP, denda keterlambatan wajar memiliki batas maksimal 5% dari nilai kontrak.",
+                    "HIGH"
+                ))
+            elif alert == "CONTRACT_RATE_ABOVE_1_PER_MILLE_COMPARISON":
+                findings.append(_finding(
+                    "CON-PENALTY",
+                    "Tarif denda keterlambatan di atas standar 1/1000",
+                    "Kontrak",
+                    "REVIEW",
+                    _line_find(contract_lines, r"denda|sanksi\s+keterlambatan"),
+                    ("Draf kontrak", quote) if quote else None,
+                    "Tarif denda harian melebihi ketentuan standar 1 permil (1/1000) per hari keterlambatan per Perpres 12/2021.",
+                    "MEDIUM"
+                ))
 
-        obsolete = addendum.get("obsolete_criteria", [])
-        for index, criterion in enumerate(obsolete, start=1):
-            findings.append(_finding(f"ADD-{index:03d}", "Perubahan persyaratan adendum", "Adendum", "SUPERSEDED" if criterion.get("reason", "").startswith("Redaksi") else "REVIEW", ("Dokumen pemilihan", criterion.get("criterion", "")), ("Adendum", next((row.get("adendum_requirement") for row in addendum["changes"] if row["item_id"] == criterion["item_id"] and row.get("adendum_requirement")), "Tidak ditemukan")), criterion["reason"]))
+        # 9. Vendor/Brand Lock-in Detection (Pasal 19 ayat 1 Perpres 12/2021)
+        equiv_phrases = get_brand_equivalency_phrases()
+        def has_equivalency(text: str) -> bool:
+            tl = text.casefold()
+            return any(phrase.casefold() in tl for phrase in equiv_phrases)
 
-        # Vendor/Brand Lock-in Detection (Pasal 19 ayat 1 Perpres 12/2021)
         lockin_rules = [
             (
                 "SPEC-LOCKIN-CPU",
@@ -296,6 +425,9 @@ class EvaluationEngine:
         for lock_code, lock_label, lock_pat, lock_note in lockin_rules:
             matched = _line_find(requirement_lines, lock_pat)
             if matched:
+                if has_equivalency(matched[1]):
+                    # Contains equivalency phrase (e.g. "atau setara", "ekuivalen") -> Not a poison pill violation
+                    continue
                 lockin_detected = True
                 findings.append(_finding(
                     lock_code,
@@ -309,18 +441,22 @@ class EvaluationEngine:
                 ))
 
         if not lockin_detected and general_lockin:
-            findings.append(_finding(
-                "SPEC-BRAND-LOCKIN",
-                "Spesifikasi Mengarah ke Merek Tertentu (Vendor Lock-in)",
-                "Spesifikasi",
-                "GAP",
-                general_lockin,
-                ("Dokumen pemilihan", general_lockin[1]),
-                "Spesifikasi teknis terindikasi mengarah kepada produk/merek tertentu tanpa membuka alternatif setara; melanggar Pasal 19 ayat (1) Perpres 12/2021 dan prinsip persaingan usaha sehat.",
-                "HIGH",
-            ))
+            if not has_equivalency(general_lockin[1]):
+                findings.append(_finding(
+                    "SPEC-BRAND-LOCKIN",
+                    "Spesifikasi Mengarah ke Merek Tertentu (Vendor Lock-in)",
+                    "Spesifikasi",
+                    "GAP",
+                    general_lockin,
+                    ("Dokumen pemilihan", general_lockin[1]),
+                    "Spesifikasi teknis terindikasi mengarah kepada produk/merek tertentu tanpa membuka alternatif setara; melanggar Pasal 19 ayat (1) Perpres 12/2021 dan prinsip persaingan usaha sehat.",
+                    "HIGH",
+                ))
 
-        # Compressed Procurement Timeline Detection (Pasal 54 Perpres 12/2021 & Standar LKPP)
+        # 10. Compressed Procurement Timeline Detection (Pasal 54 Perpres 12/2021 & Standar LKPP)
+        min_bidding_days = int(get_threshold("min_bidding_days", 7))
+        min_sanggah_days = int(get_threshold("min_sanggah_days", 5))
+
         timeline_redflag = _line_find(requirement_lines, r"compressed\s+timeline|jadwal\s+mepet|terlalu\s+mepet")
         bid_prep_match = _line_find(requirement_lines, r"(?:penyusunan\s+dokumen\s+penawaran|pemasukan\s+penawaran)[\s\S]{0,120}?(?:hanya\s+)?(\d+)\s*hari\s*kerja")
         sanggah_match = _line_find(requirement_lines, r"masa\s+sanggah[\s\S]{0,120}?(?:hanya\s+)?(\d+)\s*hari\s*kerja")
@@ -328,12 +464,12 @@ class EvaluationEngine:
         timeline_issues: list[str] = []
         if bid_prep_match:
             days = re.search(r"(\d+)\s*hari\s*kerja", bid_prep_match[1], re.I)
-            if days and int(days.group(1)) < 7:
-                timeline_issues.append(f"Masa penyusunan penawaran hanya {days.group(1)} hari kerja (standar LKPP minimal 7 hari kerja)")
+            if days and int(days.group(1)) < min_bidding_days:
+                timeline_issues.append(f"Masa penyusunan penawaran hanya {days.group(1)} hari kerja (standar LKPP minimal {min_bidding_days} hari kerja)")
         if sanggah_match:
             days = re.search(r"(\d+)\s*hari\s*kerja", sanggah_match[1], re.I)
-            if days and int(days.group(1)) < 5:
-                timeline_issues.append(f"Masa sanggah hanya {days.group(1)} hari kerja (standar LKPP minimal 5 hari kerja)")
+            if days and int(days.group(1)) < min_sanggah_days:
+                timeline_issues.append(f"Masa sanggah hanya {days.group(1)} hari kerja (standar LKPP minimal {min_sanggah_days} hari kerja)")
 
         if timeline_redflag and not timeline_issues:
             timeline_issues.append("Jadwal pelaksanaan lelang atau masa sanggah di bawah batas waktu wajar ketentuan LKPP")
@@ -351,7 +487,7 @@ class EvaluationEngine:
                 "HIGH",
             ))
 
-        # Governance & Integrity Checks: Conflict of Interest & Affiliated Former Officials
+        # 11. Governance & Integrity Checks: Conflict of Interest & Affiliated Former Officials
         coi_match = _line_find(requirement_lines, r"surat\s+rekomendasi\s+dari[\s\S]{0,80}?(?:mantan|pejabat|kepala\s+divisi|direksi)|mantan\s+Kepala\s+Divisi|mantan\s+pejabat.*terafiliasi")
         if not coi_match:
             coi_match = _line_find(requirement_lines, r"Ir\.\s*\[Nama\]|Ir\.\s+[A-Z][a-z]+.*mantan")
@@ -359,7 +495,11 @@ class EvaluationEngine:
             candidate_coi = _line_find(requirement_lines, r"benturan\s+kepentingan|conflict\s+of\s+interest")
             if candidate_coi:
                 text_lower = candidate_coi[1].casefold()
-                is_negation = bool(re.search(r"\b(?:tidak\s+ada|bebas\s+(?:dari\s+)?|tidak\s+terdapat|tidak\s+memiliki|tanpa|pernyataan\s+tidak)\s+(?:adanya\s+)?benturan\s+kepentingan", text_lower))
+                is_negation = bool(re.search(
+                    r"\b(?:tidak\s+ada|bebas(?:\s+dari)?|tidak\s+terdapat|tidak\s+memiliki|tanpa|pernyataan\s+tidak|tidak\s+sedang\s+mengalami)\s+(?:adanya\s+)?benturan\s+kepentingan"
+                    r"|pakta\s+integritas|surat\s+pernyataan\s+tidak\s+menuntut",
+                    text_lower
+                ))
                 if not is_negation:
                     coi_match = candidate_coi
         if coi_match:
@@ -374,7 +514,7 @@ class EvaluationEngine:
                 "HIGH",
             ))
 
-        # Unrealistic Implementation Timeline & Pre-Work Arrangement (Bid Rigging)
+        # 12. Unrealistic Implementation Timeline & Pre-Work Arrangement (Bid Rigging)
         unrealistic_match = _line_find(requirement_lines, r"zero-trust[\s\S]{0,80}?(?:dalam\s+)?(\d+)\s*hari\s*kalender|pre-work\s+arrangement|indikasi\s+tender\s+diatur|mustahil\s+untuk\s+dilaksanakan")
         if not unrealistic_match:
             zt_match = re.search(r"zero-trust[\s\S]{0,80}?(\d+)\s*hari\s*kalender", request.dok_pemilihan, re.I)
@@ -392,7 +532,7 @@ class EvaluationEngine:
                 "HIGH",
             ))
 
-        # Discriminatory Regional Association Lock-in
+        # 13. Discriminatory Regional Association Lock-in
         regional_assoc_match = _line_find(requirement_lines, r"keanggotaan\s+asosiasi\s+regional|ADCR-Jabar|asosiasi.*regional.*jawa\s+barat|Gold\s+Partner|asosiasi\s+data\s+center\s+regional")
         if regional_assoc_match:
             findings.append(_finding(
@@ -406,7 +546,7 @@ class EvaluationEngine:
                 "HIGH",
             ))
 
-        # Restrictive Incumbent Experience Lock-in
+        # 14. Restrictive Incumbent Experience Lock-in
         incumbent_match = _line_find(requirement_lines, r"tepat\s+\d+\s*rack|merek\s+inkumben|merek\s+tertentu\s*\(sebutkan\s+merek\s+inkumben\)|kapasitas\s+40\s+atau\s+60.*tidak\s+akan\s+diterima|hanya\s+pengalaman\s+yang\s+memenuhi\s+SEMUA\s+kriteria")
         if incumbent_match:
             findings.append(_finding(
@@ -420,8 +560,8 @@ class EvaluationEngine:
                 "HIGH",
             ))
 
-        # Financial & Budget Checks (Over Budget, Billing Rate Mark-Up, Double Counting, Personnel Qualification)
-        # 1. Over Budget Check (Total BoQ > Pagu Anggaran)
+        # 15. Financial & Budget Checks (Over Budget, Billing Rate Mark-Up, Double Counting, Personnel Qualification)
+        # 15.1. Over Budget Check (Total BoQ > Pagu Anggaran)
         pagu_match = re.search(r"(?:PAGU\s+ANGGARAN|Pagu\s+Anggaran)[\s\S]{0,60}?(?:Rp\.?\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{7,})", request.dok_pemilihan, re.I)
         boq_match = re.search(r"(?:TOTAL\s+BIAYA|Total\s+BoQ|Total\s+Biaya)[\s\S]{0,60}?(?:Rp\.?\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{7,})", request.dok_pemilihan, re.I)
 
@@ -447,7 +587,6 @@ class EvaluationEngine:
             pct_fmt = f"{pct:.1f}".replace(".", ",")
             pagu_line = _line_find(requirement_lines, r"Pagu\s+Anggaran") or ("Dokumen pemilihan", f"Pagu Anggaran: Rp {pagu_fmt}")
             boq_line = _line_find(requirement_lines, r"TOTAL\s+BIAYA|Total\s+BoQ|Total\s+Biaya|SELISIH\s*\(OVER\s+BUDGET\)") or ("Dokumen pemilihan", f"Total BoQ: Rp {boq_fmt}")
-            
             findings.append(_finding(
                 "FIN-OVER-BUDGET",
                 "Total BoQ Melebihi Pagu Anggaran (Over Budget)",
@@ -459,23 +598,26 @@ class EvaluationEngine:
                 "HIGH",
             ))
 
-        # 2. Mark-Up Tarif Man-Month Konsultan
+        # 15.2. Mark-Up Tarif Man-Month Konsultan
         markup_flag = _line_find(requirement_lines, r"Mark-up\s+Tarif\s+Man-Month|standar\s+rata-rata.*(?:IN)?KINDO|kewajaran\s+harga.*man-month")
         sa_match = re.search(r"Solution\s+Architect[\s\S]{0,80}?(?:Rp\.?\s*)?(\d{1,3}(?:\.\d{3}){2,})", request.dok_pemilihan, re.I)
         pm_match = re.search(r"Project\s+Manager[\s\S]{0,80}?(?:Rp\.?\s*)?(\d{1,3}(?:\.\d{3}){2,})", request.dok_pemilihan, re.I)
+
+        _, sa_max, sa_guide = get_billing_rate_limits("Solution Architect")
+        _, pm_max, _ = get_billing_rate_limits("Project Manager")
 
         parsed_rates: list[tuple[str, float]] = []
         if sa_match:
             try:
                 val = float(parse_idr_number(sa_match.group(1)))
-                if val >= 70_000_000:
+                if val > sa_max:
                     parsed_rates.append(("Solution Architect", val))
             except (ValueError, TypeError):
                 pass
         if pm_match:
             try:
                 val = float(parse_idr_number(pm_match.group(1)))
-                if val >= 70_000_000:
+                if val > pm_max:
                     parsed_rates.append(("Project Manager", val))
             except (ValueError, TypeError):
                 pass
@@ -486,10 +628,10 @@ class EvaluationEngine:
                 rate_descs = [f"{role} sebesar Rp {f'{int(round(v)):,}'.replace(',', '.')}/bulan" for role, v in parsed_rates]
                 rates_text = " dan ".join(rate_descs)
                 ev_line = _line_find(requirement_lines, r"Solution\s+Architect|Project\s+Manager") or ("Dokumen pemilihan", rates_text)
-                note_text = f"Billing rate untuk posisi {rates_text} melonjak di atas standar rata-rata remunerasi konsultan nasional (pedoman INKINDO: Rp 40–60 juta/bulan). Melanggar prinsip kewajaran harga (value for money) dan Perpres 16/2018 Pasal 75."
+                note_text = f"Billing rate untuk posisi {rates_text} melonjak di atas standar rata-rata remunerasi konsultan nasional ({sa_guide}: Rp 40–60 juta/bulan). Melanggar prinsip kewajaran harga (value for money) dan Perpres 16/2018 Pasal 75."
             else:
                 ev_line = markup_flag or ("Dokumen pemilihan", "Tarif man-month konsultan melebihi pedoman INKINDO")
-                note_text = "Billing rate tenaga ahli melebihi pedoman standar remunerasi INKINDO (Rp 40–60 juta/bulan). Melanggar prinsip kewajaran harga (value for money) dan Perpres 16/2018 Pasal 75."
+                note_text = f"Billing rate tenaga ahli melebihi pedoman standar remunerasi INKINDO ({sa_guide}: Rp 40–60 juta/bulan). Melanggar prinsip kewajaran harga (value for money) dan Perpres 16/2018 Pasal 75."
 
             findings.append(_finding(
                 "FIN-MARKUP-RATE",
@@ -502,7 +644,7 @@ class EvaluationEngine:
                 "HIGH",
             ))
 
-        # 3. Duplikasi Pembiayaan Lisensi (Double Counting)
+        # 15.3. Duplikasi Pembiayaan Lisensi (Double Counting)
         double_lic_flag = _line_find(requirement_lines, r"Duplikasi\s+Lisensi|sudah\s+termasuk\s+lisensi|tumpang\s+tindih.*double\s+counting")
         lic_match = re.search(r"Lisensi\s+Core\s+ERP[\s\S]{0,80}?(\d{1,3}(?:\.\d{3}){2,})", request.dok_pemilihan, re.I)
         maint_match = re.search(r"Pemeliharaan\s+Berkala[\s\S]{0,80}?(\d{1,3}(?:\.\d{3}){2,})", request.dok_pemilihan, re.I)
@@ -538,11 +680,30 @@ class EvaluationEngine:
                 "HIGH",
             ))
 
-        # 4. Kualifikasi & Sertifikasi Tenaga Ahli (Administrasi Bukti)
-        experts_req = _line_find(requirement_lines, r"TOGAF|PMP\s*/\s*PRINCE2|Sertifikasi.*(?:SAP|Oracle|Microsoft|ERP)|CISSP|CISM|GCIH|GCFA|OSCP|CDCP|CDCS|Uptime\s+Institute|S1\s+Teknik\s+Informatika.*(?:5|8)\s+tahun")
+        # 15.4. Kualifikasi & Sertifikasi Tenaga Ahli (Administrasi Bukti Per Slot Peran)
+        experts_req = _line_find(requirement_lines, r"TOGAF|PMP\s*/\s*PRINCE2|Sertifikasi.*(?:SAP|Oracle|Microsoft|ERP)|CISSP|CISM|GCIH|GCFA|OSCP|CDCP|CDCS|Uptime\s+Institute|S1\s+Teknik\s+Informatika.*(?:5|8)\s+tahun|kualifikasi\s+(?:tenaga\s+ahli|personel|keahlian)|personel\s+inti.*(?:pengalaman|sertifikat|ijazah)|Kualifikasi\s+Personel")
         if experts_req:
+            role_slots: list[dict[str, str]] = []
+            req_text_all = request.dok_pemilihan
+            pustaka_text_all = request.pustaka
+
+            if re.search(r"Solution\s+Architect|TOGAF", req_text_all, re.I):
+                sa_ok = bool(re.search(r"TOGAF|Solution\s+Architect|sertifikasi.*arsitektur", pustaka_text_all, re.I))
+                role_slots.append({"role": "Solution Architect (TOGAF)", "status": "TERPENUHI" if sa_ok else "REVIEW"})
+            if re.search(r"Project\s+Manager|PMP|PRINCE2", req_text_all, re.I):
+                pm_ok = bool(re.search(r"PMP|PRINCE2|Project\s+Manager", pustaka_text_all, re.I))
+                role_slots.append({"role": "Project Manager (PMP/PRINCE2)", "status": "TERPENUHI" if pm_ok else "REVIEW"})
+            if re.search(r"CISSP|CISM|GCIH|GCFA|OSCP", req_text_all, re.I):
+                sec_ok = bool(re.search(r"CISSP|CISM|GCIH|GCFA|OSCP|sertifikasi\s+keamanan", pustaka_text_all, re.I))
+                role_slots.append({"role": "SOC / Security Engineer (CISSP/OSCP)", "status": "TERPENUHI" if sec_ok else "REVIEW"})
+            if re.search(r"CDCP|CDCS|Uptime", req_text_all, re.I):
+                dc_ok = bool(re.search(r"CDCP|CDCS|Uptime", pustaka_text_all, re.I))
+                role_slots.append({"role": "Data Center Specialist (CDCP/Uptime)", "status": "TERPENUHI" if dc_ok else "REVIEW"})
+
+            all_fulfilled = bool(role_slots and all(slot["status"] == "TERPENUHI" for slot in role_slots))
             evidence_experts = _line_find(evidence_lines, r"TOGAF|PMP|PRINCE2|CISSP|CISM|GCIH|GCFA|OSCP|CDCP|CDCS|sertifikat.*(?:ERP|SOC|Uptime|platform)|CV\s+personel|ijazah")
-            if evidence_experts:
+            
+            if all_fulfilled or (not role_slots and evidence_experts):
                 findings.append(_finding(
                     "ADM-EXPERTS",
                     "Kualifikasi & Sertifikasi Tenaga Ahli (Personel Inti)",
@@ -554,16 +715,8 @@ class EvaluationEngine:
                     "MEDIUM",
                 ))
             else:
-                note_parts = []
-                req_text = request.dok_pemilihan
-                if re.search(r"CISSP|CISM|GCIH|GCFA|OSCP", req_text, re.I):
-                    note_parts.append("SOC (CISSP/CISM, GCIH/GCFA/OSCP, CEH/CySA+)")
-                if re.search(r"TOGAF|PMP|PRINCE2", req_text, re.I):
-                    note_parts.append("TOGAF, PMP, sertifikasi ERP")
-                if re.search(r"CDCP|CDCS|Uptime", req_text, re.I):
-                    note_parts.append("Data Center (CDCP/CDCS Uptime Institute)")
-                
-                domain_desc = " / ".join(note_parts) if note_parts else "TOGAF, PMP, sertifikasi ERP"
+                unfulfilled_roles = [s["role"] for s in role_slots if s["status"] == "REVIEW"]
+                domain_desc = ", ".join(unfulfilled_roles) if unfulfilled_roles else "TOGAF, PMP, sertifikasi ERP"
                 findings.append(_finding(
                     "ADM-EXPERTS",
                     f"Kualifikasi & Sertifikasi Tenaga Ahli ({domain_desc})",
@@ -575,6 +728,35 @@ class EvaluationEngine:
                     "MEDIUM",
                 ))
 
+        # Baseline contract comparison (forensics)
+        baseline_diff = None
+        if request.baseline_contract and request.baseline_contract.strip():
+            contract_target = request.contract_draft or request.dok_pemilihan
+            baseline_diff = diff_contracts(request.baseline_contract, contract_target)
+
+        # Count recognized requirements / clauses
+        recognized_clauses_count = sum([
+            bool(npwp_req),
+            bool(kswp_req),
+            bool(nib_req),
+            bool(sbu_req),
+            bool(bond_req),
+            bool(warranty_req),
+            bool(experts_req),
+            bool(bid_prep_match or sanggah_match or timeline_redflag),
+            bool(has_penalty_clause),
+            bool(lockin_detected or general_lockin),
+            bool(coi_match),
+            bool(unrealistic_match),
+            bool(regional_assoc_match),
+            bool(incumbent_match),
+            bool(pagu_val is not None and boq_val is not None),
+            bool(sa_match or pm_match or markup_flag),
+            bool(has_double_license),
+            bool(addendum.get("changes") or addendum.get("obsolete_criteria")),
+        ])
+
+        # Verdict calculation
         critical_flaws = sum(item["severity"] == "HIGH" and item["status"] == "GAP" for item in findings)
         gap_count = sum(item["status"] in ("GAP", "EXPIRING") for item in findings)
         review_count = sum(item["status"] == "REVIEW" for item in findings)
@@ -583,18 +765,23 @@ class EvaluationEngine:
             if item["status"] == "REVIEW" and item.get("requirement_evidence")
         )
 
-        has_evidence = bool(request.pustaka and request.pustaka.strip())
-        if critical_flaws > 0 or gap_count > 0:
+        if recognized_clauses_count == 0 and not findings:
+            verdict = "TIDAK ADA SYARAT TERBACA"
+            exec_note = "TIDAK ADA SYARAT TERBACA: Dokumen mungkin berupa pindaian gambar tanpa OCR, atau tidak memuat bab teknis/administrasi yang dapat dikenali mesin."
+        elif critical_flaws > 0 or gap_count > 0:
             verdict = "NO-GO"
+            exec_note = f"NO-GO: {critical_flaws or gap_count} kesenjangan/red flag kritis terkonfirmasi dari teks; {missing_mandatory} syarat administratif masih perlu bukti."
         elif missing_mandatory > 0 or review_count > 0:
             verdict = "BELUM CUKUP BUKTI"
+            exec_note = f"BELUM CUKUP BUKTI: {missing_mandatory or review_count} persyaratan memerlukan bukti pemenuhan dokumen dari penyedia sebelum dapat dinyatakan layak (GO)."
         else:
             verdict = "GO"
+            exec_note = "GO: Seluruh persyaratan yang teridentifikasi telah terpenuhi berdasarkan bukti yang disertakan."
 
-        risk_score = min(100, sum(24 if item["status"] == "GAP" and item["severity"] == "HIGH" else 12 if item["status"] == "GAP" else 6 if item["status"] == "REVIEW" else 0 for item in findings))
-        risk_level = "CRITICAL" if risk_score >= 70 else "HIGH" if risk_score >= 40 else "MEDIUM" if risk_score >= 15 else "LOW"
+        risk_score = 0 if verdict == "TIDAK ADA SYARAT TERBACA" else min(100, sum(24 if item["status"] == "GAP" and item["severity"] == "HIGH" else 12 if item["status"] == "GAP" else 6 if item["status"] == "REVIEW" else 0 for item in findings))
+        risk_level = "LOW" if verdict == "TIDAK ADA SYARAT TERBACA" else "CRITICAL" if risk_score >= 70 else "HIGH" if risk_score >= 40 else "MEDIUM" if risk_score >= 15 else "LOW"
         contextual = self._contextual_extraction(request, findings) if request.allow_external_processing else {"status": "not_requested", "items": [], "message": "Analisis konteks AI tidak dijalankan."}
-        
+
         # Merge verified AI red flags into findings if not already captured
         if contextual.get("status") == "success" and contextual.get("items"):
             existing_codes = {f["id"] for f in findings}
@@ -605,12 +792,6 @@ class EvaluationEngine:
                     findings.append(_finding("PROC-AI-TIMELINE", "Jadwal Lelang Mepet (Deteksi Semantik AI)", "Jadwal", "GAP", ("Dokumen pemilihan", item["quote"]), (item["source"], item["quote"]), f"{item['summary']}. Terindikasi melanggar batas waktu wajar (Pasal 54 Perpres 12/2021).", "HIGH"))
 
         counts = {status: sum(item["status"] == status for item in findings) for status in ("TERPENUHI", "GAP", "EXPIRING", "SUPERSEDED", "REVIEW")}
-        if verdict == "NO-GO":
-            exec_note = f"NO-GO: {critical_flaws or gap_count} kesenjangan/red flag kritis terkonfirmasi dari teks; {missing_mandatory} syarat administratif masih perlu bukti."
-        elif verdict == "BELUM CUKUP BUKTI":
-            exec_note = f"BELUM CUKUP BUKTI: {missing_mandatory or review_count} persyaratan memerlukan bukti pemenuhan dokumen dari penyedia sebelum dapat dinyatakan layak (GO)."
-        else:
-            exec_note = "GO: Seluruh persyaratan yang teridentifikasi telah terpenuhi berdasarkan bukti yang disertakan."
 
         summary = {
             "executive_summary": exec_note,
@@ -622,7 +803,7 @@ class EvaluationEngine:
             "qualification": "GO berarti seluruh persyaratan administratif/teknis yang teridentifikasi telah diverifikasi pemenuhannya dari bukti yang disertakan; bukan pernyataan patuh atau jaminan kemenangan.",
         }
         duration = round((time.perf_counter() - started) * 1000, 2)
-        return {
+        payload: dict[str, Any] = {
             "audit_id": str(uuid.uuid4()), "created_at": datetime.now(timezone.utc).isoformat(),
             "package_name": request.package_name, "tender_id": request.tender_id, "notice_number": request.notice_number,
             "pokja_name": request.pokja_name, "company_name": request.company_name,
@@ -634,6 +815,9 @@ class EvaluationEngine:
             "review_recommendation": "Verifikasi kutipan pada dokumen asli dan minta pemeriksaan Pokja/penasihat hukum. Hasil sistem adalah triase berbasis teks, bukan keputusan tender atau nasihat hukum.",
             "performance": {"engine_duration_ms": duration, "execution_time_ms": duration, "scope": "Validasi lokal dan provider (jika disetujui); durasi diukur dengan time.perf_counter()."},
         }
+        if baseline_diff is not None:
+            payload["contract_baseline_diff"] = baseline_diff
+        return payload
 
     def _contextual_extraction(self, request: EvaluationRequest, findings: list[dict[str, Any]]) -> dict[str, Any]:
         if not request.allow_external_processing:

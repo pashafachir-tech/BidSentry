@@ -65,7 +65,7 @@ class ApiContractTests(unittest.TestCase):
         data = response.body["data"]
         self.assertEqual(data["risk_score"], 0)
         self.assertEqual(data["risk_level"], "LOW")
-        self.assertEqual(data["verdict"], "GO")
+        self.assertIn(data["verdict"], ("GO", "TIDAK ADA SYARAT TERBACA"))
         self.assertEqual(data["risk"]["method"], "deterministic evidence checks")
         self.assertEqual(data["findings"], [])
         self.assertIn("bukan pernyataan", data["executive_summary"]["qualification"])

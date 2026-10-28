@@ -1,0 +1,348 @@
+# BidSentry Declarative Rule Engine Configuration
+# Seluruh aturan, ambang batas, dan pola regex didefinisikan di sini.
+# DILARANG mengubah label benchmark atau melakukan overfitting pada dokumen probe.
+
+thresholds:
+  min_bidding_days: 7       # Batas minimum hari kerja penyiapan penawaran (Perpres 12/2021)
+  min_sanggah_days: 5       # Batas minimum hari kerja masa sanggah (Perpres 12/2021)
+  statutory_daily_penalty_rate: 0.001  # 1/1000 per hari keterlambatan
+  standard_penalty_max_cap: 0.05       # 5% dari nilai kontrak (simulasi pedoman LKPP)
+  expiry_warning_days: 30   # Dokumen dianggap EXPIRING jika kedaluwarsa dalam <= 30 hari dari bid_deadline
+  billing_rates:
+    "Solution Architect":
+      min_idr: 40000000
+      max_idr: 70000000
+      guideline: "Pedoman Standar Remunerasi INKINDO"
+    "Project Manager":
+      min_idr: 40000000
+      max_idr: 70000000
+      guideline: "Pedoman Standar Remunerasi INKINDO"
+    "Senior Developer":
+      min_idr: 25000000
+      max_idr: 45000000
+      guideline: "Pedoman Standar Remunerasi INKINDO"
+
+brand_lockin:
+  equivalency_phrases:
+    - "atau setara"
+    - "setara"
+    - "atau ekuivalen"
+    - "ekuivalen"
+    - "equivalent"
+    - "or equivalent"
+    - "sepadan"
+  vendors:
+    cpu:
+      - "Intel Xeon"
+      - "Emerald Rapids"
+      - "UPI 4.0"
+      - "Intel C741"
+      - "TME-MK"
+      - "Intel VMD"
+      - "Platform Firmware Resilience"
+      - "Boot Guard"
+    gpu:
+      - "NVIDIA H100"
+      - "H100 SXM5"
+      - "NVLink 4.0"
+      - "ConnectX-7"
+      - "Quantum-2"
+      - "QM9700"
+    management:
+      - "Dell iDRAC 10"
+      - "HPE iLO 7"
+      - "PowerStore Manager"
+      - "NetApp ONTAP"
+      - "ONTAP FabricPool"
+      - "Fabric Vision"
+
+rules:
+  - id: ADM-NPWP
+    nama: "Format NPWP (15 atau 16 Digit)"
+    kategori: "Administrasi"
+    pasal_rujukan: "Perdirjen Pajak PER-04/PJ/2020 jo UU KUP"
+    sumber: "https://pajak.go.id/id/peraturan/petunjuk-teknis-pelaksanaan-nomor-pokok-wajib-pajak"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "\\bNPWP\\b"
+      - "nomor\\s+pokok\\s+wajib\\s+pajak"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Pemeriksaan format dan panjang nomor NPWP (15/16 digit). Registrasi aktif tetap harus diverifikasi ke DJP."
+
+  - id: ADM-NIB
+    nama: "Keberadaan Nomor Induk Berusaha (NIB)"
+    kategori: "Administrasi"
+    pasal_rujukan: "PP No. 5 Tahun 2021 Pasal 12"
+    sumber: "https://oss.go.id/informasi/peraturan"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "\\bNIB\\b"
+      - "nomor\\s+induk\\s+berusaha"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Periksa kepemilikan NIB 13 digit pada OSS. NIB berlaku selama berusaha tanpa masa kedaluwarsa berkala."
+
+  - id: ADM-SBU
+    nama: "Masa Berlaku Sertifikat Badan Usaha (SBU)"
+    kategori: "Administrasi"
+    pasal_rujukan: "UU No. 2 Tahun 2017 tentang Jasa Konstruksi jo PP 14/2021"
+    sumber: "https://jdih.pu.go.id/detail-dokumen/2837/1"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "\\bSBU\\b"
+      - "sertifikat\\s+badan\\s+usaha"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Masa berlaku SBU harus mencakup batas akhir pemasukan penawaran atau masa pelaksanaan."
+
+  - id: ADM-KSWP
+    nama: "Status Konfirmasi Status Wajib Pajak (KSWP)"
+    kategori: "Administrasi"
+    pasal_rujukan: "Inpres No. 7 Tahun 2015 jo Perdirjen Pajak PER-43/PJ/2015"
+    sumber: "https://jdih.kemenkeu.go.id/fulltext/2015/7INPRES~2015Inp.pdf"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "\\bKSWP\\b"
+      - "konfirmasi\\s+status\\s+(?:wajib\\s+)?pajak"
+      - "status\\s+(?:perpajakan|pajak)"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Status KSWP wajib berstatus Valid/Terkonfirmasi melalui layanan sistem perpajakan DJP."
+
+  - id: ADM-BOND
+    nama: "Nilai dan Kecukupan Jaminan Penawaran"
+    kategori: "Administrasi"
+    pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 30"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "jaminan\\s+penawaran"
+      - "bid\\s+bond"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Verifikasi nominal jaminan penawaran sesuai batas 1-3% dari nilai HPS/kontrak dan diterbitkan penjamin terakreditasi."
+
+  - id: ADM-WARRANTY
+    nama: "Lama Garansi / Jaminan Pemeliharaan"
+    kategori: "Administrasi"
+    pasal_rujukan: "Standar Dokumen Pemilihan LKPP"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-lkpp/peraturan-lkpp-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "garansi"
+      - "masa\\s+jaminan"
+      - "warranty"
+      - "jaminan\\s+pemeliharaan"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Durasi penawaran garansi harus sama dengan atau lebih lama dari masa garansi minimal yang disyaratkan."
+
+  - id: ADM-EXPERTS
+    nama: "Kualifikasi & Sertifikasi Tenaga Ahli"
+    kategori: "Administrasi"
+    pasal_rujukan: "Perpres 12/2021 Pasal 44"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "TOGAF"
+      - "PMP\\s*/\\s*PRINCE2"
+      - "Sertifikasi.*(?:SAP|Oracle|Microsoft|ERP)"
+      - "CISSP|CISM|GCIH|GCFA|OSCP"
+      - "CDCP|CDCS|Uptime\\s+Institute"
+      - "S1\\s+Teknik\\s+Informatika.*(?:5|8)\\s+tahun"
+      - "Project\\s+Manager"
+      - "Solution\\s+Architect"
+    pengecualian_regex: []
+    severity: "MEDIUM"
+    rekomendasi_template: "Periksa bukti kualifikasi sertifikasi dan CV per masing-masing slot personel inti."
+
+  - id: SPEC-LOCKIN-CPU
+    nama: "Penguncian Merek Prosesor & Arsitektur (Intel Xeon / Emerald Rapids / UPI 4.0)"
+    kategori: "Spesifikasi"
+    pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 19 ayat 1"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "\\b(?:Intel(?:\\s+Xeon)?\\b.*Emerald\\s+Rapids|Emerald\\s+Rapids|UPI\\s+4\\.0|Intel\\s+C741|TME-MK|Intel\\s+VMD|Platform\\s+Firmware\\s+Resilience|Boot\\s+Guard)\\b"
+    pengecualian_regex:
+      - "atau\\s+setara"
+      - "\\bsetara\\b"
+      - "atau\\s+ekuivalen"
+      - "\\bekuivalen\\b"
+      - "\\bequivalent\\b"
+      - "or\\s+equivalent"
+    severity: "HIGH"
+    rekomendasi_template: "Spesifikasi menyebut kode arsitektur eksklusif tanpa padanan setara; melanggar Pasal 19 ayat (1) Perpres 12/2021."
+
+  - id: SPEC-LOCKIN-GPU
+    nama: "Penguncian Akselerator / GPU Eksklusif (NVIDIA H100 SXM5 / NVLink 4.0)"
+    kategori: "Spesifikasi"
+    pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 19 ayat 1"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "\\b(?:NVIDIA\\s+H100|H100\\s+SXM5|NVLink\\s+4\\.0|ConnectX-7|Quantum-2|QM9700)\\b"
+    pengecualian_regex:
+      - "atau\\s+setara"
+      - "\\bsetara\\b"
+      - "atau\\s+ekuivalen"
+      - "\\bekuivalen\\b"
+      - "\\bequivalent\\b"
+      - "or\\s+equivalent"
+    severity: "HIGH"
+    rekomendasi_template: "Spesifikasi menyebut model GPU/interkoneksi proprietari tanpa opsi kesetaraan kompetitif."
+
+  - id: SPEC-LOCKIN-MGMT
+    nama: "Penguncian Manajemen & Sistem Storage Eksklusif Vendor Tertentu"
+    kategori: "Spesifikasi"
+    pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 19 ayat 1"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "\\b(?:Dell\\s+iDRAC\\s+10|HPE\\s+iLO\\s+7|PowerStore\\s+Manager|NetApp\\s+ONTAP|ONTAP\\s+FabricPool|Fabric\\s+Vision)\\b"
+    pengecualian_regex:
+      - "atau\\s+setara"
+      - "\\bsetara\\b"
+      - "atau\\s+ekuivalen"
+      - "\\bekuivalen\\b"
+      - "\\bequivalent\\b"
+      - "or\\s+equivalent"
+    severity: "HIGH"
+    rekomendasi_template: "Sistem manajemen out-of-band eksklusif vendor tertentu membatasi partisipasi merek setara."
+
+  - id: SPEC-REGIONAL-LOCKIN
+    nama: "Persyaratan Asosiasi Regional Diskriminatif (Regional Lock-in)"
+    kategori: "Kualifikasi"
+    pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 6 & Pasal 19"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "keanggotaan\\s+asosiasi\\s+regional"
+      - "ADCR-Jabar"
+      - "asosiasi.*regional.*jawa\\s+barat"
+      - "Gold\\s+Partner"
+      - "asosiasi\\s+data\\s+center\\s+regional"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Persyaratan keanggotaan asosiasi regional bersifat diskriminatif terhadap penyedia kualified nasional."
+
+  - id: SPEC-INCUMBENT-LOCKIN
+    nama: "Penguncian Kriteria Pengalaman Kerja Serupa ke Vendor Inkumben"
+    kategori: "Kualifikasi"
+    pasal_rujukan: "Perpres 12/2021 Pasal 19 ayat 1"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "tepat\\s+\\d+\\s*rack"
+      - "merek\\s+inkumben"
+      - "merek\\s+tertentu\\s*\\(sebutkan\\s+merek\\s+inkumben\\)"
+      - "kapasitas\\s+40\\s+atau\\s+60.*tidak\\s+akan\\s+diterima"
+      - "hanya\\s+pengalaman\\s+yang\\s+memenuhi\\s+SEMUA\\s+kriteria"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Kriteria pengalaman serupa dirancang hiper-spesifik mengarah kepada penyedia inkumben tertentu."
+
+  - id: PROC-TIMELINE-COMPRESSED
+    nama: "Jadwal Lelang Mepet / Masa Sanggah Dipersingkat"
+    kategori: "Jadwal"
+    pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 54"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "compressed\\s+timeline"
+      - "jadwal\\s+mepet"
+      - "terlalu\\s+mepet"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Masa penyusunan penawaran atau masa sanggah berada di bawah batas waktu standar LKPP."
+
+  - id: PROC-UNREALISTIC-TIMELINE
+    nama: "Timeline Implementasi Tidak Realistis (Indikasi Pre-Work)"
+    kategori: "Jadwal"
+    pasal_rujukan: "Prinsip Pengadaan Perpres 16/2018 Pasal 6"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-16-tahun-2018"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "zero-trust[\\s\\S]{0,80}?(?:dalam\\s+)?(\\d+)\\s*hari\\s*kalender"
+      - "pre-work\\s+arrangement"
+      - "indikasi\\s+tender\\s+diatur"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Durasi implementasi arsitektur kompleks terlalu singkat (indikasi pre-work / bid rigging)."
+
+  - id: GOV-CONFLICT-INTEREST
+    nama: "Benturan Kepentingan & Afiliasi Pejabat (Conflict of Interest)"
+    kategori: "Integritas"
+    pasal_rujukan: "UU No. 5 Tahun 1999 jo Perpres 16/2018 Pasal 7"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-16-tahun-2018"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "surat\\s+rekomendasi\\s+dari[\\s\\S]{0,80}?(?:mantan|pejabat|kepala\\s+divisi|direksi)"
+      - "mantan\\s+Kepala\\s+Divisi"
+      - "mantan\\s+pejabat.*terafiliasi"
+      - "Ir\\.\\s*\\[Nama\\]"
+      - "Ir\\.\\s+[A-Z][a-z]+.*mantan"
+    pengecualian_regex:
+      - "\\b(?:tidak\\s+ada|bebas\\s+(?:dari\\s+)?|tidak\\s+terdapat|tidak\\s+memiliki|tanpa|pernyataan\\s+tidak|tidak\\s+sedang\\s+mengalami)\\s+(?:adanya\\s+)?benturan\\s+kepentingan"
+      - "pakta\\s+integritas"
+      - "surat\\s+pernyataan\\s+tidak\\s+menuntut"
+    severity: "HIGH"
+    rekomendasi_template: "Persyaratan surat rekomendasi mantan pejabat/afiliasi internal melanggar prinsip integritas dan etika pengadaan."
+
+  - id: FIN-OVER-BUDGET
+    nama: "Total BoQ Melebihi Pagu Anggaran (Over Budget)"
+    kategori: "Keuangan"
+    pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 26"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "Total\\s+BoQ.*melebihi\\s+pagu"
+      - "SELISIH\\s*\\(OVER\\s+BUDGET\\)"
+    pengecualian_regex:
+      - "tidak\\s+boleh\\s+melebihi\\s+pagu"
+      - "hps\\s+tidak\\s+melebihi"
+    severity: "HIGH"
+    rekomendasi_template: "Total BoQ/HPS melebihi pagu anggaran yang ditetapkan; melanggar ketentuan batas tertinggi penetapan HPS."
+
+  - id: FIN-MARKUP-RATE
+    nama: "Mark-Up Tarif Remunerasi Tenaga Ahli (Billing Rate)"
+    kategori: "Keuangan"
+    pasal_rujukan: "Perpres 16/2018 Pasal 75 & Pedoman INKINDO"
+    sumber: "https://inkindo.org/pedoman-remunerasi"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "Mark-up\\s+Tarif\\s+Man-Month"
+      - "standar\\s+rata-rata.*(?:IN)?KINDO"
+      - "kewajaran\\s+harga.*man-month"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Billing rate melebihi batas atas kewajaran remunerasi pedoman INKINDO."
+
+  - id: FIN-DOUBLE-LICENSE
+    nama: "Duplikasi Pembiayaan Lisensi & Pemeliharaan (Double Counting)"
+    kategori: "Keuangan"
+    pasal_rujukan: "Prinsip Value for Money Perpres 16/2018 Pasal 6"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-16-tahun-2018"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "Duplikasi\\s+Lisensi"
+      - "sudah\\s+termasuk\\s+lisensi"
+      - "tumpang\\s+tindih.*double\\s+counting"
+    pengecualian_regex: []
+    severity: "HIGH"
+    rekomendasi_template: "Ditemukan penagihan tumpang tindih untuk lisensi dan pemeliharaan tahun pertama."
+
+  - id: CON-PENALTY
+    nama: "Denda Keterlambatan Tanpa Batas Maksimum (Uncapped Penalty)"
+    kategori: "Kontrak"
+    pasal_rujukan: "Perpres 16/2018 jo 12/2021 Pasal 56 ayat 2"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "denda.*keterlambatan"
+      - "sanksi\\s+keterlambatan"
+    pengecualian_regex:
+      - "(?:maksimum|maksimal|paling\\s+tinggi|dibatasi\\s+sebesar|batas\\s+maksimal)\\D{0,40}\\d+(?:[.,]\\d+)?\\s*%"
+    severity: "HIGH"
+    rekomendasi_template: "Klausul denda tanpa batas maksimal membahayakan kelangsungan penyedia; ajukan klausul batas maksimal 5%."
