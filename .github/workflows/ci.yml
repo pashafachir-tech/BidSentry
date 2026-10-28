@@ -11,6 +11,9 @@ jobs:
     name: Unit Tests & Regression Benchmark
     runs-on: ubuntu-latest
 
+    env:
+      PYTHONPATH: .
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -43,3 +46,7 @@ jobs:
       - name: Run Independent Blind Benchmark Test
         run: |
           python tests/benchmark_blind.py
+
+      - name: Run Narrative Budget Benchmark Test
+        run: |
+          python tests/benchmark_budget_narrative.py
