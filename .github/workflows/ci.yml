@@ -39,3 +39,7 @@ jobs:
       - name: Run Held-Out Benchmark Regression Test (Zero-Regression Guard)
         run: |
           python tests/benchmark_heldout.py
+
+      - name: Run Independent Blind Benchmark Test
+        run: |
+          python tests/benchmark_blind.py

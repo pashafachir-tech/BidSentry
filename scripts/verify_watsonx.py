@@ -38,8 +38,8 @@ def verify_watsonx() -> dict[str, str]:
     model_id = os.environ.get("LLM_MODEL_NAME") or file_env.get("LLM_MODEL_NAME") or "ibm/granite-3-8b-instruct"
 
     result = {
-        "status": "UNCONFIGURED",
-        "message": "SKIPPED - Kredensial IBM watsonx tidak dikonfigurasi.",
+        "status": "BELUM DIVERIFIKASI (UNCONFIGURED)",
+        "message": "SKIPPED - Kredensial IBM watsonx tidak dikonfigurasi pada lingkungan lokal.",
         "latency_ms": "—",
         "model_id": model_id,
         "instructions": "Setel WATSONX_API_KEY dan WATSONX_PROJECT_ID pada environment atau file .env lokal untuk mengaktifkan ekstraksi semantik via IBM Granite.",
@@ -129,7 +129,7 @@ Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated
 
 ## 3. Komponen Pendukung Lainnya
 
-- **Mesin Aturan Lokal**: `READY / 100% PASS` (24/24 dokumen held-out benchmark).
+- **Mesin Aturan Lokal**: `READY` (14 aturan deklaratif Perpres 12/2021 aktif secara deterministik dan offline).
 - **Langflow Advisory**: Terintegrasi via HTTP REST client (`bidsentry/services/langflow_service.py`), mode opt-in dengan konfirmasi manual pengguna.
 - **Composio Automation**: Integrasi kalender dan dokumen tender, mode human-in-the-loop (memerlukan persetujuan eksplisit sebelum menyiapkan aksi).
 """

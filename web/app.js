@@ -677,17 +677,15 @@ async function exportReview() {
 
 async function exportSelectedReview() {
   const state = getState();
-  const selected = (state.audits || []).find((item) => item.audit_id === state.selectedAuditId);
-  if (!selected) {
+  const review = getReviewSnapshot(state);
+  if (!review || !review.isCustom) {
     toast("Pilih audit dari tabel terlebih dahulu.", "error");
     return;
   }
   try {
-    const payload = auditMemoryCache.get(selected.audit_id) || selected;
-    const review = buildReviewPayload(payload);
     const workbook = await api.exportWorkbook({ kind: "review", review });
-    downloadBlob(workbook, `risk-review-${selected.tender_id || selected.audit_id.slice(0, 8)}.xlsx`);
-    toast(`Risk Review "${selected.package_name}" berhasil diekspor.`);
+    downloadBlob(workbook, `risk-review-${review.tender_id || review.id || "audit"}.xlsx`);
+    toast(`Risk Review "${review.package_name}" berhasil diekspor.`);
   } catch (error) {
     toast(error.message || "Gagal mengekspor laporan.", "error");
   }
@@ -719,6 +717,8 @@ function filterObjectionFindings(findings, category = "ALL") {
   const excludedRuleIds = new Set(["ADM-NPWP", "ADM-NIB", "ADM-SBU", "ADM-KSWP"]);
 
   return (findings || []).filter((f) => {
+    // If reviewer marked finding as Ignored (False Positive), exclude from objection
+    if (f.reviewer_status === "IGNORED") return false;
     if (excludedStatuses.has(String(f.status || "").toUpperCase())) return false;
     if (excludedRuleIds.has(f.id)) return false;
     const note = (f.review_note || "").toLowerCase();
@@ -828,14 +828,16 @@ async function downloadObjectionDocx() {
   const review = getReviewSnapshot(state);
   if (!review.isCustom) { toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error"); return; }
   try {
+    const eligibleFindings = filterObjectionFindings(review.findings || []);
+    const sourceQuotes = eligibleFindings.map((f) => f.requirement_evidence || f.evidence || "").filter(Boolean).join("\n\n");
     const payload = {
       tender_id: review.tender_id || "",
       package_name: review.package_name || "",
       company_name: review.company_name || "",
       notice_number: review.notice_number || "",
       pokja_name: review.pokja_name || "",
-      source_text: [state.lastAuditDraft?.dok_pemilihan, state.lastAuditDraft?.adendum, state.lastAuditDraft?.contract_draft].filter(Boolean).join("\n") || "Teks dokumen",
-      findings: filterObjectionFindings(review.findings || []),
+      source_text: [state.lastAuditDraft?.dok_pemilihan, state.lastAuditDraft?.adendum, state.lastAuditDraft?.contract_draft, sourceQuotes].filter(Boolean).join("\n\n") || "Teks dokumen",
+      findings: eligibleFindings,
       format: "docx",
     };
     const result = await api.createSanggahan(payload);

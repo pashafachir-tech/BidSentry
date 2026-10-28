@@ -11,7 +11,7 @@ BidSentry adalah ruang kerja intelijen pengadaan berbasis *local-first* untuk au
 Seluruh dokumen bukti, pengukuran akurasi, dan arsitektur telah disusun lengkap dan transparan:
 
 - 📑 [**Evidence Scorecard (Rubrik Juri)**](file:///d:/bidsentry/docs/EVIDENCE_SCORECARD.md) — Pemetaan terhadap 6 kriteria rubrik (Problem Clarity 20%, Innovation/Monetization 25%, User Impact 15%, Technical Execution & IBM 20%, Responsible AI 10%, Participation 5%).
-- 📊 [**Benchmark Results (Held-Out Test)**](file:///d:/bidsentry/docs/BENCHMARK_RESULTS.md) — Hasil pengujian objektif 24 dokumen sintetis held-out & 8 kasus jebakan (*Verdict Accuracy: 100.0%, Trap Evasion: 100.0%*).
+- 📊 [**Benchmark Results (Dev Set & Blind Test)**](file:///d:/bidsentry/docs/BENCHMARK_RESULTS.md) — Evaluasi akurasi Development Set 24 dokumen (*Baseline: 75.0% ➔ Tuned: 100.0%*) dan Blind Test Set independen 10 dokumen (*Verdict Acc: 70.0%, Trap Evasion: 100.0%*).
 - 🧠 [**Model & System Card**](file:///d:/bidsentry/docs/MODEL_CARD.md) — Arsitektur hibrida deterministik vs LLM, kebijakan sensor PII, mitigasi kegagalan, dan batasan operasional.
 - 🏗️ [**System Architecture**](file:///d:/bidsentry/docs/ARCHITECTURE.md) — Diagram alir data dan sequence diagram Mermaid, mencakup titik integrasi IBM watsonx / Bob MCP.
 - 🔍 [**Competitive Comparison**](file:///d:/bidsentry/docs/COMPETITIVE_COMPARISON.md) — Matriks perbandingan jujur vs Review Manual, Tool Kepatuhan Komersial, dan Chatbot LLM Generik.
@@ -49,8 +49,11 @@ Juri dan pengembang dapat memverifikasi seluruh komponen secara mandiri melalui 
 # Jalankan seluruh unit test (53 tests)
 pytest tests/ -v
 
-# Jalankan pengujian benchmark 24 dokumen held-out & evaluasi jebakan
+# Jalankan pengujian benchmark Development Set (24 dokumen)
 python tests/benchmark_heldout.py
+
+# Jalankan pengujian Blind Test Set independen (10 dokumen tanpa tuning)
+python tests/benchmark_blind.py
 
 # Jalankan probe status koneksi IBM watsonx & Bob MCP (Aman / Exit 0)
 python scripts/verify_watsonx.py

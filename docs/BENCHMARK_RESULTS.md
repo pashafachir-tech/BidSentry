@@ -1,98 +1,86 @@
-# Hasil Benchmark Independen BidSentry (Held-out Dataset)
+# Laporan Evaluasi Akurasi & Benchmark BidSentry
 
-## Baseline Sebelum Perbaikan (Initial Baseline)
+> **Pernyataan Integritas Metodologi**:
+> Laporan ini memisahkan secara tegas dua dataset evaluasi:
+> 1. **Dataset Pengembangan & Penyetelan (Development & Tuning Set — 24 Dokumen)**: Digunakan untuk memandu dekopling aturan dan verifikasi regresi pola.
+> 2. **Dataset Uji Buta Independen (Blind Test Set — 10 Dokumen)**: Dilabeli secara independen sebelum dievaluasi, dijalankan tanpa penyesuaian aturan (*zero-tuning*), untuk mengukur generalisasi obyektif sistem.
 
-- **Tanggal:** 2026-10-28 (2026-10-28T04:10:49.632704+00:00)
-- **Commit Hash:** `f094ef8`
-- **Jumlah Dokumen Uji:** 24 dokumen sintetis held-out (termasuk 8 kasus jebakan/negatif)
-- **Verdict Accuracy:** 75.0% (18/24)
-- **Trap Evasion Rate:** 77.8% (tingkat ketepatan menghindari false flag pada klausul jebakan)
-- **Macro Precision:** 82.1%
-- **Macro Recall:** 89.3%
-- **Macro F1 Score:** 85.6%
+---
 
-### Tabel Akurasi Per Aturan / Temuan
+## BAGIAN I: Dataset Pengembangan (Development Set — 24 Dokumen)
 
-| Aturan (Rule ID) | Dokumen Relevan | TP | FP | FN | Precision | Recall | F1 Score | Keterangan Status |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| `ADM-KSWP` | 2 | 2 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `ADM-NIB` | 1 | 0 | 1 | 1 | 0.0% | 0.0% | 0.0% | **Perlu Perbaikan (Precision < 80%)** |
-| `ADM-NPWP` | 3 | 3 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `ADM-SBU` | 2 | 1 | 1 | 1 | 50.0% | 50.0% | 50.0% | **Perlu Perbaikan (Precision < 80%)** |
-| `ADM-WARRANTY` | 2 | 2 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `CON-PENALTY` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `FIN-DOUBLE-LICENSE` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `FIN-MARKUP-RATE` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `FIN-OVER-BUDGET` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `GOV-CONFLICT-INTEREST` | 2 | 1 | 1 | 0 | 50.0% | 100.0% | 66.7% | **Perlu Perbaikan (Precision < 80%)** |
-| `PROC-TIMELINE-COMPRESSED` | 2 | 2 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `SPEC-LOCKIN-CPU` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `SPEC-LOCKIN-GPU` | 2 | 1 | 1 | 0 | 50.0% | 100.0% | 66.7% | **Perlu Perbaikan (Precision < 80%)** |
-| `SPEC-REGIONAL-LOCKIN` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
+Dataset ini terdiri dari 24 dokumen sintetis yang memodelkan skenario pelanggaran dan klausul jebakan umum sesuai Perpres 12/2021.
 
-## Pengukuran Pasca-Perbaikan (Post-Fix Engine)
+### 1. Perbandingan Sebelum vs Sesudah Penyetelan Engine
 
-- **Tanggal:** 2026-10-28 (2026-10-28T04:25:54.250617+00:00)
-- **Commit Hash:** `3bf8d5a`
-- **Jumlah Dokumen Uji:** 24 dokumen sintetis held-out (termasuk 8 kasus jebakan/negatif)
-- **Verdict Accuracy:** 100.0% (24/24)
-- **Trap Evasion Rate:** 100.0% (tingkat ketepatan menghindari false flag pada klausul jebakan)
-- **Macro Precision:** 100.0%
-- **Macro Recall:** 100.0%
-- **Macro F1 Score:** 100.0%
-
-### Tabel Akurasi Per Aturan / Temuan
-
-| Aturan (Rule ID) | Dokumen Relevan | TP | FP | FN | Precision | Recall | F1 Score | Keterangan Status |
-|---|---:|---:|---:|---:|---:|---:|---:|---|
-| `ADM-KSWP` | 2 | 2 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `ADM-NIB` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `ADM-NPWP` | 3 | 3 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `ADM-SBU` | 2 | 2 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `ADM-WARRANTY` | 2 | 2 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `CON-PENALTY` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `FIN-DOUBLE-LICENSE` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `FIN-MARKUP-RATE` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `FIN-OVER-BUDGET` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `GOV-CONFLICT-INTEREST` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `PROC-TIMELINE-COMPRESSED` | 2 | 2 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `SPEC-LOCKIN-CPU` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `SPEC-LOCKIN-GPU` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-| `SPEC-REGIONAL-LOCKIN` | 1 | 1 | 0 | 0 | 100.0% | 100.0% | 100.0% | Aman (Precision ≥ 80%) |
-
-## Perbandingan Sebelum vs Sesudah (Before vs After)
-
-| Metrik Evaluasi | Baseline (Sebelum) | Pasca-Perbaikan (Sesudah) | Delta Perubahan | Keterangan Evaluasi |
+| Metrik Evaluasi | Baseline Awal (Commit `f094ef8`) | Pasca-Penyetelan (Commit `369b3a3`) | Delta Perubahan | Keterangan Evaluasi |
 |---|---:|---:|---:|---|
-| **Verdict Accuracy** | 75.0% (18/24) | 100.0% (24/24) | **+25.0%** | Perbaikan penanganan status default dan verdict `TIDAK ADA SYARAT TERBACA` |
-| **Trap Evasion Rate** | 77.8% (7/9) | 100.0% (8/8) | **+22.2%** | Eliminasi false positive pada klausul kesetaraan dan negasi integritas |
-| **Macro Precision** | 82.1% | 100.0% | **+17.9%** | Seluruh 13 aturan deteksi mencapai presisi 100% tanpa over-triggering |
-| **Macro Recall** | 89.3% | 100.0% | **+10.7%** | Rekonstruksi kalimat lintas baris (cross-line) menangkap bukti terputus |
-| **Macro F1 Score** | 85.6% | 100.0% | **+14.4%** | Keseimbangan deteksi red flag dan proteksi klausul sah |
+| **Verdict Accuracy** | 75.0% (18/24) | **100.0%** (24/24) | **+25.0%** | Perbaikan status default `TIDAK ADA SYARAT TERBACA` |
+| **Trap Evasion Rate** | 77.8% (7/9) | **100.0%** (9/9) | **+22.2%** | Eliminasi false positive klausul kesetaraan & pakta integritas |
+| **Macro Precision** | 82.1% | **100.0%** | **+17.9%** | Seluruh 14 aturan terkalibrasi tanpa over-triggering |
+| **Macro Recall** | 89.3% | **100.0%** | **+10.7%** | Rekonstruksi kalimat lintas baris (*cross-line stitching*) |
+| **Macro F1 Score** | 85.6% | **100.0%** | **+14.4%** | Keseimbangan deteksi red flag dan perlindungan klausul sah |
 
-## Analisis Temuan dan Error Analysis
+> **Catatan Koreksi Penulisan**:
+> Pada log ringkasan sebelumnya tercatat angka `8/8` untuk Trap Evasion pasca-perbaikan. Ini merupakan kekeliruan ketik (*clerical typo*) pada templat teks tabel pembanding; penyebut riil pada dataset `data/benchmark/` adalah **9 kasus jebakan** (`doc_01`, `03`, `06`, `08`, `10`, `12`, `16`, `21`, `23`), dan kode evaluator mengonfirmasi 9 dari 9 jebakan berhasil dievasi (100.0%).
 
-1. **Peningkatan NIB (`ADM-NIB`)**: Presisi dan recall naik dari 0% ke 100%. Aturan disesuaikan dengan PP No. 5/2021 yang menyatakan NIB berlaku selama masa operasional usaha tanpa masa kedaluwarsa berkala, dengan memverifikasi keberadaan format 13 digit OSS.
-2. **Peningkatan SBU (`ADM-SBU`)**: Presisi dan recall naik dari 50% ke 100%. Implementasi *cross-line sentence reconstruction* berhasil merekatkan baris teks yang terpotong enter/newline dari dokumen PDF tanpa kehilangan metadata baris asli.
-3. **Eliminasi False Positive Brand Lock-in (`SPEC-LOCKIN-GPU`)**: Presisi naik dari 50% ke 100%. Frasa kesetaraan teknis (*'atau setara'*, *'equivalent'*) kini dikenali sebagai pengecualian sah sesuai Pasal 19 ayat (1) Perpres 12/2021 sehingga tidak memicu alarm palsu pada vendor sah.
-4. **Koreksi Negasi Integritas (`GOV-CONFLICT-INTEREST`)**: Presisi naik dari 50% ke 100%. Regex negasi diperbaiki untuk mengakui kalimat pakta integritas normatif (*'bebas dari benturan kepentingan'*) sehingga tidak disalahartikan sebagai pelanggaran afiliasi pejabat.
-5. **Verdict 'TIDAK ADA SYARAT TERBACA'**: Dokumen tanpa klausul pengadaan atau dokumen kosong kini secara eksplisit mengeluarkan verdict konservatif `TIDAK ADA SYARAT TERBACA` dengan peringatan OCR/dokumen tidak memuat bab teknis, alih-alih meloloskan dengan status GO palsu.
-## Perbandingan Sebelum vs Sesudah (Before vs After)
+### 2. Batasan Metodologi Development Set
+Karena 24 dokumen ini digunakan oleh tim teknis selama proses refaktorisasi `engine.py` dan `config/rules.yaml`, skor 100.0% pada set ini mengukur **tingkat kepatuhan implementasi kode terhadap spesifikasi kasus uji yang dirancang**, BUKAN bukti bahwa sistem sempurna pada semua dokumen pengadaan di dunia nyata.
 
-| Metrik Evaluasi | Baseline (Sebelum) | Pasca-Perbaikan (Sesudah) | Delta Perubahan | Keterangan Evaluasi |
-|---|---:|---:|---:|---|
-| **Verdict Accuracy** | 75.0% (18/24) | 100.0% (24/24) | **+25.0%** | Perbaikan penanganan status default dan verdict `TIDAK ADA SYARAT TERBACA` |
-| **Trap Evasion Rate** | 77.8% (7/9) | 100.0% (8/8) | **+22.2%** | Eliminasi false positive pada klausul kesetaraan dan negasi integritas |
-| **Macro Precision** | 82.1% | 100.0% | **+17.9%** | Seluruh 13 aturan deteksi mencapai presisi 100% tanpa over-triggering |
-| **Macro Recall** | 89.3% | 100.0% | **+10.7%** | Rekonstruksi kalimat lintas baris (cross-line) menangkap bukti terputus |
-| **Macro F1 Score** | 85.6% | 100.0% | **+14.4%** | Keseimbangan deteksi red flag dan proteksi klausul sah |
+---
 
-## Analisis Temuan dan Error Analysis
+## BAGIAN II: Evaluasi Uji Buta Independen (Blind Test Set — 10 Dokumen)
 
-1. **Peningkatan NIB (`ADM-NIB`)**: Presisi dan recall naik dari 0% ke 100%. Aturan disesuaikan dengan PP No. 5/2021 yang menyatakan NIB berlaku selama masa operasional usaha tanpa masa kedaluwarsa berkala, dengan memverifikasi keberadaan format 13 digit OSS.
-2. **Peningkatan SBU (`ADM-SBU`)**: Presisi dan recall naik dari 50% ke 100%. Implementasi *cross-line sentence reconstruction* berhasil merekatkan baris teks yang terpotong enter/newline dari dokumen PDF tanpa kehilangan metadata baris asli.
-3. **Eliminasi False Positive Brand Lock-in (`SPEC-LOCKIN-GPU`)**: Presisi naik dari 50% ke 100%. Frasa kesetaraan teknis (*'atau setara'*, *'equivalent'*) kini dikenali sebagai pengecualian sah sesuai Pasal 19 ayat (1) Perpres 12/2021 sehingga tidak memicu alarm palsu pada vendor sah.
-4. **Koreksi Negasi Integritas (`GOV-CONFLICT-INTEREST`)**: Presisi naik dari 50% ke 100%. Regex negasi diperbaiki untuk mengakui kalimat pakta integritas normatif (*'bebas dari benturan kepentingan'*) sehingga tidak disalahartikan sebagai pelanggaran afiliasi pejabat.
-5. **Verdict 'TIDAK ADA SYARAT TERBACA'**: Dokumen tanpa klausul pengadaan atau dokumen kosong kini secara eksplisit mengeluarkan verdict konservatif `TIDAK ADA SYARAT TERBACA` dengan peringatan OCR/dokumen tidak memuat bab teknis, alih-alih meloloskan dengan status GO palsu.
+Untuk menguji kemampuan generalisasi sistem secara jujur, dibuat 10 dokumen uji baru di `data/test_blind/` yang mencakup variasi pengadaan konstruksi, TI, jasa kebersihan, alat kesehatan, sewa kendaraan, dan dokumen non-standar. Dokumen-dokumen ini dilabeli **sebelum eksekusi** dan engine dievaluasi **tanpa mengubah satu baris pun aturan kode** untuk mencocokkannya.
 
+### 1. Ringkasan Hasil Uji Buta Independen (Zero-Tuning)
 
+- **Tanggal Pengujian:** 2026-10-28
+- **Skrip Evaluator:** `tests/benchmark_blind.py`
+- **Total Dokumen Uji:** 10 Dokumen Independen
+- **Verdict Accuracy:** **70.0%** (7 dari 10 dokumen terklasifikasi tepat)
+- **Trap Evasion Rate:** **100.0%** (3 dari 3 skenario jebakan lolos tanpa false alarm)
+- **Macro Precision:** 17.4%
+- **Macro Recall:** 33.3%
+- **Macro F1 Score:** 22.8%
+
+### 2. Detail Hasil per Dokumen Uji Buta
+
+| ID Dokumen | Judul Skenario Uji | Expected Verdict | Actual Verdict | Status Evaluasi | Keterangan Kasus |
+|---|---|---|---|:---:|---|
+| `blind_01` | Rehabilitasi Gedung Kantor (Patuh & Bersih) | `GO` | `GO` | **MATCH** | Memenuhi seluruh syarat administratif & teknis |
+| `blind_02` | Laptop Mobilitas (Lock-in Intel Core Ultra) | `NO-GO` | `NO-GO` | **MATCH** | Berhasil mendeteksi penguncian CPU Intel tanpa opsi setara |
+| `blind_03` | Kajian Tata Ruang (Jadwal Sangat Mepet) | `NO-GO` | `NO-GO` | **MATCH** | Berhasil menangkap penawaran 4 hari & sanggah 2 hari |
+| `blind_04` | CT-Scan RSUD (Denda Keterlambatan Tanpa Batas) | `NO-GO` | `NO-GO` | **MATCH** | Berhasil mendeteksi klausul denda tanpa batas maksimal |
+| `blind_05` | Jasa Kebersihan (Pakta Integritas Bebas KKN) | `GO` | `GO` | **MATCH (TRAP)** | Jebakan komitmen integritas normatif lolos tanpa alarm |
+| `blind_06` | Jasa ERP (Total BoQ Melebihi Pagu Anggaran) | `NO-GO` | `GO` | **MISMATCH** | **False Negative**: Angka BoQ dalam narasi bebas lolos dari regex tabel |
+| `blind_07` | Sewa Kendaraan Dinas (Spesifikasi Merek + Setara) | `GO` | `NO-GO` | **MISMATCH** | **False Positive Verdict**: Klausul merek setara lolos (Trap: PASS), tetapi dokumen minim slot memicu gap administratif |
+| `blind_08` | Meubeler Kantor (SBU Kedaluwarsa < 30 Hari) | `BELUM CUKUP BUKTI` | `NO-GO` | **MISMATCH** | Aturan mendeteksi `EXPIRING`, namun kombinasi slot memicu NO-GO |
+| `blind_09` | Konsultan Jalan (Billing Rate di Atas INKINDO) | `NO-GO` | `NO-GO` | **MATCH** | Berhasil mendeteksi mark-up tarif tenaga ahli Rp 140 jt/bln |
+| `blind_10` | Notulensi Koordinasi (Format Narasi Lepas) | `TIDAK ADA SYARAT TERBACA` | `TIDAK ADA SYARAT TERBACA` | **MATCH (TRAP)** | Berhasil mendeteksi ketiadaan bab syarat teknis |
+
+---
+
+## BAGIAN III: Analisis Kegagalan & Area Kelemahan Engine (Error Analysis)
+
+Evaluasi independen pada blind test set mengungkap kelemahan nyata yang wajib diketahui evaluator:
+
+1. **Keterbatasan Format Narasi Bebas (Kasus `blind_06`)**:
+   - *Masalah*: Angka BoQ (Rp 6,25 Miliar) dan Pagu (Rp 5,0 Miliar) yang ditulis dalam paragraf narasi deskriptif tanpa tabel BoQ terstruktur gagal dipicu oleh parser anggaran. Parser saat ini dioptimalkan untuk berkas `.xlsx` dan pola teks bertabel.
+   - *Solusi Masa Depan*: Menambahkan modul ekstraksi semantik berbasis LLM (IBM Granite) untuk menangkap entitas anggaran dalam format prosa bebas jika pengguna mengaktifkan mode analisis tambahan.
+
+2. **Interaksi Multi-Slot Dokumen (Kasus `blind_07` & `blind_08`)**:
+   - *Masalah*: Mesin aturan bersifat konservatif. Jika dokumen input hanya berisi potongan KAK tanpa melampirkan berkas bukti (NPWP, NIB), mesin menganggap dokumen penawaran belum lengkap sehingga memicu verdict penolakan (NO-GO), meskipun klausul teknisnya sendiri memenuhi syarat.
+   - *Solusi Masa Depan*: Memisahkan verdict menjadi dua dimensi: **Verdict KAK/Draf Panitia** (apakah KAK diskriminatif) dan **Verdict Dokumen Penawaran** (apakah berkas penyedia lengkap).
+
+---
+
+## BAGIAN IV: Cara Menjalankan Ulang Benchmark
+
+```powershell
+# 1. Jalankan benchmark Development Set (24 dokumen)
+python tests/benchmark_heldout.py
+
+# 2. Jalankan benchmark Blind Test Set Independen (10 dokumen)
+python tests/benchmark_blind.py
+```

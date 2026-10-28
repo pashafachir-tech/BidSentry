@@ -1,7 +1,7 @@
 # Status Integrasi Teknologi IBM & Layanan Eksternal
 
 > **Dokumen Transparansi Teknis**: Dihasilkan oleh `scripts/verify_watsonx.py`.
-> Terakhir diperbarui: 2026-10-28 04:42:15 UTC
+> Terakhir diperbarui: 2026-10-28 04:59:00 UTC
 
 Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated Data). Evaluator dan juri dapat memverifikasi status secara mandiri.
 
@@ -11,7 +11,7 @@ Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated
 
 | Komponen | Status Saat Ini | Keterangan |
 | :--- | :--- | :--- |
-| **Kredensial** | `UNCONFIGURED` | `SKIPPED - Kredensial IBM watsonx tidak dikonfigurasi.` |
+| **Kredensial** | `BELUM DIVERIFIKASI (UNCONFIGURED)` | `SKIPPED - Kredensial IBM watsonx tidak dikonfigurasi pada lingkungan lokal.` |
 | **Model ID** | `ibm/granite-3-8b-instruct` | Standar: `ibm/granite-3-8b-instruct` |
 | **Latensi Uji** | `—` | Nilai aktual saat probe dijalankan |
 | **Panduan Aktivasi** | — | Setel WATSONX_API_KEY dan WATSONX_PROJECT_ID pada environment atau file .env lokal untuk mengaktifkan ekstraksi semantik via IBM Granite. |
@@ -39,6 +39,6 @@ Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated
 
 ## 3. Komponen Pendukung Lainnya
 
-- **Mesin Aturan Lokal**: `READY / 100% PASS` (24/24 dokumen held-out benchmark).
+- **Mesin Aturan Lokal**: `READY` (14 aturan deklaratif Perpres 12/2021 aktif secara deterministik dan offline).
 - **Langflow Advisory**: Terintegrasi via HTTP REST client (`bidsentry/services/langflow_service.py`), mode opt-in dengan konfirmasi manual pengguna.
 - **Composio Automation**: Integrasi kalender dan dokumen tender, mode human-in-the-loop (memerlukan persetujuan eksplisit sebelum menyiapkan aksi).

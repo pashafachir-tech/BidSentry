@@ -25,8 +25,8 @@ Dokumen ini membandingkan BidSentry secara obyektif dan jujur terhadap tiga pend
 
 ## 2. Analisis Keunggulan Spesifik BidSentry
 
-### A. Arsitektur Hibrida "Zero Hallucination"
-Sistem kepatuhan konvensional yang semata-mata mengandalkan LLM prompt seringkali berhalusinasi: menyebutkan pasal fiktif, salah menafsirkan batas sanggah LKPP, atau mengklaim pelanggaran pada dokumen yang sebenarnya patuh. BidSentry menyelesaikan masalah ini dengan mendasarkan putusan hukum (GO / NO-GO) pada mesin aturan berbasis kode dan konfigurasi deklaratif (`config/rules.yaml`), sedangkan LLM hanya digunakan sebagai penasihat semantik sekunder yang terverifikasi substring persis.
+### A. Arsitektur Hibrida Berbasis Aturan Deterministik
+Sistem kepatuhan konvensional yang semata-mata mengandalkan LLM prompt seringkali menghasilkan halusinasi hukum: menyebutkan pasal fiktif, salah menafsirkan batas sanggah LKPP, atau mengklaim pelanggaran pada dokumen yang sebenarnya patuh. BidSentry menyelesaikan masalah ini dengan mendasarkan putusan hukum (GO / NO-GO) pada mesin aturan berbasis kode dan konfigurasi deklaratif (`config/rules.yaml`), sedangkan LLM hanya digunakan sebagai penasihat semantik sekunder yang terverifikasi substring persis.
 
 ### B. Pemisahan Hak Sanggah vs Kekurangan Berkas
 Mayoritas sistem evaluasi dokumen gagal membedakan subjek kesalahan. BidSentry secara cerdas membedakan:

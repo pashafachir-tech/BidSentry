@@ -65,9 +65,15 @@ Jika LLM mengembalikan kutipan yang mengandung placeholder redaksi (misal `[NIK-
 
 ---
 
-## 5. Metrik Evaluasi & Pemantauan (Benchmark Held-Out)
-Sistem diuji secara berkala terhadap 24 dokumen sintetis held-out (`data/benchmark/`):
-- **Akurasi Verdict**: 100.0% (24/24 dokumen terklasifikasi sesuai ground-truth).
-- **Ketahanan Terhadap Jebakan (Trap Evasion Rate)**: 100.0% (8/8 skenario jebakan *false positive* lolos tanpa bias).
-- **Macro F1 Score**: 100.0%.
-- Laporan lengkap tercatat pada `docs/BENCHMARK_RESULTS.md`.
+## 5. Metrik Evaluasi & Pemantauan (Benchmark Evaluasi)
+Sistem diuji dengan dua dataset terpisah:
+1. **Dataset Pengembangan & Penyetelan (Development Set — 24 Dokumen Sintetis)**:
+   - Digunakan untuk memandu kalibrasi aturan deterministik.
+   - Baseline awal: Akurasi Verdict 75.0%, Trap Evasion 77.8% (7/9).
+   - Pasca-Penyetelan: Akurasi Verdict 100.0% (24/24), Trap Evasion 100.0% (9/9).
+2. **Dataset Uji Buta Independen (Blind Test Set — 10 Dokumen Tanpa Penyetelan Aturan)**:
+   - Dijalankan secara *zero-tuning* untuk mengukur generalisasi nyata.
+   - **Akurasi Verdict: 70.0% (7/10 dokumen)**.
+   - **Trap Evasion Rate: 100.0% (3/3 skenario jebakan lolos tanpa false alarm)**.
+   - Menunjukkan keandalan tinggi pada klausul lock-in, jadwal mepet, dan denda kontrak, dengan keterbatasan yang diakui pada deteksi angka anggaran dalam format narasi bebas.
+   - Laporan perbandingan lengkap tercatat pada `docs/BENCHMARK_RESULTS.md`.
