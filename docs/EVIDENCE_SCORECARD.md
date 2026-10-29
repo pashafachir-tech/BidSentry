@@ -51,26 +51,26 @@ Pengadaan barang dan jasa pemerintah (PBJP) di Indonesia mengelola alokasi angga
 
 ### D. Metrik Dampak Lapangan
 - Seluruh metrik pengujian pengguna manusia lapangan berstatus: **`BELUM DIKUMPULKAN`**.
-- Protokol dan instrumen wawancara terstandarisasi telah disiapkan pada [`docs/INTERVIEW_GUIDE.md`](file:///d:/bidsentry/docs/INTERVIEW_GUIDE.md) dan [`docs/PILOT_RESULTS_TEMPLATE.md`](file:///d:/bidsentry/docs/PILOT_RESULTS_TEMPLATE.md).
+- Protokol dan instrumen wawancara terstandarisasi telah disiapkan pada [`docs/INTERVIEW_GUIDE.md`](INTERVIEW_GUIDE.md) dan [`docs/PILOT_RESULTS_TEMPLATE.md`](PILOT_RESULTS_TEMPLATE.md).
 
 ---
 
 ## 2. Innovation, Feasibility, Monetization (Bobot 25%)
 
 ### A. Inovasi: Mesin Aturan Deterministik Berbasis Kode
-- **Deterministic-First Core**: Berbeda dengan aplikasi AI generik yang menyerahkan putusan hukum pada model bahasa yang rawan halusinasi angka/pasal, BidSentry menggunakan mesin aturan deterministik berbasis kode dan konfigurasi deklaratif ([`config/rules.yaml`](file:///d:/bidsentry/config/rules.yaml)).
+- **Deterministic-First Core**: Berbeda dengan aplikasi AI generik yang menyerahkan putusan hukum pada model bahasa yang rawan halusinasi angka/pasal, BidSentry menggunakan mesin aturan deterministik berbasis kode dan konfigurasi deklaratif ([`config/rules.yaml`](../config/rules.yaml)).
 - **Dual-Layer Evaluation**: Mesin lokal mengeksekusi 15 aturan spesifik Perpres 12/2021 secara 100% offline. LLM (IBM Granite / Langflow) hanya bertindak sebagai penasihat semantik sekunder jika disetujui pengguna (*opt-in*).
 
 ### B. Kelayakan Teknis & Status Integrasi IBM watsonx (Feasibility)
-- **First-Class Watsonx Service**: Tersedia modul mandiri [`bidsentry/services/watsonx_service.py`](file:///d:/bidsentry/bidsentry/services/watsonx_service.py) yang mengintegrasikan SDK resmi `ibm-watsonx-ai` (model `ibm/granite-3-8b-instruct`), terhubung langsung ke DI container [`bidsentry/app.py`](file:///d:/bidsentry/bidsentry/app.py) dan alur Langflow [`langflow/tender_extraction_flow.json`](file:///d:/bidsentry/langflow/tender_extraction_flow.json).
-- **Protokol Agentic Bob MCP**: Konfigurasi server Bob MCP terverifikasi di [`bob/mcp.json`](file:///d:/bidsentry/bob/mcp.json) menggunakan protokol standar stdio untuk interoperabilitas tool AI agentic.
-- **Transparansi Kredensial**: Status integrasi komponen IBM watsonx didokumentasikan secara transparan pada [`docs/INTEGRATION_STATUS.md`](file:///d:/bidsentry/docs/INTEGRATION_STATUS.md). Saat kredensial lingkungan belum diisi pengguna, sistem secara jujur berstatus **`BELUM DIVERIFIKASI (UNCONFIGURED)`**.
-- **Skrip Verifikasi Mandiri**: Skrip verifikasi mandiri untuk juri tersedia di [`scripts/verify_watsonx.py`](file:///d:/bidsentry/scripts/verify_watsonx.py) (berjalan mulus dengan return code 0, memeriksa koneksi live SDK dan melaporkan status aktual tanpa crash).
+- **First-Class Watsonx Service**: Tersedia modul mandiri [`bidsentry/services/watsonx_service.py`](../bidsentry/services/watsonx_service.py) yang mengintegrasikan SDK resmi `ibm-watsonx-ai` (model `ibm/granite-3-8b-instruct`), terhubung langsung ke DI container [`bidsentry/app.py`](../bidsentry/app.py) dan alur Langflow [`langflow/tender_extraction_flow.json`](../langflow/tender_extraction_flow.json).
+- **Protokol Agentic Bob MCP**: Konfigurasi server Bob MCP terverifikasi di [`bob/mcp.json`](../bob/mcp.json) menggunakan protokol standar stdio untuk interoperabilitas tool AI agentic.
+- **Transparansi Kredensial**: Status integrasi komponen IBM watsonx didokumentasikan secara transparan pada [`docs/INTEGRATION_STATUS.md`](INTEGRATION_STATUS.md). Saat kredensial lingkungan belum diisi pengguna, sistem secara jujur berstatus **`BELUM DIVERIFIKASI (UNCONFIGURED)`**.
+- **Skrip Verifikasi Mandiri**: Skrip verifikasi mandiri untuk juri tersedia di [`scripts/verify_watsonx.py`](../scripts/verify_watsonx.py) (berjalan mulus dengan return code 0, memeriksa koneksi live SDK dan melaporkan status aktual tanpa crash).
 
 ### C. Strategi Monetisasi B2B & Model Harga Berjenjang (Pivot Go-To-Market)
 
 > [!IMPORTANT]
-> **Menghindari Jebakan Siklus B2G**: Tim memutar haluan strategi dari ketergantungan tender pemerintah (siklus 12–24 bulan) menuju **Vendor Bid-Readiness SaaS** (peserta tender LPSE) dan **B2B Enterprise Procurement & Internal Audit BUMN** (siklus 2–6 minggu). Dokumen strategi lengkap pada [`docs/MONETIZATION_STRATEGY.md`](file:///d:/bidsentry/docs/MONETIZATION_STRATEGY.md).
+> **Menghindari Jebakan Siklus B2G**: Tim memutar haluan strategi dari ketergantungan tender pemerintah (siklus 12–24 bulan) menuju **Vendor Bid-Readiness SaaS** (peserta tender LPSE) dan **B2B Enterprise Procurement & Internal Audit BUMN** (siklus 2–6 minggu). Dokumen strategi lengkap pada [`docs/MONETIZATION_STRATEGY.md`](MONETIZATION_STRATEGY.md).
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -110,7 +110,7 @@ Pengadaan barang dan jasa pemerintah (PBJP) di Indonesia mengelola alokasi angga
 - **Sanggahan & BAHP Builder Terarah dengan Exact Substring Grounding**: Memvalidasi kutipan temuan secara ketat terhadap teks sumber asli yang disimpan di server. Kutipan yang tidak cocok ditolak untuk mencegah halusinasi surat formal.
 
 ### B. Estimasi Throughput Teknis & Waktu Review
-- **Throughput Mesin**: Pengukuran latensi kode backend berkisar antara 1.2 hingga 3.5 detik untuk parsing PDF multi-halaman dan < 0.5 detik untuk evaluasi aturan lokal. Detail perbandingan dekomposisi waktu manual (rata-rata 4.5 jam) vs mesin disajikan pada [`docs/PILOT_RESULTS_TEMPLATE.md`](file:///d:/bidsentry/docs/PILOT_RESULTS_TEMPLATE.md) dan [`docs/PILOT_VALIDATION.md`](file:///d:/bidsentry/docs/PILOT_VALIDATION.md).
+- **Throughput Mesin**: Pengukuran latensi kode backend berkisar antara 1.2 hingga 3.5 detik untuk parsing PDF multi-halaman dan < 0.5 detik untuk evaluasi aturan lokal. Detail perbandingan dekomposisi waktu manual (rata-rata 4.5 jam) vs mesin disajikan pada [`docs/PILOT_RESULTS_TEMPLATE.md`](PILOT_RESULTS_TEMPLATE.md) dan [`docs/PILOT_VALIDATION.md`](PILOT_VALIDATION.md).
 
 ---
 
@@ -120,15 +120,15 @@ Pengadaan barang dan jasa pemerintah (PBJP) di Indonesia mengelola alokasi angga
 - **Stack Inti**: Python 3.11/3.12, FastAPI ASGI (`bidsentry/asgi.py`, `server.py`), openpyxl, reportlab, Vanilla JavaScript murni, CSS custom responsif tanpa framework berat eksternal.
 - **Konsolidasi Arsitektur Bersih (Single Source of Truth)**:
   - Server entrypoint tunggal terstandarisasi (`server.py` dan `bidsentry.asgi`), mendepresiasi modul duplikat `bidsentry/http_server.py`.
-  - Penyatuan kontrak skema API di [`bidsentry/schemas/__init__.py`](file:///d:/bidsentry/bidsentry/schemas/__init__.py) dengan re-ekspor ramah kompatibilitas mundur pada `bidsentry/types/`.
-  - Konsolidasi evaluasi finansial ke dalam [`bidsentry/audits/financial.py`](file:///d:/bidsentry/bidsentry/audits/financial.py) dengan antarmuka terpadu `run_financial_audit()`.
+  - Penyatuan kontrak skema API di [`bidsentry/schemas/__init__.py`](../bidsentry/schemas/__init__.py) dengan re-ekspor ramah kompatibilitas mundur pada `bidsentry/types/`.
+  - Konsolidasi evaluasi finansial ke dalam [`bidsentry/audits/financial.py`](../bidsentry/audits/financial.py) dengan antarmuka terpadu `run_financial_audit()`.
   - Penyatuan layanan orkestrasi pada `AuditService.audit_comprehensive()`.
-  - Arsitektur terdokumentasi lengkap pada [`docs/ARCHITECTURE_CONSOLIDATED.md`](file:///d:/bidsentry/docs/ARCHITECTURE_CONSOLIDATED.md).
+  - Arsitektur terdokumentasi lengkap pada [`docs/ARCHITECTURE_CONSOLIDATED.md`](ARCHITECTURE_CONSOLIDATED.md).
 - **Pengujian Dokumen PDF Multi-Halaman Nyata (Real PDF Test Fixtures)**:
   - Tersedia berkas uji PDF realistis di `data/sample_tenders/pdf_tenders/`: `paket_konstruksi_rab_kompleks.pdf` (tabel BoQ multi-halaman dengan 15 item pekerjaan) dan `paket_pengadaan_it_server_kak.pdf` (dokumen KAK lengkap dengan klausul diskriminatif merek dan denda tanpa batas).
-  - Tervalidasi otomatis melalui `DocumentExtractionService` pada [`tests/test_pdf_real_extraction.py`](file:///d:/bidsentry/tests/test_pdf_real_extraction.py).
-- **Pengujian E2E Otomatis**: Dilengkapi smoke test Playwright pada [`tests/e2e_smoke.py`](file:///d:/bidsentry/tests/e2e_smoke.py) yang memvalidasi interaksi UI lengkap, transisi dialog, dan verifikasi tabel temuan secara headless.
-- **Automated CI Workflow**: GitHub Actions pipeline aktif di [`.github/workflows/ci.yml`](file:///d:/bidsentry/.github/workflows/ci.yml) yang menjalankan seluruh unit test (103 passed tests) dan regression benchmark.
+  - Tervalidasi otomatis melalui `DocumentExtractionService` pada [`tests/test_pdf_real_extraction.py`](../tests/test_pdf_real_extraction.py).
+- **Pengujian E2E Otomatis**: Dilengkapi smoke test Playwright pada [`tests/e2e_smoke.py`](../tests/e2e_smoke.py) yang memvalidasi interaksi UI lengkap, transisi dialog, dan verifikasi tabel temuan secara headless.
+- **Automated CI Workflow**: GitHub Actions pipeline aktif di [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) yang menjalankan seluruh unit test (103 passed tests) dan regression benchmark.
 
 ### B. Hasil Benchmark Objektif (Tiga Dataset Terpisah)
 
@@ -159,7 +159,7 @@ Seluruh angka di bawah dihitung secara dinamis dari hasil eksekusi kode benchmar
    - **Macro F1 Score: 25.0%**
    - *Kasus Mismatch: `budget_02` (biaya aman, namun ketiadaan slot berkas NIB/NPWP menghasilkan status BELUM CUKUP BUKTI).*
 
-Laporan lengkap dan analisis kegagalan disajikan pada [`docs/BENCHMARK_RESULTS.md`](file:///d:/bidsentry/docs/BENCHMARK_RESULTS.md).
+Laporan lengkap dan analisis kegagalan disajikan pada [`docs/BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md).
 
 ---
 
@@ -173,7 +173,7 @@ Laporan lengkap dan analisis kegagalan disajikan pada [`docs/BENCHMARK_RESULTS.m
 - **Host Header & DNS Rebinding Guard**: Membatasi eksekusi hanya pada host terpercaya.
 
 ### B. Transparansi & Model Card
-- Dokumentasi kebijakan verdict deterministik, batasan model, ruang lingkup etika, dan analisis kegagalan tersedia lengkap pada [`docs/MODEL_CARD.md`](file:///d:/bidsentry/docs/MODEL_CARD.md).
+- Dokumentasi kebijakan verdict deterministik, batasan model, ruang lingkup etika, dan analisis kegagalan tersedia lengkap pada [`docs/MODEL_CARD.md`](MODEL_CARD.md).
 - Verdict `NO-GO` secara ketat dibatasi hanya untuk pelanggaran fatal yang terkonfirmasi (`GAP`); ketidaklengkapan bukti atau berkas kedaluwarsa masuk ke status `BELUM CUKUP BUKTI`.
 
 ---
@@ -181,4 +181,4 @@ Laporan lengkap dan analisis kegagalan disajikan pada [`docs/BENCHMARK_RESULTS.m
 ## 6. Participation & Engineering Discipline (Bobot 5%)
 - **Penilaian Participation**: Kriteria Participation (5%) mencakup kehadiran workshop, konsultasi mentor, dan keterlibatan komunitas selama program hackathon yang dinilai secara mandiri oleh panitia/juri.
 - **Disiplin Rekayasa Kode**: Repositori ini membuktikan keseriusan implementasi melalui commit Git modular berkesinambungan, pengujian unit test menyeluruh (**103 tests pass** tanpa regresi), dan transparansi pelaporan hasil benchmark tanpa memalsukan data.
-- **Riwayat Perubahan**: Tercatat lengkap pada [`docs/CHANGELOG_ITERASI.md`](file:///d:/bidsentry/docs/CHANGELOG_ITERASI.md).
+- **Riwayat Perubahan**: Tercatat lengkap pada [`docs/CHANGELOG_ITERASI.md`](CHANGELOG_ITERASI.md).
