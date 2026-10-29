@@ -33,6 +33,8 @@ brand_lockin:
     - "sepadan"
     - "produk setara"
     - "dapat diganti setara"
+    - "equal or better"
+    - "acceptable alternative"
   vendors:
     cpu:
       - "Intel Xeon"
@@ -288,10 +290,19 @@ rules:
       - "Gold\\s+Partner"
       - "asosiasi\\s+data\\s+center\\s+regional"
       - "(?:asosiasi|domisili|keberadaan\\s+kantor|khusus\\s+penyedia)\\s+(?:lokal|daerah|[A-Z][a-z]+|wilayah\\s+[A-Z][a-z]+|Kalsel|Jabar|Jateng|Jatim|DKI)\\s+(?:saja|wajib|mutlak|diwajibkan)"
-      - "(?:wajib|harus)\\s+(?:berdomisili|memiliki\\s+kantor(?:\\s+cabang)?)\\s+di\\s+(?:wilayah|daerah|[A-Z][a-z]+|Kalsel|Jabar|Jateng|Jatim)"
-    pengecualian_regex: []
+      - "(?:wajib|harus|diwajibkan)\\s+(?:berdomisili|memiliki\\s+(?:kantor|fasilitas)(?:\\s+(?:operasional|perwakilan|cabang))?)\\s+di\\s+(?:wilayah|daerah|[A-Za-z]+)"
+      - "(?:memiliki|wajib\\s+memiliki|harus\\s+memiliki)\\s+kantor\\s+(?:perwakilan|cabang)"
+      - "anggota\\s+KADIN\\s+(?:Kota|Kabupaten|Provinsi)"
+      - "(?:keanggotaan\\s+asosiasi|anggota\\s+(?:asosiasi|kadin|gapensi|akli|infindo|hipmi))\\s+(?:pengusaha\\s+)?(?:lokal|daerah|regional|(?:kota|kabupaten|provinsi))"
+      - "asosiasi\\s+pengusaha\\s+lokal"
+    pengecualian_regex:
+      - "lokasi\\s+pekerjaan\\s+(?:berada\\s+)?di"
+      - "pekerjaan\\s+dilaksanakan\\s+di"
+      - "(?:workshop|bengkel\\s+kerja|kantor\\s+lapangan)\\s+(?:berada\\s+)?di"
+      - "tempat\\s+pelaksanaan\\s+pekerjaan"
+      - "lokasi\\s+proyek\\s+di"
     severity: "HIGH"
-    rekomendasi_template: "Persyaratan keanggotaan asosiasi regional atau domisili bersifat diskriminatif terhadap penyedia kualified nasional."
+    rekomendasi_template: "Persyaratan keanggotaan asosiasi regional, KADIN daerah, atau domisili kantor cabang bersifat diskriminatif terhadap penyedia kualified nasional."
 
   - id: SPEC-INCUMBENT-LOCKIN
     nama: "Penguncian Kriteria Pengalaman Kerja Serupa ke Vendor Inkumben"
@@ -310,7 +321,7 @@ rules:
     rekomendasi_template: "Kriteria pengalaman serupa dirancang hiper-spesifik mengarah kepada penyedia inkumben tertentu."
 
   - id: PROC-TIMELINE-COMPRESSED
-    nama: "Jadwal Lelang Mepet / Masa Sanggah Dipersingkat"
+    nama: "Jadwal Lelang Mepet / Masa Sanggah Dipersingkat (Compressed Timeline)"
     kategori: "Jadwal"
     pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 54"
     sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
@@ -319,7 +330,7 @@ rules:
       - "compressed\\s+timeline"
       - "jadwal\\s+mepet"
       - "terlalu\\s+mepet"
-      - "(?:pemasukan\\s+penawaran|masa\\s+sanggah)[\\s\\S]{0,120}?(?:hanya\\s+)?(?:satu|dua|tiga|empat|lima|enam|\\d+)\\s*hari\\s*(?:kerja|kalender)"
+      - "(?:pemasukan\\s+penawaran|masa\\s+sanggah|bidding\\s+period|submission\\s+deadline|tender\\s+duration|objection\\s+period)[\\s\\S]{0,120}?(?:hanya\\s+|only\\s+)?(?:satu|dua|tiga|empat|lima|enam|one|two|three|four|five|six|\\d+)\\s*(?:hari\\s*(?:kerja|kalender)?|(?:working\\s+|calendar\\s+)?days?)"
     pengecualian_regex: []
     severity: "HIGH"
     rekomendasi_template: "Masa penyusunan penawaran atau masa sanggah berada di bawah batas waktu standar LKPP."
@@ -410,7 +421,9 @@ rules:
     pola_regex:
       - "denda.*keterlambatan"
       - "sanksi\\s+keterlambatan"
+      - "liquidated\\s+damages"
+      - "delay\\s+penalty"
     pengecualian_regex:
-      - "(?:maksimum|maksimal|paling\\s+tinggi|dibatasi\\s+sebesar|batas\\s+maksimal)\\D{0,40}\\d+(?:[.,]\\d+)?\\s*%"
+      - "(?:maksimum|maksimal|paling\\s+tinggi|dibatasi\\s+sebesar|batas\\s+maksimal|maximum|capped\\s+at|up\\s+to|not\\s+exceeding|limit(?:ed)?\\s+to)\\D{0,40}\\d+(?:[.,]\\d+)?\\s*%"
     severity: "HIGH"
     rekomendasi_template: "Klausul denda tanpa batas maksimal membahayakan kelangsungan penyedia; ajukan klausul batas maksimal 5%."

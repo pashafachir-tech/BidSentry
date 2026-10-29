@@ -7,7 +7,7 @@ from typing import Any
 
 
 _RATE = re.compile(r"(?P<n>\d+(?:[.,]\d+)?)\s*/\s*(?P<d>\d{3,})|(?P<per_mille>\d+(?:[.,]\d+)?)\s*(?:‰|permil|per\s*mille)|(?P<pct>\d+(?:[.,]\d+)?)\s*%", re.I)
-_CAP = re.compile(r"(?:maksimum|maksimal|paling\s+tinggi|batas\s+(?:maksimum|paling\s+tinggi)|tidak\s+lebih\s+dari|dibatasi\s+sebesar)\D{0,40}(\d+(?:[.,]\d+)?)\s*%", re.I)
+_CAP = re.compile(r"(?:maksimum|maksimal|paling\s+tinggi|batas\s+(?:maksimum|paling\s+tinggi)|tidak\s+lebih\s+dari|dibatasi\s+sebesar|maximum|capped\s+at|up\s+to|not\s+exceeding|limit(?:ed)?\s+to)\D{0,40}(\d+(?:[.,]\d+)?)\s*%", re.I)
 
 
 def _decimal(value: str) -> float:
@@ -45,7 +45,7 @@ def calculate_penalty_scenarios(
     if not 0 < statutory_daily_rate < 1 or not 0 < illustrative_cap_percentage <= 1:
         raise ValueError("Penalty rate and cap must be within valid percentage bounds")
     lines = [line.strip() for line in clause_text.splitlines() if line.strip()]
-    penalty_lines = [line for line in lines if re.search(r"denda|sanksi\s+keterlambatan|liquidated\s+damages", line, re.I)]
+    penalty_lines = [line for line in lines if re.search(r"denda|sanksi\s+keterlambatan|liquidated\s+damages|delay\s+penalty", line, re.I)]
     clause = " ".join(penalty_lines)[:1200]
     contract_rate = _parse_rate(clause) if clause else None
     cap_match = _CAP.search(clause) if clause else None

@@ -187,15 +187,22 @@ _WORD_NUMBERS = {
     "satu": 1, "dua": 2, "tiga": 3, "empat": 4, "lima": 5, "enam": 6, "tujuh": 7, "delapan": 8, "sembilan": 9, "sepuluh": 10,
     "sebelas": 11, "dua belas": 12, "tiga belas": 13, "empat belas": 14, "lima belas": 15
 }
+_EN_WORD_NUMBERS = {
+    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10,
+    "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15
+}
 
 
 def _parse_days_count(text: str) -> int | None:
-    """Parse duration in days from text supporting both digits and Indonesian word numerals."""
-    m = re.search(r"(\d+)(?:\s*\([A-Za-z]+\))?\s*hari\s*(?:kerja|kalender)?", text, re.I)
+    """Parse duration in days from text supporting both digits and ID/EN word numerals."""
+    m = re.search(r"(\d+)(?:\s*\([A-Za-z]+\))?\s*(?:hari\s*(?:kerja|kalender)?|(?:working\s+|calendar\s+)?days?)", text, re.I)
     if m:
         return int(m.group(1))
     for word, num in _WORD_NUMBERS.items():
         if re.search(rf"\b{word}\s*hari\s*(?:kerja|kalender)?", text, re.I):
+            return num
+    for word, num in _EN_WORD_NUMBERS.items():
+        if re.search(rf"\b{word}\s*(?:working\s+|calendar\s+)?days?", text, re.I):
             return num
     return None
 
@@ -227,11 +234,12 @@ def _parse_idr_amount(text: str) -> float | None:
 
 _ANTI_EQUIV_PATTERNS = [
     re.compile(r"(?:tidak\s+(?:menerima|mengizinkan|diperkenankan|boleh|dapat)|tanpa|dilarang|bukan|menolak)\s+(?:opsi\s+|produk\s+|barang\s+|tipe\s+)?(?:setara|ekuivalen|equivalent)", re.I),
-    re.compile(r"(?:setara|ekuivalen|equivalent)\s+(?:tidak\s+diterima|tidak\s+diakomodir|ditolak|dilarang|gugur)", re.I),
+    re.compile(r"(?:setara|ekuivalen|equivalent)\s+(?:tidak\s+diterima|tidak\s+diakomodir|ditolak|dilarang|gugur|not\s+accepted|not\s+allowed|strictly\s+prohibited)", re.I),
+    re.compile(r"(?:no|without|strictly\s+no)\s+(?:equivalent|alternative|substitution)\s+(?:accepted|allowed)?", re.I),
 ]
 
 _EQUIV_PHRASE_PAT = re.compile(
-    r"(?:atau\s+(?:[a-z0-9_-]+\s+){0,6}(?:yang\s+)?setara|atau\s+ekuivalen|atau\s+sepadan|or\s+equivalent|produk\s+setara|dapat\s+diganti\s+setara|\bekuivalen\b|\bequivalent\b)",
+    r"(?:atau\s+(?:[a-z0-9_-]+\s+){0,6}(?:yang\s+)?setara|atau\s+ekuivalen|atau\s+sepadan|or\s+equivalent|produk\s+setara|dapat\s+diganti\s+setara|\bekuivalen\b|\bequivalent\b|equal\s+or\s+better|acceptable\s+alternative)",
     re.I
 )
 
@@ -497,6 +505,8 @@ class EvaluationEngine:
         general_lockin_pat = (
             r"(?i)\b(?:wajib|harus|hanya\s+(?:menerima)?)\s+(?:merek|merk|brand)\s+[A-Za-z0-9_-]+|"
             r"\b(?:wajib|harus|hanya\s+menerima|mengunci\s+ke)\s+(?:merek|merk|brand|tipe|kendaraan|mobil|laptop|server|perangkat|komputer)?\s*(?:Lenovo|ThinkPad|Toyota|Innova|Dell|HP|HPE|Cisco|Oracle|Apple|MacBook|Asus|Acer|Samsung|Huawei)\b|"
+            r"\b(?:must\s+be|exclusive\s+use\s+of)\s+[A-Za-z0-9_-]+|"
+            r"\bonly\s+[A-Za-z0-9_-]+\s+accepted\b|"
             r"vendor-tailored|mengarah(?:kan)?\s+spesifikasi|mengunci\s+(?:ke\s+)?(?:produk|merek|platform|vendor)"
         )
         general_lockin = _line_find(requirement_lines, general_lockin_pat)
@@ -536,9 +546,15 @@ class EvaluationEngine:
         min_bidding_days = int(get_threshold("min_bidding_days", 7))
         min_sanggah_days = int(get_threshold("min_sanggah_days", 5))
 
-        timeline_redflag = _line_find(requirement_lines, r"compressed\s+timeline|jadwal\s+mepet|terlalu\s+mepet")
-        bid_prep_match = _line_find(requirement_lines, r"(?:penyusunan\s+dokumen\s+penawaran|pemasukan\s+penawaran)[\s\S]{0,120}?(?:hanya\s+)?(\d+|[A-Za-z]+)(?:\s*\([A-Za-z]+\))?\s*hari\s*(?:kerja|kalender)")
-        sanggah_match = _line_find(requirement_lines, r"masa\s+sanggah[\s\S]{0,120}?(?:hanya\s+)?(\d+|[A-Za-z]+)(?:\s*\([A-Za-z]+\))?\s*hari\s*(?:kerja|kalender)")
+        timeline_redflag = _line_find(requirement_lines, r"compressed\s+timeline|jadwal\s+mepet|terlalu\s+mepet|unrealistic\s+bidding\s+window|tight\s+deadline")
+        bid_prep_match = _line_find(
+            requirement_lines,
+            r"(?:penyusunan\s+dokumen\s+penawaran|pemasukan\s+penawaran|bidding\s+period|submission\s+deadline|tender\s+duration)[\s\S]{0,120}?(?:hanya\s+|only\s+)?(\d+|[A-Za-z]+)(?:\s*\([A-Za-z]+\))?\s*(?:hari\s*(?:kerja|kalender)?|(?:working\s+|calendar\s+)?days?)"
+        )
+        sanggah_match = _line_find(
+            requirement_lines,
+            r"(?:masa\s+sanggah|objection\s+period|appeal\s+period)[\s\S]{0,120}?(?:hanya\s+|only\s+)?(\d+|[A-Za-z]+)(?:\s*\([A-Za-z]+\))?\s*(?:hari\s*(?:kerja|kalender)?|(?:working\s+|calendar\s+)?days?)"
+        )
 
         timeline_issues: list[str] = []
         if bid_prep_match:
@@ -619,19 +635,32 @@ class EvaluationEngine:
             requirement_lines,
             r"(?i)keanggotaan\s+asosiasi\s+regional|ADCR-Jabar|asosiasi.*regional.*jawa\s+barat|Gold\s+Partner|asosiasi\s+data\s+center\s+regional|"
             r"(?:asosiasi|domisili|keberadaan\s+kantor|khusus\s+penyedia)\s+(?:lokal|daerah|[A-Z][a-z]+|wilayah\s+[A-Z][a-z]+|Kalsel|Jabar|Jateng|Jatim|DKI)\s+(?:saja|wajib|mutlak|diwajibkan)|"
-            r"(?:wajib|harus)\s+(?:berdomisili|memiliki\s+kantor(?:\s+cabang)?)\s+di\s+(?:wilayah|daerah|[A-Z][a-z]+|Kalsel|Jabar|Jateng|Jatim)"
+            r"(?:wajib|harus|diwajibkan)\s+(?:berdomisili|memiliki\s+(?:kantor|fasilitas)(?:\s+(?:operasional|perwakilan|cabang))?)\s+di\s+(?:wilayah|daerah|[A-Za-z]+)|"
+            r"(?:memiliki|wajib\s+memiliki|harus\s+memiliki)\s+kantor\s+(?:perwakilan|cabang)(?:\s+di\s+[A-Za-z]+)?|"
+            r"anggota\s+KADIN\s+(?:Kota|Kabupaten|Provinsi)(?:\s+[A-Za-z]+)?|"
+            r"(?:keanggotaan\s+asosiasi|anggota\s+(?:asosiasi|kadin|gapensi|akli|infindo|hipmi))\s+(?:pengusaha\s+)?(?:lokal|daerah|regional|(?:kota|kabupaten|provinsi))|"
+            r"asosiasi\s+pengusaha\s+lokal"
         )
         if regional_assoc_match:
-            findings.append(_finding(
-                "SPEC-REGIONAL-LOCKIN",
-                "Persyaratan Asosiasi Regional Diskriminatif (Regional Lock-in)",
-                "Kualifikasi",
-                "GAP",
-                regional_assoc_match,
-                ("Dokumen pemilihan", regional_assoc_match[1]),
-                "Persyaratan keanggotaan asosiasi regional tertentu (seperti ADCR-Jabar status Gold Partner) atau pembatasan domisili bersifat diskriminatif dan membatasi akses penyedia nasional berkualifikasi dari luar daerah. Melanggar Pasal 6 huruf c dan e serta Pasal 19 Perpres 12/2021 tentang prinsip non-diskriminasi dan keterbukaan persaingan.",
-                "HIGH",
+            is_legit_site = bool(re.search(
+                r"(?i)\b(?:lokasi\s+pekerjaan|pekerjaan\s+dilaksanakan|tempat\s+pelaksanaan|workshop|bengkel\s+kerja|kantor\s+lapangan|fasilitas\s+pembuangan|lokasi\s+proyek)\s+(?:berada\s+)?di\b",
+                regional_assoc_match[1]
             ))
+            has_explicit_legal_restriction = bool(re.search(
+                r"(?i)\b(?:wajib\s+berdomisili|harus\s+berdomisili|keanggotaan\s+asosiasi|anggota\s+KADIN|asosiasi\s+pengusaha\s+lokal|ADCR-Jabar|kantor\s+(?:cabang|perwakilan))\b",
+                regional_assoc_match[1]
+            ))
+            if not is_legit_site or (has_explicit_legal_restriction and not re.search(r"(?i)\b(?:workshop|bengkel\s+kerja|kantor\s+lapangan)\b", regional_assoc_match[1])):
+                findings.append(_finding(
+                    "SPEC-REGIONAL-LOCKIN",
+                    "Persyaratan Asosiasi Regional Diskriminatif (Regional Lock-in)",
+                    "Kualifikasi",
+                    "GAP",
+                    regional_assoc_match,
+                    ("Dokumen pemilihan", regional_assoc_match[1]),
+                    "Persyaratan keanggotaan asosiasi regional tertentu (seperti ADCR-Jabar status Gold Partner), keanggotaan KADIN daerah, pembatasan domisili, atau kewajiban kantor cabang daerah bersifat diskriminatif dan membatasi akses penyedia nasional berkualifikasi dari luar daerah. Melanggar Pasal 6 huruf c dan e serta Pasal 19 Perpres 12/2021 tentang prinsip non-diskriminasi dan keterbukaan persaingan.",
+                    "HIGH",
+                ))
 
         # 14. Restrictive Incumbent Experience Lock-in
         incumbent_match = _line_find(requirement_lines, r"tepat\s+\d+\s*rack|merek\s+inkumben|merek\s+tertentu\s*\(sebutkan\s+merek\s+inkumben\)|kapasitas\s+40\s+atau\s+60.*tidak\s+akan\s+diterima|hanya\s+pengalaman\s+yang\s+memenuhi\s+SEMUA\s+kriteria")

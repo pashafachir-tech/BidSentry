@@ -1,4 +1,8 @@
-"""Tests for generalized detection rules, PII scrubbing, audit log hash chaining, and watsonx preflight guardrails."""
+"""Tests for generalized detection rules, PII scrubbing, audit log hash chaining, watsonx preflight guardrails,
+and newly expanded regional discrimination and English clause suites.
+"""
+
+from __future__ import annotations
 
 import json
 import tempfile
@@ -183,3 +187,283 @@ class TestWatsonxPreflightGuardrails:
         assert preflight["grounding_check"]["verbatim_grounded"] == 1
         assert preflight["grounding_check"]["unverified_or_rejected"] == 1
         assert preflight["pii_scrubbing"]["unmasked_pii_detected"] is False
+
+
+# ===========================================================================
+# Expanded Generalized Rule Suites (Tugas 4.1 & 4.2)
+# ===========================================================================
+
+class TestExpandedRegionalDiscrimination:
+    def test_regional_lockin_positive_domicile(self, engine: EvaluationEngine) -> None:
+        """Positive: Mandating legal domicile in a specific province/region must trigger NO-GO."""
+        req = EvaluationRequest(
+            package_name="Pengadaan Jasa Konsultansi Perencanaan",
+            tender_id="TND-REG-01",
+            dok_pemilihan=(
+                "Kualifikasi Penyedia:\n"
+                "Penyedia wajib berdomisili di wilayah Jawa Barat dan melampirkan surat domisili resmi.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-REGIONAL-LOCKIN" in gap_ids
+
+    def test_regional_lockin_positive_branch_and_kadin(self, engine: EvaluationEngine) -> None:
+        """Positive: Requiring local branch office and local chamber membership must trigger NO-GO."""
+        req = EvaluationRequest(
+            package_name="Pekerjaan Pemeliharaan Gedung",
+            tender_id="TND-REG-02",
+            dok_pemilihan=(
+                "Kualifikasi Peserta:\n"
+                "Penyedia harus memiliki kantor cabang di Surabaya dan terdaftar sebagai anggota KADIN Kota Surabaya.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-REGIONAL-LOCKIN" in gap_ids
+
+    def test_regional_lockin_trap_legitimate_workshop(self, engine: EvaluationEngine) -> None:
+        """False-positive Trap: Legitimate physical site requirement (workshop/bengkel) must PASS as GO."""
+        req = EvaluationRequest(
+            package_name="Pengadaan Sewa dan Pemeliharaan Alat Berat",
+            tender_id="TND-REG-03",
+            dok_pemilihan=(
+                "Ketentuan Fasilitas:\n"
+                "Lokasi pekerjaan di Kota Bandung. Penyedia harus memiliki workshop/bengkel kerja di lokasi pekerjaan untuk perawatan teknis berkala.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-REGIONAL-LOCKIN" not in gap_ids
+
+    def test_regional_lockin_trap_project_execution_site(self, engine: EvaluationEngine) -> None:
+        """False-positive Trap: Mentioning geographic location of project site must PASS as GO."""
+        req = EvaluationRequest(
+            package_name="Pembangunan Dermaga Pelabuhan",
+            tender_id="TND-REG-04",
+            dok_pemilihan=(
+                "Lingkup Pekerjaan:\n"
+                "Pekerjaan dilaksanakan di area pelabuhan Tanjung Perak Surabaya. Tempat pelaksanaan pekerjaan di Jawa Timur.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-REGIONAL-LOCKIN" not in gap_ids
+
+
+class TestExpandedEnglishTimeline:
+    def test_english_timeline_positive_compressed_period(self, engine: EvaluationEngine) -> None:
+        """Positive: Compressed bidding and objection periods in English must trigger NO-GO."""
+        req = EvaluationRequest(
+            package_name="Server Infrastructure Procurement",
+            tender_id="TND-EN-TIME-01",
+            dok_pemilihan=(
+                "Procurement Schedule:\n"
+                "Tender timeline: bidding period 3 working days, objection period 2 working days.\n"
+                "All submissions must be uploaded via the electronic procurement system."
+            ),
+            contract_draft="Liquidated damages of 1/1000 per day capped at 5% of contract value.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "PROC-TIMELINE-COMPRESSED" in gap_ids
+
+    def test_english_timeline_positive_submission_deadline(self, engine: EvaluationEngine) -> None:
+        """Positive: Short submission deadline in English must trigger NO-GO."""
+        req = EvaluationRequest(
+            package_name="Data Center Network Upgrade",
+            tender_id="TND-EN-TIME-02",
+            dok_pemilihan=(
+                "Instructions to Bidders:\n"
+                "The submission deadline is only 4 days from announcement date.\n"
+                "Objection period is 5 working days."
+            ),
+            contract_draft="Liquidated damages of 1/1000 per day capped at 5% of contract value.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "PROC-TIMELINE-COMPRESSED" in gap_ids
+
+    def test_english_timeline_trap_adequate_working_days(self, engine: EvaluationEngine) -> None:
+        """False-positive Trap: Adequate bidding and objection periods in English must PASS as GO."""
+        req = EvaluationRequest(
+            package_name="Core Switch Modernization",
+            tender_id="TND-EN-TIME-03",
+            dok_pemilihan=(
+                "Procurement Schedule:\n"
+                "Tender timeline: bidding period 10 working days, objection period 7 working days.\n"
+                "Electronic documents will be accepted until 17:00 WIB."
+            ),
+            contract_draft="Liquidated damages of 1/1000 per day capped at 5% of contract value.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "PROC-TIMELINE-COMPRESSED" not in gap_ids
+
+    def test_english_timeline_trap_adequate_calendar_days(self, engine: EvaluationEngine) -> None:
+        """False-positive Trap: Adequate submission window (14 calendar days) must PASS as GO."""
+        req = EvaluationRequest(
+            package_name="Cloud Security Assessment",
+            tender_id="TND-EN-TIME-04",
+            dok_pemilihan=(
+                "Tender Rules:\n"
+                "The submission deadline is 14 calendar days from announcement. Objection period is 7 working days."
+            ),
+            contract_draft="Liquidated damages of 1/1000 per day capped at 5% of contract value.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "PROC-TIMELINE-COMPRESSED" not in gap_ids
+
+
+class TestExpandedEnglishBrandLockin:
+    def test_english_brand_lockin_positive_must_be(self, engine: EvaluationEngine) -> None:
+        """Positive: 'must be [brand], only [brand] accepted' without equivalency must trigger NO-GO."""
+        req = EvaluationRequest(
+            package_name="Enterprise Server Expansion",
+            tender_id="TND-EN-LOCK-01",
+            dok_pemilihan=(
+                "Hardware Specifications:\n"
+                "The server must be Dell PowerEdge R760, and only Dell accepted without alternative.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert any(x in gap_ids for x in ("SPEC-BRAND-LOCKIN", "SPEC-LOCKIN-MGMT"))
+
+    def test_english_brand_lockin_positive_exclusive_use(self, engine: EvaluationEngine) -> None:
+        """Positive: 'exclusive use of Cisco switches' without substitution must trigger NO-GO."""
+        req = EvaluationRequest(
+            package_name="Campus Network Backbone",
+            tender_id="TND-EN-LOCK-02",
+            dok_pemilihan=(
+                "Network Equipment Requirements:\n"
+                "Exclusive use of Cisco switches without substitution is required.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert any(x in gap_ids for x in ("SPEC-LOCKIN-NETWORKING", "SPEC-BRAND-LOCKIN"))
+
+    def test_english_brand_lockin_trap_equal_or_better(self, engine: EvaluationEngine) -> None:
+        """False-positive Trap: 'or equivalent with equal or better specifications' must PASS as GO."""
+        req = EvaluationRequest(
+            package_name="Compute Node Expansion",
+            tender_id="TND-EN-LOCK-03",
+            dok_pemilihan=(
+                "Technical Requirements:\n"
+                "The server must be Dell PowerEdge R760, or equivalent with equal or better specifications.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" not in gap_ids
+
+    def test_english_brand_lockin_trap_acceptable_alternative(self, engine: EvaluationEngine) -> None:
+        """False-positive Trap: 'or acceptable alternative' compliant with IEEE standards must PASS as GO."""
+        req = EvaluationRequest(
+            package_name="Distribution Switch Upgrade",
+            tender_id="TND-EN-LOCK-04",
+            dok_pemilihan=(
+                "Switching Specifications:\n"
+                "Exclusive use of Cisco switches or acceptable alternative meeting open IEEE standards.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" not in gap_ids
+        assert "SPEC-LOCKIN-NETWORKING" not in gap_ids
+
+
+class TestExpandedEnglishLiquidatedDamages:
+    def test_english_penalty_positive_without_limit(self, engine: EvaluationEngine) -> None:
+        """Positive: 'liquidated damages of 1% per day without limit' must trigger NO-GO."""
+        req = EvaluationRequest(
+            package_name="Custom Software Development",
+            tender_id="TND-EN-PEN-01",
+            dok_pemilihan="Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja.",
+            contract_draft=(
+                "General Conditions of Contract:\n"
+                "Liquidated damages of 1% per day without limit for any delay in project milestone."
+            ),
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "CON-PENALTY" in gap_ids
+
+    def test_english_penalty_positive_uncapped(self, engine: EvaluationEngine) -> None:
+        """Positive: 'delay penalty: liquidated damages ... uncapped' must trigger NO-GO."""
+        req = EvaluationRequest(
+            package_name="ERP Customization Services",
+            tender_id="TND-EN-PEN-02",
+            dok_pemilihan="Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja.",
+            contract_draft=(
+                "Penalties and Sanctions:\n"
+                "Delay penalty: liquidated damages of 0.2% per day uncapped and without maximum limit."
+            ),
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "CON-PENALTY" in gap_ids
+
+    def test_english_penalty_trap_capped_at_five_percent(self, engine: EvaluationEngine) -> None:
+        """False-positive Trap: 'liquidated damages ... capped at 5%' must PASS as GO."""
+        req = EvaluationRequest(
+            package_name="Mobile Banking Maintenance",
+            tender_id="TND-EN-PEN-03",
+            dok_pemilihan="Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja.",
+            contract_draft=(
+                "Terms of Agreement:\n"
+                "Liquidated damages of 0.1% per day, capped at 5% of total contract value."
+            ),
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "CON-PENALTY" not in gap_ids
+
+    def test_english_penalty_trap_maximum_cap(self, engine: EvaluationEngine) -> None:
+        """False-positive Trap: 'liquidated damages ... up to a maximum 5%' must PASS as GO."""
+        req = EvaluationRequest(
+            package_name="Cloud Migration Engineering",
+            tender_id="TND-EN-PEN-04",
+            dok_pemilihan="Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja.",
+            contract_draft=(
+                "Remedies for Delay:\n"
+                "Liquidated damages of 1/1000 per day up to a maximum 5% of the contract price."
+            ),
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "CON-PENALTY" not in gap_ids
