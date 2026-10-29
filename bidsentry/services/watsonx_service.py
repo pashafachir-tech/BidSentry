@@ -24,7 +24,10 @@ class WatsonxService:
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.default_model_id = self.settings.llm_model_name or "ibm/granite-3-8b-instruct"
+
+    @property
+    def default_model_id(self) -> str:
+        return getattr(self.settings, "watsonx_model_id", "") or self.settings.llm_model_name or "ibm/granite-3-8b-instruct"
 
     @property
     def is_configured(self) -> bool:
