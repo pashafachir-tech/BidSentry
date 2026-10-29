@@ -149,6 +149,44 @@ Penyebab rendahnya metrik per-aturan terbukti bersumber dari dua faktor empiris 
    - *Masalah*: Dokumen pengujian hanya melampirkan teks narasi anggaran tanpa melampirkan berkas bukti legalitas penyedia (slot NIB, NPWP kosong). Sesuai kebijakan verdict deterministik yang ketat, ketiadaan bukti dokumen legalitas memicu evaluasi administratif yang menurunkan verdict menjadi `BELUM CUKUP BUKTI`.
    - *Status Kasus `blind_07`*: Sebelumnya `blind_07` tercatat sebagai mismatch vonis (Actual `NO-GO`). Namun investigasi empiris membuktikan hal tersebut bukan disebabkan oleh ketiadaan berkas administratif, melainkan murni akibat bug parser batas denda yang gagal menangkap frasa "batas maksimal 5 persen". Setelah parser diperbaiki, `blind_07` kini 100% MATCH (`GO`).
 
+### 3. Keterbatasan Trap Evasion pada Set Lama & Hasil Evaluasi Trap Set v2
+
+Berdasarkan audit otomatis label uji melalui skrip [`scripts/audit_benchmark_labels.py`](../scripts/audit_benchmark_labels.py), ditemukan keterbatasan metodologis serius pada evaluasi jebakan (*Trap Evasion*) di Validation Set v1:
+
+1. **Keberadaan Rule ID "Hantu" (Phantom IDs) pada Label Lama**:
+   - Dari 12 total rule ID unik yang tercatat pada label `data/test_blind/` dan `data/test_narrative_budget/`, sebanyak **6 ID (50.0%) adalah ID hantu** yang tidak pernah ada di kamus engine (`config/rules.yaml` maupun `engine.py`).
+   - Contoh nyata: `SPEC-LOCKIN-PROC`, `PROC-TIMELINE-PREP`, `PROC-TIMELINE-SANGGAH`, `FIN-HPS-OVER-PAGU`, `FIN-BILLING-RATE`, dan `GOV-CONFLICT-INTEREST`.
+   - **Dampak Metodologis**: Pada dokumen jebakan seperti `blind_05` dan `blind_10`, daftar `forbidden_findings` seluruhnya diisi oleh ID hantu tersebut. Karena engine tidak memiliki aturan dengan ID tersebut, kondisi pelanggaran terlarang **tidak akan pernah bisa terpicu**. Hal ini menyebabkan klaim Trap Evasion 100% pada set v1 bersifat semu (*trivial pass*), bukan pembuktian ketahanan semantik engine.
+
+2. **Pengujian Tandingan Mandiri: Traps Suite v2 (10 Dokumen Baru)**:
+   Untuk menguji ketahanan jebakan secara objektif dan jujur tanpa memanipulasi file lama, disusun rangkaian uji baru di `data/test_traps_v2/` yang dievaluasi dengan skrip [`tests/benchmark_traps_v2.py`](../tests/benchmark_traps_v2.py). Karakteristik rangkaian v2:
+   - Seluruh `forbidden_findings` dan `expected_findings` **100% menggunakan ID aturan yang valid** dan aktif di engine.
+   - Terdiri dari 9 skenario jebakan red flag umum: variasi denda berbatas (`trap_01`), klausul merek setara (`trap_02`), batas normatif pagu/hps (`trap_03`), pakta integritas anti-KKN (`trap_04`), penyebutan lokasi pekerjaan non-diskriminatif (`trap_05`), syarat SNI dan TKDN (`trap_06`), jadwal standar LKPP (`trap_07`), workshop lapangan relevan (`trap_08`), dan klausul bahasa Inggris (`trap_09`).
+   - Dilengkapi **1 kontrol positif** (`trap_10`) yang memuat pelanggaran nyata (*vendor lock-in* mutlak tanpa alternatif dan denda tanpa batas) yang **wajib divonis NO-GO** untuk memastikan rangkaian uji tidak memiliki bias meloloskan segalanya (*all-pass bias*).
+
+#### Hasil Evaluasi Traps Suite v2 (`tests/benchmark_traps_v2.py`)
+
+- **Total Dokumen Uji**: 10 Dokumen Baru
+- **Verdict Accuracy**: **100.0%** (10 dari 10 dokumen terklasifikasi tepat)
+- **Trap Evasion Rate**: **100.0%** (9 dari 9 skenario jebakan berhasil lolos tanpa false alarm)
+- **Positive Control Catch**: **1/1** (Kontrol positif `trap_10` berhasil ditolak dengan vonis `NO-GO` dan red flags `SPEC-BRAND-LOCKIN` & `CON-PENALTY`)
+- **Macro Precision**: 100.0%
+- **Macro Recall**: 100.0%
+- **Macro F1 Score**: 100.0%
+
+| ID Dokumen | Judul Skenario Jebakan | Expected | Actual | Status Evaluasi | Keterangan Uji |
+|---|---|:---:|:---:|:---:|---|
+| `trap_01` | Denda Berbatas Ragam Satuan (5 Persen / Paling Banyak 5%) | `GO` | `GO` | **MATCH (TRAP)** | Lolos tanpa false positive `CON-PENALTY` |
+| `trap_02` | Spesifikasi Merek Terkenal Diikuti "atau Setara" | `GO` | `GO` | **MATCH (TRAP)** | Lolos tanpa false positive `SPEC-BRAND-LOCKIN` |
+| `trap_03` | Kalimat Normatif Pagu & HPS Tanpa Defisit | `GO` | `GO` | **MATCH (TRAP)** | Lolos tanpa false positive `FIN-OVER-BUDGET` |
+| `trap_04` | Pakta Integritas Komitmen Anti-KKN & Bebas CoI | `GO` | `GO` | **MATCH (TRAP)** | Lolos tanpa false alarm benturan kepentingan |
+| `trap_05` | Lokasi Pekerjaan Lapangan Tanpa Syarat Domisili | `GO` | `GO` | **MATCH (TRAP)** | Lolos tanpa false positive `DISC-GEO-DOMICILE` |
+| `trap_06` | Standar Mutu SNI & Sertifikasi TKDN Kemenperin | `GO` | `GO` | **MATCH (TRAP)** | Lolos tanpa false positive brand lock-in |
+| `trap_07` | Jadwal Pemilihan Standar LKPP (7 Hari & 5 Hari) | `GO` | `GO` | **MATCH (TRAP)** | Lolos tanpa false alarm jadwal mepet |
+| `trap_08` | Fasilitas Workshop Lapangan yang Relevan | `GO` | `GO` | **MATCH (TRAP)** | Lolos tanpa false positive diskriminasi cabang |
+| `trap_09` | Klausul Kontrak Bahasa Inggris (Capped & Equivalent) | `GO` | `GO` | **MATCH (TRAP)** | Lolos tanpa false alarm penalti atau merek |
+| `trap_10` | Kontrol Positif: Lock-in Mutlak & Denda Tanpa Batas | `NO-GO` | `NO-GO` | **MATCH (CONTROL)** | Berhasil ditolak NO-GO dengan temuan red flags sah |
+
 ---
 
 ## BAGIAN V: Cara Menjalankan Ulang Seluruh Benchmark
@@ -162,4 +200,10 @@ python tests/benchmark_blind.py
 
 # 3. Jalankan benchmark Narrative Budget Test Set Baru (5 dokumen)
 python tests/benchmark_budget_narrative.py
+
+# 4. Jalankan benchmark Traps Suite v2 Baru (10 dokumen)
+python tests/benchmark_traps_v2.py
+
+# 5. Jalankan audit integritas label benchmark
+python scripts/audit_benchmark_labels.py
 ```
