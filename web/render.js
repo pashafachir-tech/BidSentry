@@ -23,6 +23,7 @@ function icon(name) {
     refresh: '<path d="M20 7v5h-5M4 17v-5h5"/><path d="M5.6 9A7 7 0 0 1 17 6l3 6M4 12l3 6a7 7 0 0 0 11.4-3"/>',
     close: '<path d="m18 6-12 12M6 6l12 12"/>',
     file: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>',
+    folder: '<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>',
   };
   return `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round">${paths[name] || paths.audit}</svg>`;
 }
@@ -102,22 +103,46 @@ export function renderApp(state) {
     <div class="app-shell">
       <aside class="sidebar">
         <a class="brand" href="/" aria-label="BidSentry beranda"><span class="brand-name"><strong>BidSentry</strong><small>INTELIJEN PENGADAAN</small></span></a>
-        <div class="workspace-switch"><span><strong>Ruang kerja</strong><small>Pengadaan publik</small></span><span class="chevron">⌄</span></div>
-        <p class="nav-label">RUANG KERJA</p>
-        <nav class="primary-nav" aria-label="Navigasi utama">
-          <button class="nav-item ${state.activeView === "overview" ? "active" : ""}" data-action="view-overview">${icon("overview")}<span>Ringkasan</span><kbd>01</kbd></button>
-          <button class="nav-item ${state.activeView === "audits" ? "active" : ""}" data-action="focus-audits">${icon("audit")}<span>Daftar pengajuan</span><kbd>${number(overview.total_audits || 0)}</kbd></button>
-          <button class="nav-item ${state.activeView === "review" ? "active" : ""}" data-action="focus-review">${icon("shield")}<span>Hasil evaluasi</span></button>
+        
+        <div class="sidebar-action-wrap">
+          <button type="button" class="button-new-project" data-action="new-audit" title="Mulai pemeriksaan tender baru">
+            ${icon("plus")}
+            <span>Add new project</span>
+          </button>
+        </div>
+
+        <div class="project-section-header">
+          <span class="project-label">PROJECTS</span>
+          <span class="project-badge">${number(allAudits.length)}</span>
+        </div>
+
+        <nav class="projects-nav" aria-label="Daftar folder proyek">
+          ${allAudits.length === 0 ? `
+            <div class="projects-empty">
+              <span>${icon("folder")}</span>
+              <p>Belum ada proyek tersimpan.</p>
+            </div>
+          ` : allAudits.map((row) => `
+            <button type="button" class="project-folder-item ${row.audit_id === state.selectedAuditId ? "is-active" : ""}" data-action="select-project" data-audit-id="${escapeHtml(row.audit_id)}" title="${escapeHtml(row.package_name)}">
+              <span class="project-folder-icon">${icon("folder")}</span>
+              <span class="project-folder-info">
+                <strong class="project-folder-title">${escapeHtml(row.package_name)}</strong>
+                <small class="project-folder-meta">${escapeHtml(row.tender_id || "Proyek")} · ${riskMeta[row.risk_level]?.label || "Sedang"}</small>
+              </span>
+              <span class="package-dot ${riskMeta[row.risk_level]?.css || "risk-medium"}"></span>
+            </button>
+          `).join("")}
         </nav>
-        <div class="sidebar-bottom"><div class="engine-status"><span class="status-dot"></span><div><strong>Mesin aturan lokal</strong><small>${escapeHtml(integrationCopy(state.integrations))}</small></div></div><div class="sidebar-footer"><span>BidSentry AI</span><span>v2.1</span></div></div>
+
+        <div class="sidebar-bottom"><div class="engine-status"><span class="status-dot"></span><div><strong>Mesin aturan lokal</strong><small>${escapeHtml(integrationCopy(state.integrations))}</small></div></div><div class="sidebar-footer"><span>BidSentry AI</span><span>v2.2</span></div></div>
       </aside>
 
       <main class="main-content">
-        <header class="topbar"><div class="breadcrumb"><span>Ruang kerja</span><span>/</span><strong>${activeViewLabel}</strong></div><div class="topbar-actions"><div class="perspective-toggle" role="radiogroup" aria-label="Mode Pengguna"><button type="button" class="perspective-btn ${state.userPerspective === 'pokja' ? 'is-active' : ''}" data-action="set-perspective" data-perspective="pokja" title="Mode Pokja / Auditor: Evaluasi Penawaran & Berita Acara">Pokja / Auditor</button><button type="button" class="perspective-btn ${state.userPerspective === 'vendor' ? 'is-active' : ''}" data-action="set-perspective" data-perspective="vendor" title="Mode Vendor: Pre-Flight Bid Readiness & Sanggahan">Vendor / Peserta</button></div><span class="live-indicator"><i></i>LOKAL</span><button class="button button-quiet button-small topbar-text-action" data-action="open-settings">Koneksi & Pengaturan</button><button class="icon-button" title="Ganti tema" aria-label="Ganti tema" data-action="theme-toggle">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button><button class="icon-button" title="Muat ulang data" aria-label="Muat ulang data" data-action="refresh">${icon("refresh")}</button></div></header>
+        <header class="topbar"><div class="breadcrumb"><span>Proyek</span><span>/</span><strong>${selected ? escapeHtml(selected.package_name) : "Semua Pemeriksaan"}</strong></div><div class="topbar-actions"><div class="perspective-toggle" role="radiogroup" aria-label="Mode Pengguna"><button type="button" class="perspective-btn ${state.userPerspective === 'pokja' ? 'is-active' : ''}" data-action="set-perspective" data-perspective="pokja" title="Mode Pokja / Auditor: Evaluasi Penawaran & Berita Acara">Pokja / Auditor</button><button type="button" class="perspective-btn ${state.userPerspective === 'vendor' ? 'is-active' : ''}" data-action="set-perspective" data-perspective="vendor" title="Mode Vendor: Pre-Flight Bid Readiness & Sanggahan">Vendor / Peserta</button></div><span class="live-indicator"><i></i>LOKAL</span><button class="button button-quiet button-small topbar-text-action" data-action="open-settings">Koneksi & Pengaturan</button><button class="icon-button" title="Ganti tema" aria-label="Ganti tema" data-action="theme-toggle">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button><button class="icon-button" title="Muat ulang data" aria-label="Muat ulang data" data-action="refresh">${icon("refresh")}</button></div></header>
         <div class="page-content">
           <section class="page-heading">
             <div>
-              <p class="eyebrow">INTELIJEN PENGADAAN <span>·</span> RUANG KERJA</p>
+              <p class="eyebrow">INTELIJEN PENGADAAN <span>·</span> AUDIT PROYEK</p>
               <h1>Pemeriksaan pengadaan</h1>
               <p class="page-intro">Bandingkan persyaratan, bukti penyedia, adendum, dan klausul kontrak secara otomatis dan jujur.</p>
             </div>
@@ -208,7 +233,7 @@ export function renderApp(state) {
             </article>
           </section>
 
-          <footer class="page-footer"><span>BidSentry <b>·</b> Ruang kerja pemeriksaan internal</span><span>Skor adalah indeks triase; periksa sumber aslinya</span></footer>
+          <footer class="page-footer"><span>BidSentry <b>·</b> Platform Intelijen Audit Pengadaan</span><span>Skor adalah indeks triase; periksa sumber aslinya</span></footer>
         </div>
       </main>
     </div>

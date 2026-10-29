@@ -991,7 +991,15 @@ document.addEventListener("click", async (event) => {
     return;
   }
 
-  if (action === "select-audit") selectAudit(target.dataset.auditId);
+  if (action === "select-audit" || action === "select-project") {
+    selectAudit(target.dataset.auditId);
+    if (action === "select-project") {
+      const reviewSection = document.getElementById("risk-review") || document.querySelector(".detail-card");
+      if (reviewSection) {
+        reviewSection.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    }
+  }
   if (action === "review-filter") setState({ reviewFilter: target.dataset.filter, expandedFindingId: null });
   if (action === "toggle-finding") setState({ expandedFindingId: getState().expandedFindingId === target.dataset.findingId ? null : target.dataset.findingId });
 
