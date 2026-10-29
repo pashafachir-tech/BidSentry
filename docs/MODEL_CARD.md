@@ -97,18 +97,20 @@ Sistem diuji dengan dua dataset terpisah:
    - Digunakan untuk memandu kalibrasi aturan deterministik.
    - Baseline awal: Akurasi Verdict 75.0%, Trap Evasion 77.8% (7/9).
    - Pasca-Penyetelan: Akurasi Verdict 100.0% (24/24), Trap Evasion 100.0% (9/9).
-2. **Validation Set v1 (10 Dokumen — label tidak diubah; engine dikalibrasi setelah putaran pertama dari 70% ke 90%)**:
-   - Diuji pertama kali menghasilkan akurasi 70.0% (7/10); pasca-kalibrasi kebijakan konservatif dan parser anggaran naik ke **90.0% (9/10 dokumen)**.
+2. **Validation Set v1 (10 Dokumen — label tidak diubah; 70% baseline -> 90% kalibrasi -> 100% post-audit fix)**:
+   - Diuji pertama kali menghasilkan akurasi 70.0% (7/10); pasca-kalibrasi kebijakan konservatif dan parser anggaran naik ke 90.0% (9/10); pasca-audit perbaikan bug parser denda kata ("persen") mencapai **100.0% (10/10 dokumen)** [post-audit fix].
    - **Trap Evasion Rate: 100.0% (3/3 skenario jebakan lolos tanpa false alarm)**.
-   - Menunjukkan keandalan tinggi pada klausul lock-in, jadwal mepet, dan denda kontrak, dengan keterbatasan yang diakui pada deteksi angka anggaran dalam format narasi bebas.
-   - Laporan perbandingan lengkap tercatat pada `docs/BENCHMARK_RESULTS.md`.
+   - Karena set ini telah diinspeksi strukturnya selama audit, hasil ini dicatat secara transparan sebagai perbaikan bug teknis, bukan uji buta murni.
+3. **Narrative Budget Set (5 Dokumen — format angka anggaran pada prosa bebas non-tabel)**:
+   - Akurasi Verdict: **80.0% (4/5 dokumen)**, Trap Evasion: **100.0% (1/1)**.
+   - Laporan perbandingan dan audit gap lengkap tercatat pada `docs/BENCHMARK_RESULTS.md`.
 
 ---
 
 ## 6. Batasan yang Diketahui (Known Limitations)
 
 1. **Macro Precision, Recall, dan F1 Rendah**:
-   - Pada Validation Set v1 (Macro Precision ≈15%, Recall ≈29%, F1 ≈20%) dan Narrative Budget Set (Macro Precision ≈25%, Recall ≈17%, F1 ≈20%), metrik evaluasi per-aturan relatif rendah. Hasil inspeksi empiris per-dokumen (lihat [`docs/BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md)) menunjukkan hal ini terutama disebabkan oleh diskrepansi penamaan ID aturan antara skema label pengujian dengan ID deklaratif engine, klausul sah tambahan di fixture draf kontrak yang tidak dilabeli, serta evaluasi administratif otomatis.
+   - Pada Validation Set v1 (Macro Precision ≈20.2%, Recall ≈28.6%, F1 ≈23.7%) dan Narrative Budget Set (Macro Precision ≈25.0%, Recall ≈16.7%, F1 ≈20.0%), metrik evaluasi per-aturan relatif rendah. Hasil inspeksi empiris per-dokumen (lihat [`docs/BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md)) menunjukkan hal ini terutama disebabkan oleh diskrepansi penamaan ID aturan antara skema label pengujian dengan ID deklaratif engine serta evaluasi administratif otomatis.
 2. **Cakupan Aturan Berbasis Pola Teks (Pattern-Based)**:
    - Logika deteksi mengandalkan ekspresi reguler deklaratif dan pencocokan teks substring; sistem tidak melakukan pemahaman semantik mendalam pada dokumen yang menggunakan metafora atau parafrasa kompleks tanpa model bahasa.
 3. **Keterbatasan Bahasa Dokumen**:

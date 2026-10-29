@@ -116,14 +116,14 @@ Seluruh angka di bawah dihitung secara dinamis dari eksekusi kode aktual tanpa m
 | Dataset Uji | Jumlah Dokumen | Akurasi Vonis | Trap Evasion (Lolos Jebakan) | Keterangan Metodologi |
 | :--- | :---: | :---: | :---: | :--- |
 | **Development Set** | **24 Dokumen** | **100.0%** | **100.0% (9/9)** | Dipakai memandu kalibrasi aturan deterministik. |
-| **Validation Set v1** | **10 Dokumen** | **90.0%** | **100.0% (3/3)** | Validation Set v1 (label tidak diubah; engine dikalibrasi setelah putaran pertama dari 70.0% ke 90.0%). |
+| **Validation Set v1** | **10 Dokumen** | **100.0%** | **100.0% (3/3)** | Validation Set v1 (label tidak diubah; 70.0% baseline -> 90.0% kalibrasi -> 100.0% post-audit fix). |
 | **Narrative Budget Set** | **5 Dokumen** | **80.0%** | **100.0% (1/1)** | Pengujian ekstraksi angka Pagu/BoQ pada prosa naratif bebas. |
 | **Real PDF Fixtures** | **2 PDF Multi-Halaman** | **100.0%** | **100.0%** | Tabel BoQ 15 item pekerjaan & KAK lengkap (PDF nyata). |
 
-> **Catatan Integritas Hasil**: Kasus meleset pada Validation Set v1 (`blind_07`) dan Narrative Set (`budget_02`) disebabkan oleh prinsip kehati-hatian (*safety-first*): sistem menolak menyimpulkan `GO` secara ceroboh saat berkas kualifikasi belum lengkap, melainkan menetapkan status `BELUM CUKUP BUKTI` dan menyerahkan keputusan akhir kepada auditor manusia (*Human-in-the-Loop*).
+> **Catatan Integritas Hasil**: Satu-satunya mismatch vonis yang tersisa pada Narrative Set (`budget_02`) disebabkan oleh prinsip kehati-hatian (*safety-first*): sistem menolak menyimpulkan `GO` secara ceroboh saat berkas kualifikasi belum lengkap, melainkan menetapkan status `BELUM CUKUP BUKTI` dan menyerahkan keputusan akhir kepada auditor manusia (*Human-in-the-Loop*). Kasus `blind_07` yang sebelumnya NO-GO terbukti akibat bug parser batas denda kata ("persen") dan kini telah teratasi (100% MATCH) pasca-audit bug fix.
 
 ### ⚠️ Batasan yang Diketahui (Known Limitations)
-- **Macro Precision/Recall/F1 Rendah**: Pada Validation Set v1 (Macro P ≈15%, R ≈29%, F1 ≈20%) dan Narrative Budget Set (Macro P ≈25%, R ≈17%, F1 ≈20%), metrik per-aturan relatif rendah. Berdasarkan inspeksi empiris, hal ini terutama dipicu oleh perbedaan penamaan ID aturan antara skema label uji dengan ID engine, serta terdeteksinya klausul sah tambahan pada fixture (lihat [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md)).
+- **Macro Precision/Recall/F1 Rendah**: Pada Validation Set v1 (Macro P ≈20.2%, R ≈28.6%, F1 ≈23.7%) dan Narrative Budget Set (Macro P ≈25.0%, R ≈16.7%, F1 ≈20.0%), metrik per-aturan relatif rendah. Berdasarkan inspeksi empiris, hal ini terutama dipicu oleh perbedaan penamaan ID aturan antara skema label uji dengan ID engine serta evaluasi administratif otomatis (lihat [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md)).
 - **Cakupan Aturan Berbasis Pola Teks**: Deteksi didasarkan pada ekspresi reguler dan pencocokan leksikal deklaratif; belum mencakup inferensi semantik mendalam tanpa model bahasa.
 - **Dukungan Bahasa Dokumen**: Utamanya dioptimalkan untuk bahasa Indonesia pengadaan (istilah LPSE, KAK, HPS, DIPA); belum mencakup dokumen berbahasa Inggris penuh selain frasa kunci jadwal dan ekuivalensi dasar.
 - **Deteksi Diskriminasi Regional Terbatas**: Baru mencakup pola pembatasan domisili, keanggotaan asosiasi, dan kantor cabang spesifik wilayah tertentu.
