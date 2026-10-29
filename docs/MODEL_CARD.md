@@ -97,9 +97,23 @@ Sistem diuji dengan dua dataset terpisah:
    - Digunakan untuk memandu kalibrasi aturan deterministik.
    - Baseline awal: Akurasi Verdict 75.0%, Trap Evasion 77.8% (7/9).
    - Pasca-Penyetelan: Akurasi Verdict 100.0% (24/24), Trap Evasion 100.0% (9/9).
-2. **Dataset Uji Buta Independen (Blind Test Set — 10 Dokumen Tanpa Penyetelan Aturan)**:
-   - Dijalankan secara *zero-tuning* untuk mengukur generalisasi nyata.
-   - **Akurasi Verdict: 70.0% (7/10 dokumen)**.
+2. **Validation Set v1 (10 Dokumen — label tidak diubah; engine dikalibrasi setelah putaran pertama dari 70% ke 90%)**:
+   - Diuji pertama kali menghasilkan akurasi 70.0% (7/10); pasca-kalibrasi kebijakan konservatif dan parser anggaran naik ke **90.0% (9/10 dokumen)**.
    - **Trap Evasion Rate: 100.0% (3/3 skenario jebakan lolos tanpa false alarm)**.
    - Menunjukkan keandalan tinggi pada klausul lock-in, jadwal mepet, dan denda kontrak, dengan keterbatasan yang diakui pada deteksi angka anggaran dalam format narasi bebas.
    - Laporan perbandingan lengkap tercatat pada `docs/BENCHMARK_RESULTS.md`.
+
+---
+
+## 6. Batasan yang Diketahui (Known Limitations)
+
+1. **Macro Precision, Recall, dan F1 Rendah**:
+   - Pada Validation Set v1 (Macro Precision ≈15%, Recall ≈29%, F1 ≈20%) dan Narrative Budget Set (Macro Precision ≈25%, Recall ≈17%, F1 ≈20%), metrik evaluasi per-aturan relatif rendah. Hal ini merupakan konsekuensi langsung dari kebijakan triase konservatif (*Human-in-the-Loop*): sistem sengaja menghindari vonis ekstrem otomatis dan mengalihkan status yang meragukan ke `BELUM CUKUP BUKTI`.
+2. **Cakupan Aturan Berbasis Pola Teks (Pattern-Based)**:
+   - Logika deteksi mengandalkan ekspresi reguler deklaratif dan pencocokan teks substring; sistem tidak melakukan pemahaman semantik mendalam pada dokumen yang menggunakan metafora atau parafrasa kompleks tanpa model bahasa.
+3. **Keterbatasan Bahasa Dokumen**:
+   - Sistem dioptimalkan untuk bahasa Indonesia dokumen pengadaan LPSE (istilah KAK, HPS, DIPA, BoQ). Dukungan bahasa Inggris saat ini baru mencakup istilah kunci jadwal ("bidding period", "working days") dan klausul ekuivalensi ("or equivalent").
+4. **Deteksi Diskriminasi Regional Spesifik Pola**:
+   - Deteksi pembatasan wilayah baru mencakup pola eksplisit domisili ("wajib berdomisili"), asosiasi ("anggota KADIN"), dan kepemilikan kantor cabang lokal yang tidak dikecualikan oleh lokasi pekerjaan sah.
+5. **Keamanan Prompt Injection**:
+   - Mesin aturan lokal 100% kebal terhadap prompt injection karena beroperasi murni secara deterministik tanpa LLM. Namun, jalur inferensi LLM eksternal opsional (watsonx / Langflow) hanya dilindungi oleh filter sanitasi PII dan verifikasi kutipan teks persis (*exact quote grounding*), bukan pembuktian formal adversarial defense.

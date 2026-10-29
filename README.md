@@ -5,7 +5,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
 [![IBM watsonx](https://img.shields.io/badge/IBM%20watsonx-Granite--3--8B-052FAD.svg)](https://www.ibm.com/watsonx)
-[![Tests Passing](https://img.shields.io/badge/tests-78%20passed-brightgreen.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-87%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -13,12 +13,12 @@
 ## 📌 Sekilas Masalah: Realitas Pengadaan Publik Indonesia
 
 Setiap tahunnya, pengadaan barang dan jasa pemerintah (PBJP) di Indonesia mengelola anggaran lebih dari **Rp 1.165 Triliun** (SiRUP LKPP 2024). Namun, proses evaluasi dokumen tender masih dilakukan secara terpisah dan manual:
-- ⏳ **Review Manual Lambat**: Membutuhkan waktu dasar rata-rata **4,5 jam** bagi auditor/tim tender manusia untuk membaca ratusan halaman Kerangka Acuan Kerja (KAK), spesifikasi teknis, Berita Acara Adendum, dan Bill of Quantities (BoQ) Excel.
+- ⏳ **Tantangan Review Manual**: Proses penelaahan dokumen Kerangka Acuan Kerja (KAK), spesifikasi teknis, Berita Acara Adendum, dan Bill of Quantities (BoQ) membutuhkan pembacaan mendalam lintas berkas; estimasi waktu review manual belum diverifikasi secara empiris.
 - ⚠️ **Kecurangan & Celah Hukum Tersembunyi**: Praktik penguncian merek (*brand lock-in* eksklusif tanpa opsi setara), jadwal lelang yang sengaja dipersingkat (*compressed timeline*), denda keterlambatan tanpa batas (*uncapped poison pill*), serta pembengkakan anggaran (*over-budget* BoQ) sering kali luput dari pengawasan karena terselip di antara tumpukan dokumen yang berbeda.
 - 🔄 **Ketidaksinkronan Antar-Berkas yang Terabaikan**: Dokumen pengadaan tidak pernah berdiri sendiri. Benturan data antara apa yang disyaratkan di KAK, apa yang ditawarkan penyedia di BoQ, apa yang diubah di Adendum, dan apa yang disepakati di draf kontrak sering kali tidak terdeteksi sebelum kontrak ditandatangani.
 - ⚖️ **Asimetri Informasi Pelaku Usaha**: Peserta tender dan UMKM sering kali gugur bukan karena mutu teknis, melainkan karena jebakan klausul administratif atau ketiadaan waktu menyusun draf sanggahan resmi sesuai batas waktu LKPP.
 
-**BidSentry** hadir sebagai solusi kecerdasan buatan hibrida (*Local-First Deterministic Engine + IBM watsonx.ai Granite*) yang mengkorelasikan seluruh berkas tender dalam satu ruang kerja intelijen: mempercepat triase dokumen dari estimasi **4,5 jam** menjadi **~42 detik** dengan jaminan kutipan bukti 100% persis (*exact substring verification*).
+**BidSentry** hadir sebagai solusi kecerdasan buatan hibrida (*Local-First Deterministic Engine + IBM watsonx.ai Granite*) yang mengkorelasikan seluruh berkas tender dalam satu ruang kerja intelijen: throughput mesin lokal terukur (latensi eksekusi `engine_duration_ms` pada benchmark); estimasi waktu review manual belum diverifikasi, dengan jaminan kutipan bukti 100% persis (*exact substring verification*).
 
 ---
 
@@ -116,11 +116,18 @@ Seluruh angka di bawah dihitung secara dinamis dari eksekusi kode aktual tanpa m
 | Dataset Uji | Jumlah Dokumen | Akurasi Vonis | Trap Evasion (Lolos Jebakan) | Keterangan Metodologi |
 | :--- | :---: | :---: | :---: | :--- |
 | **Development Set** | **24 Dokumen** | **100.0%** | **100.0% (9/9)** | Dipakai memandu kalibrasi aturan deterministik. |
-| **Validation Set v1** | **10 Dokumen** | **90.0%** | **100.0% (3/3)** | **Uji Buta Independen (Frozen)**. Awalnya 70.0% sebelum kalibrasi kebijakan NO-GO konservatif & parser anggaran naratif. |
+| **Validation Set v1** | **10 Dokumen** | **90.0%** | **100.0% (3/3)** | Validation Set v1 (label tidak diubah; engine dikalibrasi setelah putaran pertama dari 70.0% ke 90.0%). |
 | **Narrative Budget Set** | **5 Dokumen** | **80.0%** | **100.0% (1/1)** | Pengujian ekstraksi angka Pagu/BoQ pada prosa naratif bebas. |
 | **Real PDF Fixtures** | **2 PDF Multi-Halaman** | **100.0%** | **100.0%** | Tabel BoQ 15 item pekerjaan & KAK lengkap (PDF nyata). |
 
-> **Catatan Integritas Hasil**: Kasus meleset pada Blind Set (`blind_07`) dan Narrative Set (`budget_02`) disebabkan oleh prinsip kehati-hatian (*safety-first*): sistem menolak menyimpulkan `GO` secara ceroboh saat berkas kualifikasi belum lengkap, melainkan menetapkan status `BELUM CUKUP BUKTI` dan menyerahkan keputusan akhir kepada auditor manusia (*Human-in-the-Loop*).
+> **Catatan Integritas Hasil**: Kasus meleset pada Validation Set v1 (`blind_07`) dan Narrative Set (`budget_02`) disebabkan oleh prinsip kehati-hatian (*safety-first*): sistem menolak menyimpulkan `GO` secara ceroboh saat berkas kualifikasi belum lengkap, melainkan menetapkan status `BELUM CUKUP BUKTI` dan menyerahkan keputusan akhir kepada auditor manusia (*Human-in-the-Loop*).
+
+### ⚠️ Batasan yang Diketahui (Known Limitations)
+- **Macro Precision/Recall/F1 Rendah**: Pada Validation Set v1 (Macro P ≈15%, R ≈29%, F1 ≈20%) dan Narrative Budget Set (Macro P ≈25%, R ≈17%, F1 ≈20%), metrik per-aturan relatif rendah karena desain sistem yang konservatif (triase pencegahan false rejection, bukan penetap hukum otomatis).
+- **Cakupan Aturan Berbasis Pola Teks**: Deteksi didasarkan pada ekspresi reguler dan pencocokan leksikal deklaratif; belum mencakup inferensi semantik mendalam tanpa model bahasa.
+- **Dukungan Bahasa Dokumen**: Utamanya dioptimalkan untuk bahasa Indonesia pengadaan (istilah LPSE, KAK, HPS, DIPA); belum mencakup dokumen berbahasa Inggris penuh selain frasa kunci jadwal dan ekuivalensi dasar.
+- **Deteksi Diskriminasi Regional Terbatas**: Baru mencakup pola pembatasan domisili, keanggotaan asosiasi, dan kantor cabang spesifik wilayah tertentu.
+- **Ketahanan Prompt Injection**: Engine aturan lokal 100% kebal prompt injection karena bersifat deterministik tanpa LLM; namun jalur LLM eksternal opsional (watsonx/Langflow) hanya dilindungi oleh penyensoran pola PII dan validasi kutipan exact substring sebelum inferensi.
 
 ---
 
@@ -149,12 +156,12 @@ Sistem berjalan secara mandiri (*zero-build step*) tanpa perlu instalasi Node.js
 
 ---
 
-## 🧪 Rangkaian Pengujian Mandiri (80 Test Cases)
+## 🧪 Rangkaian Pengujian Mandiri (87 Test Cases)
 
 Seluruh komponen dapat diverifikasi secara independen oleh juri teknis melalui perintah berikut:
 
 ```bash
-# 1. Jalankan seluruh unit & integration test (80 passed tests, 0 warnings)
+# 1. Jalankan seluruh unit & integration test (87 passed tests, 0 warnings)
 pytest tests/ -v -W default
 
 # 2. Jalankan benchmark Development Set (24 dokumen)

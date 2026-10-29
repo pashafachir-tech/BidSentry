@@ -1,9 +1,9 @@
 # Laporan Evaluasi Akurasi & Benchmark BidSentry
 
 > **Pernyataan Integritas Metodologi**:
-> Laporan ini memisahkan secara tegas tiga dataset evaluasi independen:
+> Laporan ini memisahkan secara tegas tiga dataset evaluasi:
 > 1. **Dataset Pengembangan & Penyetelan (Development Set — 24 Dokumen)**: Digunakan untuk memandu dekopling aturan dan verifikasi regresi pola.
-> 2. **Dataset Validasi Independen v1 (Validation Set v1 — 10 Dokumen)**: Dilabeli secara independen sebelum dievaluasi, dibekukan (*frozen*), dan dijalankan tanpa pengubahan label (*zero-tuning*), untuk mengukur generalisasi obyektif sistem.
+> 2. **Dataset Validasi v1 (Validation Set v1 — 10 Dokumen)**: Validation Set v1 (label tidak diubah; engine dikalibrasi setelah putaran pertama). Diuji pertama kali dengan hasil 70%; setelah itu kebijakan verdict dan parser anggaran dikalibrasi sehingga naik ke 90%. Karena set ini sudah memengaruhi penyetelan, ia BUKAN uji buta murni dan tidak boleh dibaca sebagai estimasi akurasi dunia nyata.
 > 3. **Dataset Anggaran Narasi Bebas (Narrative Budget Test Set — 5 Dokumen Baru)**: Dokumen pengujian terpisah yang ditulis setelah penyempurnaan parser anggaran untuk menguji ketahanan ekstraksi angka Pagu DIPA dan BoQ/HPS pada prosa bebas non-tabel.
 
 ---
@@ -30,16 +30,16 @@ Karena 24 dokumen ini digunakan oleh tim teknis selama proses refaktorisasi `eng
 
 ---
 
-## BAGIAN II: Evaluasi Validasi Independen (Validation Set v1 — 10 Dokumen Frozen)
+## BAGIAN II: Evaluasi Validasi (Validation Set v1 — 10 Dokumen)
 
-Untuk menguji kemampuan generalisasi sistem secara jujur, 10 dokumen uji di `data/test_blind/` mencakup variasi pengadaan konstruksi, TI, jasa kebersihan, alat kesehatan, sewa kendaraan, dan dokumen non-standar. Label dokumen ini **dibekukan** dan tidak dimanipulasi.
+Untuk menguji kemampuan generalisasi sistem secara jujur, 10 dokumen uji di `data/test_blind/` mencakup variasi pengadaan konstruksi, TI, jasa kebersihan, alat kesehatan, sewa kendaraan, dan dokumen non-standar. Validation Set v1: diuji pertama kali dengan hasil 70%; setelah itu kebijakan verdict dan parser anggaran dikalibrasi sehingga naik ke 90%. Karena set ini sudah memengaruhi penyetelan, ia BUKAN uji buta murni dan tidak boleh dibaca sebagai estimasi akurasi dunia nyata. Label pada set ini tidak diubah setelah putaran pertama.
 
 ### 1. Riwayat Iterasi & Kalibrasi Kebijakan Engine
 
 > [!NOTE] Transparansi Riwayat Kalibrasi
-> - **Putaran Awal (Baseline Engine):** Saat pertama kali diuji terhadap blind set 10 dokumen, akurasi verdict awal berada pada **70.0%** (7 dari 10 cocok).
+> - **Putaran Awal (Baseline Engine):** Saat pertama kali diuji terhadap set 10 dokumen ini, akurasi verdict awal berada pada **70.0%** (7 dari 10 cocok).
 > - **Penyempurnaan Kebijakan (Responsible AI Calibration):** Kegagalan awal disebabkan oleh dua hal: (1) vonis `NO-GO` yang terlalu agresif untuk dokumen yang hanya kekurangan lampiran bukti (padahal syarat belum tentu cacat permanen), dan (2) parser anggaran yang belum mampu membaca angka dalam kalimat prosa non-tabel.
-> - **Hasil Pasca-Kalibrasi:** Setelah mengadopsi kebijakan bahwa `NO-GO` hanya dijatuhkan untuk temuan `GAP` yang terkonfirmasi teks, sedangkan dokumen minim bukti dialihkan ke `BELUM CUKUP BUKTI`, akurasi verdict meningkat menjadi **90.0%** (9 dari 10 cocok).
+> - **Hasil Pasca-Kalibrasi:** Setelah mengadopsi kebijakan bahwa `NO-GO` hanya dijatuhkan untuk temuan `GAP` yang terkonfirmasi teks, sedangkan dokumen minim bukti dialihkan ke `BELUM CUKUP BUKTI`, akurasi verdict meningkat menjadi **90.0%** (9 dari 10 cocok). Label dokumen pada set ini tetap dipertahankan persis tanpa pengubahan.
 
 ### 2. Ringkasan Hasil Validasi Independen
 

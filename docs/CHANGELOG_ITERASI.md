@@ -20,9 +20,9 @@ Dokumen ini mencatat riwayat perbaikan menyeluruh pada repositori BidSentry berd
 - **Sitasi Resmi LKPP 2024**: Memperbarui angka belanja pengadaan dengan sumber resmi portal LKPP ([https://www.lkpp.go.id/](https://www.lkpp.go.id/)), Tahun 2024, kutipan persis: *"Total pagu belanja pengadaan barang/jasa nasional tercatat sebesar Rp 1.165,14 Triliun (dengan RUP terumumkan pada SiRUP per April 2024 mencapai Rp 1.043,45 Triliun)."*
 - **Penetapan Status Jujur**: Mengganti estimasi waktu manusia dan willingness-to-pay hipotesis dengan tanda tegas **`BELUM DIVERIFIKASI`** / **`BELUM DIKUMPULKAN`**.
 
-### 4. Kebijakan Verdict Terstandarisasi & Pembekuan Validation Set v1
+### 4. Kebijakan Verdict Terstandarisasi & Hasil Validation Set v1
 - **Kebijakan Verdict Deterministik**: Mendokumentasikan kebijakan pada `docs/MODEL_CARD.md`: vonis `NO-GO` secara ketat hanya dipicu oleh cacat fatal yang terkonfirmasi (`GAP`); kekurangan dokumen bukti atau izin kedaluwarsa dialihkan ke status `BELUM CUKUP BUKTI`.
-- **Hasil Validation Set v1 (10 Dokumen Frozen)**: Label pada `data/test_blind/` dibekukan tanpa penyetelan ulang. Evaluasi sekali jalan menghasilkan Verdict Accuracy **90.0% (9/10)**, Trap Evasion **100.0% (3/3)**, Macro Precision 16.0%, Macro Recall 30.8%, Macro F1 21.1%.
+- **Hasil Validation Set v1 (10 Dokumen)**: Label pada `data/test_blind/` tidak diubah setelah putaran pertama. Evaluasi menghasilkan Verdict Accuracy **90.0% (9/10)** pasca-kalibrasi kebijakan NO-GO konservatif & parser naratif, Trap Evasion **100.0% (3/3)**, Macro Precision 16.0%, Macro Recall 30.8%, Macro F1 21.1%.
 
 ### 5. Parser Anggaran Prosa Bebas & Dataset Pengujian Narasi Baru
 - **Ekstraksi Anggaran Naratif**: Memperluas parser `engine.py` untuk mengekstrak Pagu DIPA, BoQ, dan HPS dari kalimat prosa bebas non-tabel tanpa memicu false positive pada kalimat normatif perundang-undangan.
@@ -75,6 +75,6 @@ Dokumen ini mencatat riwayat perbaikan menyeluruh pada repositori BidSentry berd
 
 ### Kalibrasi Metodologi & Evaluasi Uji Buta (Blind Test)
 - **Klarifikasi Development Set (24 Dokumen)**: Mengkategorikan secara jujur dataset 24 dokumen sintetis sebagai Development & Tuning Set (bukan blind test), mencatat baseline 75.0% dan pasca-penyetelan 100.0%, serta mengoreksi clerical typo penyebut jebakan dari 8/8 menjadi 9/9 kasus.
-- **Implementasi Blind Test Set Independen (10 Dokumen)**: Menambahkan 10 skenario pengadaan independen di `data/test_blind/` dan skrip evaluator `tests/benchmark_blind.py`. Dijalankan secara *zero-tuning* tanpa mengubah aturan engine, mencatat **70.0% Verdict Accuracy** dan **100.0% Trap Evasion Rate** disertai analisis kegagalan terbuka (format narasi bebas vs format tabel terstruktur).
+- **Implementasi Blind Test Set Independen (10 Dokumen)**: Menambahkan 10 skenario pengadaan independen di `data/test_blind/` dan skrip evaluator `tests/benchmark_blind.py`. Dijalankan pada putaran pertama tanpa mengubah aturan engine, mencatat **70.0% Verdict Accuracy** dan **100.0% Trap Evasion Rate** disertai analisis kegagalan terbuka (format narasi bebas vs format tabel terstruktur), sebelum engine dikalibrasi pada iterasi berikutnya menjadi 90.0%.
 - **Penyempurnaan Sanggahan Builder**: Memastikan temuan yang ditandai *Ignored* (False Positive) oleh reviewer manusia secara otomatis dikecualikan dari sanggahan, dan draf sanggahan dari riwayat audit menyertakan kutipan bukti secara utuh.
 - **Pembersihan Klaim Rubrik**: Menyertakan rujukan resmi belanja PBJP (data LKPP/SiRUP > Rp 1.200 T), mengubah "persona riil" menjadi arketipe sasaran awal, memperjelas batasan throughput teknis (< 30 detik), dan menghapus terminologi berlebihan (*zero-hallucination*).

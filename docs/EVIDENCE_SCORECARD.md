@@ -2,6 +2,9 @@
 
 Dokumen ini menyajikan pemetaan bukti implementasi teknis dan proposisi proyek **BidSentry** terhadap 6 kriteria rubrik evaluasi juri secara transparan, jujur, dan dapat diverifikasi langsung pada basis kode.
 
+> **Catatan Bobot Rubrik Penilaian**:
+> 6 kriteria yang dievaluasi mencakup total bobot **95%** (20% + 25% + 15% + 20% + 10% + 5%). Sisa 5% tidak dispesifikasikan dalam lembar panduan resmi; tim menyajikan bobot persis sebagaimana tercantum dalam panduan resmi tanpa menormalisasi persentase secara sepihak.
+
 ---
 
 ## 1. Problem Clarity & Validasi Kebutuhan (Bobot 20%)
@@ -125,7 +128,7 @@ Pengadaan barang dan jasa pemerintah (PBJP) di Indonesia mengelola alokasi angga
   - Tersedia berkas uji PDF realistis di `data/sample_tenders/pdf_tenders/`: `paket_konstruksi_rab_kompleks.pdf` (tabel BoQ multi-halaman dengan 15 item pekerjaan) dan `paket_pengadaan_it_server_kak.pdf` (dokumen KAK lengkap dengan klausul diskriminatif merek dan denda tanpa batas).
   - Tervalidasi otomatis melalui `DocumentExtractionService` pada [`tests/test_pdf_real_extraction.py`](file:///d:/bidsentry/tests/test_pdf_real_extraction.py).
 - **Pengujian E2E Otomatis**: Dilengkapi smoke test Playwright pada [`tests/e2e_smoke.py`](file:///d:/bidsentry/tests/e2e_smoke.py) yang memvalidasi interaksi UI lengkap, transisi dialog, dan verifikasi tabel temuan secara headless.
-- **Automated CI Workflow**: GitHub Actions pipeline aktif di [`.github/workflows/ci.yml`](file:///d:/bidsentry/.github/workflows/ci.yml) yang menjalankan seluruh unit test (78 passed tests) dan regression benchmark.
+- **Automated CI Workflow**: GitHub Actions pipeline aktif di [`.github/workflows/ci.yml`](file:///d:/bidsentry/.github/workflows/ci.yml) yang menjalankan seluruh unit test (87 passed tests) dan regression benchmark.
 
 ### B. Hasil Benchmark Objektif (Tiga Dataset Terpisah)
 
@@ -137,9 +140,9 @@ Seluruh angka di bawah dihitung secara dinamis dari hasil eksekusi kode benchmar
    - Pasca-Penyetelan: **Verdict Accuracy 100.0% (24/24)**, **Trap Evasion 100.0% (9/9)**, Macro F1 100.0%.
    - *Catatan Metodologi: Set ini digunakan untuk memandu pengkodean aturan, bukan uji buta independen.*
 
-2. **Validation Set v1 (10 Dokumen Uji Buta — Frozen)**:
+2. **Validation Set v1 (10 Dokumen — label tidak diubah; engine dikalibrasi setelah putaran pertama)**:
    - Evaluator: `tests/benchmark_blind.py`
-   - Kebijakan: Dilabeli secara independen sebelum eksekusi, **label dibekukan tanpa penyetelan ulang**.
+   - Kebijakan: Dilabeli secara independen sebelum eksekusi, label tidak diubah setelah putaran pertama. Karena set ini telah memengaruhi kalibrasi, set ini bukan uji buta murni dan tidak boleh dibaca sebagai estimasi akurasi dunia nyata.
    - Riwayat Iterasi: Skor awal 70.0% (7/10) sebelum kalibrasi kebijakan NO-GO konservatif & parser naratif membawa akurasi ke 90.0%.
    - **Verdict Accuracy: 90.0% (9/10)**
    - **Trap Evasion Rate: 100.0% (3/3)**
@@ -177,5 +180,5 @@ Laporan lengkap dan analisis kegagalan disajikan pada [`docs/BENCHMARK_RESULTS.m
 
 ## 6. Participation & Engineering Discipline (Bobot 5%)
 - **Penilaian Participation**: Kriteria Participation (5%) mencakup kehadiran workshop, konsultasi mentor, dan keterlibatan komunitas selama program hackathon yang dinilai secara mandiri oleh panitia/juri.
-- **Disiplin Rekayasa Kode**: Repositori ini membuktikan keseriusan implementasi melalui commit Git modular berkesinambungan, pengujian unit test menyeluruh (**63 tests pass** tanpa regresi), dan transparansi pelaporan hasil benchmark tanpa memalsukan data.
+- **Disiplin Rekayasa Kode**: Repositori ini membuktikan keseriusan implementasi melalui commit Git modular berkesinambungan, pengujian unit test menyeluruh (**87 tests pass** tanpa regresi), dan transparansi pelaporan hasil benchmark tanpa memalsukan data.
 - **Riwayat Perubahan**: Tercatat lengkap pada [`docs/CHANGELOG_ITERASI.md`](file:///d:/bidsentry/docs/CHANGELOG_ITERASI.md).
