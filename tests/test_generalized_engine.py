@@ -631,3 +631,87 @@ class TestStructuredProductBrandLockin:
         assert res["verdict"] == "GO"
         gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
         assert "SPEC-BRAND-LOCKIN" not in gap_ids
+
+
+class TestPenaltyCapVariations:
+    """Tests for generalized detection of penalty caps (digits, words, percent variants) vs true uncapped clauses."""
+
+    @pytest.mark.parametrize(
+        "clause",
+        [
+            "Denda 1/1000 per hari dengan batas maksimal 5 persen.",
+            "Denda keterlambatan 1/1000 per hari dengan batas paling banyak 5% dari nilai kontrak.",
+            "Denda 1/1000 per hari, maksimum lima persen dari nilai kontrak.",
+            "Denda keterlambatan sebesar 1/1000 per hari, tidak lebih dari 5 persen.",
+            "Denda 1/1000 per hari dengan batas maksimal 5 % dari nilai kontrak.",
+            "Denda 1/1000 per hari, setinggi-tingginya 5 persen.",
+            "Denda keterlambatan 1/1000 per hari sebesar-besarnya 5%.",
+            "Denda 1/1000 per hari tidak melebihi lima persen.",
+            "Denda 1/1000 per hari dengan batas paling tinggi 2,5 persen.",
+            "Liquidated damages of 1/1000 per day capped at five percent.",
+            "Liquidated damages 1/1000 per day not exceeding 10 percent of the contract price.",
+            "Liquidated damages of 0.1% per day up to a maximum of 5%.",
+        ],
+    )
+    def test_capped_penalty_clauses_do_not_trigger_con_penalty_gap(
+        self, engine: EvaluationEngine, clause: str
+    ) -> None:
+        req = EvaluationRequest(
+            package_name="Pengadaan Jasa Uji Batas Denda",
+            tender_id="TND-CAP-TEST",
+            dok_pemilihan="Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja.",
+            contract_draft=f"Ketentuan Kontrak:\n{clause}",
+        )
+        res = engine.evaluate(req)
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "CON-PENALTY" not in gap_ids
+
+    @pytest.mark.parametrize(
+        "clause",
+        [
+            "Denda 1/1000 per hari dari nilai kontrak.",
+            "Denda keterlambatan 1/1000 per hari sampai pekerjaan selesai.",
+            "Denda 1/1000 per hari tanpa batas maksimal.",
+            "Denda keterlambatan 1/1000 per hari, tidak terbatas.",
+            "Liquidated damages of 0.1% per day without limit.",
+            "Delay penalty of 1/1000 per day uncapped.",
+        ],
+    )
+    def test_uncapped_penalty_clauses_must_trigger_con_penalty_gap(
+        self, engine: EvaluationEngine, clause: str
+    ) -> None:
+        req = EvaluationRequest(
+            package_name="Pengadaan Jasa Uji Batas Denda",
+            tender_id="TND-UNCAP-TEST",
+            dok_pemilihan="Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja.",
+            contract_draft=f"Ketentuan Kontrak:\n{clause}",
+        )
+        res = engine.evaluate(req)
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "CON-PENALTY" in gap_ids
+        assert res["verdict"] == "NO-GO"
+
+    def test_blind_fixtures_do_not_have_con_penalty_gap(self, engine: EvaluationEngine) -> None:
+        import json
+        from pathlib import Path
+
+        blind_files = [
+            "blind_02_pengadaan_laptop_lockin_intel.json",
+            "blind_03_konsultansi_jadwal_mepet.json",
+            "blind_07_sewa_kendaraan_equivalent_trap.json",
+        ]
+        blind_dir = Path("data/test_blind")
+        for fname in blind_files:
+            file_path = blind_dir / fname
+            assert file_path.exists(), f"Fixture file not found: {file_path}"
+            with open(file_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            req = EvaluationRequest(**data["request"])
+            res = engine.evaluate(req)
+            con_penalty_gaps = [
+                f for f in res["findings"]
+                if f["id"] == "CON-PENALTY" and f["status"] == "GAP"
+            ]
+            assert not con_penalty_gaps, (
+                f"Unexpected CON-PENALTY GAP in {fname}: {con_penalty_gaps}"
+            )

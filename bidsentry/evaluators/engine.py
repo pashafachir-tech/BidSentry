@@ -436,7 +436,7 @@ class EvaluationEngine:
 
         # 8. Penalty simulation and uncapped penalty detection
         contract_clause_source = request.contract_draft or request.dok_pemilihan
-        has_penalty_clause = bool(re.search(r"denda|sanksi\s+keterlambatan|liquidated\s+damages", contract_clause_source, re.I))
+        has_penalty_clause = bool(re.search(r"denda|sanksi\s+keterlambatan|liquidated\s+damages|delay\s+penalty", contract_clause_source, re.I))
         penalty = calculate_penalty_scenarios(request.contract_value_idr or 0, contract_clause_source) if (request.contract_value_idr is not None or has_penalty_clause) else {"status": "contract_value_required", "alerts": [], "scenarios": [], "clause_quote": None}
         if request.contract_value_idr is None:
             penalty["status"] = "contract_value_required"
@@ -451,7 +451,7 @@ class EvaluationEngine:
                     "Klausul denda keterlambatan tanpa batas maksimal",
                     "Kontrak",
                     "GAP",
-                    _line_find(contract_lines, r"denda|sanksi\s+keterlambatan"),
+                    _line_find(contract_lines, r"denda|sanksi\s+keterlambatan|liquidated\s+damages|delay\s+penalty"),
                     ("Draf kontrak", quote) if quote else None,
                     "Klausul denda tanpa batas maksimum (uncapped penalty) terdeteksi. Sesuai Pasal 56 ayat (2) Perpres 12/2021 dan simulasi standar LKPP, denda keterlambatan wajar memiliki batas maksimal 5% dari nilai kontrak.",
                     "HIGH"
@@ -462,7 +462,7 @@ class EvaluationEngine:
                     "Tarif denda keterlambatan di atas standar 1/1000",
                     "Kontrak",
                     "REVIEW",
-                    _line_find(contract_lines, r"denda|sanksi\s+keterlambatan"),
+                    _line_find(contract_lines, r"denda|sanksi\s+keterlambatan|liquidated\s+damages|delay\s+penalty"),
                     ("Draf kontrak", quote) if quote else None,
                     "Tarif denda harian melebihi ketentuan standar 1 permil (1/1000) per hari keterlambatan per Perpres 12/2021.",
                     "MEDIUM"

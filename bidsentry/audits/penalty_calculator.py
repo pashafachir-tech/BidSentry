@@ -7,7 +7,87 @@ from typing import Any
 
 
 _RATE = re.compile(r"(?P<n>\d+(?:[.,]\d+)?)\s*/\s*(?P<d>\d{3,})|(?P<per_mille>\d+(?:[.,]\d+)?)\s*(?:‰|permil|per\s*mille)|(?P<pct>\d+(?:[.,]\d+)?)\s*%", re.I)
-_CAP = re.compile(r"(?:maksimum|maksimal|paling\s+tinggi|batas\s+(?:maksimum|paling\s+tinggi)|tidak\s+lebih\s+dari|dibatasi\s+sebesar|maximum|capped\s+at|up\s+to|not\s+exceeding|limit(?:ed)?\s+to)\D{0,40}(\d+(?:[.,]\d+)?)\s*%", re.I)
+
+_WORD_NUM_MAP: dict[str, float] = {
+    "nol": 0.0, "zero": 0.0,
+    "satu": 1.0, "one": 1.0,
+    "dua": 2.0, "two": 2.0,
+    "tiga": 3.0, "three": 3.0,
+    "empat": 4.0, "four": 4.0,
+    "lima": 5.0, "five": 5.0,
+    "enam": 6.0, "six": 6.0,
+    "tujuh": 7.0, "seven": 7.0,
+    "delapan": 8.0, "eight": 8.0,
+    "sembilan": 9.0, "nine": 9.0,
+    "sepuluh": 10.0, "ten": 10.0,
+    "sebelas": 11.0, "eleven": 11.0,
+    "dua belas": 12.0, "twelve": 12.0,
+    "tiga belas": 13.0, "thirteen": 13.0,
+    "empat belas": 14.0, "fourteen": 14.0,
+    "lima belas": 15.0, "fifteen": 15.0,
+    "enam belas": 16.0, "sixteen": 16.0,
+    "tujuh belas": 17.0, "seventeen": 17.0,
+    "delapan belas": 18.0, "eighteen": 18.0,
+    "sembilan belas": 19.0, "nineteen": 19.0,
+    "dua puluh": 20.0, "twenty": 20.0,
+    "dua puluh lima": 25.0, "twenty five": 25.0,
+}
+
+_EXPLICIT_UNCAPPED = re.compile(
+    r"\b(?:tanpa\s+batas|tidak\s+terbatas|without\s+limit|no\s+maximum|uncapped)\b",
+    re.I,
+)
+
+_CAP_PREFIX = (
+    r"(?:batas\s+(?:maksimal|maksimum|paling\s+banyak|paling\s+tinggi|sebesar-besarnya|setinggi-tingginya)|"
+    r"maksimal|maksimum|paling\s+banyak|paling\s+tinggi|sebesar-besarnya|setinggi-tingginya|"
+    r"tidak\s+lebih\s+dari|tidak\s+melebihi|dibatasi\s+sebesar|"
+    r"capped\s+at|up\s+to(?:\s+a\s+maximum\s+of)?|not\s+exceeding|limit(?:ed)?\s+to|maximum\s+of)"
+)
+
+_DIGIT_CAP = re.compile(
+    _CAP_PREFIX + r"\D{0,60}(\d+(?:[.,]\d+)?)\s*(?:%|persen\b|percent\b)",
+    re.I,
+)
+
+_WORDS_REGEX = r"(" + "|".join(sorted([re.escape(k) for k in _WORD_NUM_MAP.keys()], key=len, reverse=True)) + r")"
+_WORD_CAP = re.compile(
+    _CAP_PREFIX + r"(?:[^a-zA-Z0-9\n]*\b[a-zA-Z]+\b){0,6}\s*" + _WORDS_REGEX + r"(?:\s+(?:koma|titik|point)\s+([a-z0-9]+))?\s*(?:%|persen\b|percent\b)",
+    re.I,
+)
+
+_CAP = _DIGIT_CAP
+
+
+def _parse_cap(clause: str) -> float | None:
+    if not clause:
+        return None
+    if _EXPLICIT_UNCAPPED.search(clause):
+        return None
+
+    m_digit = _DIGIT_CAP.search(clause)
+    if m_digit:
+        try:
+            return _decimal(m_digit.group(1)) / 100.0
+        except ValueError:
+            pass
+
+    m_word = _WORD_CAP.search(clause)
+    if m_word:
+        base_word = m_word.group(1).lower().strip()
+        val = _WORD_NUM_MAP.get(base_word)
+        if val is not None:
+            dec_word = m_word.group(2)
+            if dec_word:
+                dec_word = dec_word.lower().strip()
+                dec_val = _WORD_NUM_MAP.get(dec_word)
+                if dec_val is None and dec_word.isdigit():
+                    dec_val = float(dec_word)
+                if dec_val is not None:
+                    val = val + (dec_val / 10.0 if dec_val < 10 else dec_val / 100.0)
+            return val / 100.0
+
+    return None
 
 
 def _decimal(value: str) -> float:
@@ -45,11 +125,15 @@ def calculate_penalty_scenarios(
     if not 0 < statutory_daily_rate < 1 or not 0 < illustrative_cap_percentage <= 1:
         raise ValueError("Penalty rate and cap must be within valid percentage bounds")
     lines = [line.strip() for line in clause_text.splitlines() if line.strip()]
-    penalty_lines = [line for line in lines if re.search(r"denda|sanksi\s+keterlambatan|liquidated\s+damages|delay\s+penalty", line, re.I)]
+    penalty_lines: list[str] = []
+    for line in lines:
+        if re.search(r"denda|sanksi\s+keterlambatan|liquidated\s+damages|delay\s+penalty", line, re.I):
+            penalty_lines.append(line)
+        elif penalty_lines and re.match(r"^(?:batas|maksimal|maksimum|paling\s+banyak|tidak\s+lebih|total\s+akumulasi|capped|up\s+to|not\s+exceeding)", line, re.I):
+            penalty_lines.append(line)
     clause = " ".join(penalty_lines)[:1200]
     contract_rate = _parse_rate(clause) if clause else None
-    cap_match = _CAP.search(clause) if clause else None
-    clause_cap = _decimal(cap_match.group(1)) / 100 if cap_match else None
+    clause_cap = _parse_cap(clause) if clause else None
     uncapped = bool(penalty_lines and clause_cap is None)
     scenarios: list[dict[str, Any]] = []
     for days in delay_days:

@@ -448,6 +448,6 @@ rules:
       - "liquidated\\s+damages"
       - "delay\\s+penalty"
     pengecualian_regex:
-      - "(?:maksimum|maksimal|paling\\s+tinggi|dibatasi\\s+sebesar|batas\\s+maksimal|maximum|capped\\s+at|up\\s+to|not\\s+exceeding|limit(?:ed)?\\s+to)\\D{0,40}\\d+(?:[.,]\\d+)?\\s*%"
+      - "(?:batas\\s+(?:maksimal|maksimum|paling\\s+banyak|paling\\s+tinggi|sebesar-besarnya|setinggi-tingginya)|maksimal|maksimum|paling\\s+banyak|paling\\s+tinggi|sebesar-besarnya|setinggi-tingginya|tidak\\s+lebih\\s+dari|tidak\\s+melebihi|dibatasi\\s+sebesar|capped\\s+at|up\\s+to|not\\s+exceeding|limit(?:ed)?\\s+to|maximum\\s+of)[^0-9a-zA-Z]{0,40}(?:\\d+(?:[.,]\\d+)?|satu|dua|tiga|empat|lima|enam|tujuh|delapan|sembilan|sepuluh|one|two|three|four|five|six|seven|eight|nine|ten)\\s*(?:%|persen|percent)"
     severity: "HIGH"
     rekomendasi_template: "Klausul denda tanpa batas maksimal membahayakan kelangsungan penyedia; ajukan klausul batas maksimal 5%."
