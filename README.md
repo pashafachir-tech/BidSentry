@@ -12,11 +12,29 @@
 
 ## 📌 Sekilas Masalah: Realitas Pengadaan Publik Indonesia
 
-Setiap tahunnya, pengadaan barang dan jasa pemerintah (PBJP) di Indonesia mengelola anggaran lebih dari **Rp 1.165 Triliun** (SiRUP LKPP 2024). Namun, proses evaluasi dokumen tender masih dilakukan secara terpisah dan manual:
+Setiap tahunnya, pengadaan barang dan jasa pemerintah (PBJP) di Indonesia mengelola anggaran lebih dari **Rp1.259,2 Triliun** (Siaran Pers LKPP No. 01/SP-Ses.3/01/2025). Namun, proses evaluasi dokumen tender masih dilakukan secara terpisah dan manual:
 - ⏳ **Tantangan Review Manual**: Proses penelaahan dokumen Kerangka Acuan Kerja (KAK), spesifikasi teknis, Berita Acara Adendum, dan Bill of Quantities (BoQ) membutuhkan pembacaan mendalam lintas berkas; estimasi waktu review manual belum diverifikasi secara empiris.
 - ⚠️ **Kecurangan & Celah Hukum Tersembunyi**: Praktik penguncian merek (*brand lock-in* eksklusif tanpa opsi setara), jadwal lelang yang sengaja dipersingkat (*compressed timeline*), denda keterlambatan tanpa batas (*uncapped poison pill*), serta pembengkakan anggaran (*over-budget* BoQ) sering kali luput dari pengawasan karena terselip di antara tumpukan dokumen yang berbeda.
 - 🔄 **Ketidaksinkronan Antar-Berkas yang Terabaikan**: Dokumen pengadaan tidak pernah berdiri sendiri. Benturan data antara apa yang disyaratkan di KAK, apa yang ditawarkan penyedia di BoQ, apa yang diubah di Adendum, dan apa yang disepakati di draf kontrak sering kali tidak terdeteksi sebelum kontrak ditandatangani.
 - ⚖️ **Asimetri Informasi Pelaku Usaha**: Peserta tender dan UMKM sering kali gugur bukan karena mutu teknis, melainkan karena jebakan klausul administratif atau ketiadaan waktu menyusun draf sanggahan resmi sesuai batas waktu LKPP.
+
+### 📊 Landasan Masalah & Data Kuantitatif Resmi
+
+Pengembangan BidSentry berpijak pada data resmi instansi audit dan pengawas pengadaan nasional:
+
+1. **Volume Pasar Pengadaan (LKPP)**:
+   * Total Rencana Umum Pengadaan (RUP) nasional TA 2024 tercatat sebesar **Rp1.259,2 Triliun** (Siaran Pers LKPP No. 01/SP-Ses.3/01/2025).
+   * Ekosistem penyedia didominasi oleh pelaku usaha kecil, dengan **396.648 UMK terdaftar di SIKaP LKPP** (81% dari total seluruh pelaku usaha terdaftar).
+
+2. **Temuan Audit Anggaran & BoQ (BPK RI - IHPS I 2024)**:
+   * BPK mengungkap permasalahan **kekurangan volume pekerjaan/barang senilai Rp1,02 Triliun** (1.200 temuan pada 531 instansi) serta **kelebihan pembayaran senilai Rp156,96 Miliar** (401 temuan) akibat lemahnya sistem verifikasi administrasi pengadaan.
+
+3. **Persekongkolan Tender (KPPU RI)**:
+   * Berdasarkan Laporan Tahunan KPPU, dugaan persekongkolan tender (Pasal 22 UU No. 5/1999) secara konsisten mendominasi laporan persaingan usaha nasional, mencapai **71% dari seluruh laporan yang diterima**.
+
+4. **Kerentanan Korupsi Sektor PBJ (KPK RI)**:
+   * Data penanganan perkara KPK (2004–2025) mencatat **25,03% kasus korupsi (446 dari 1.782 perkara)** berkaitan langsung dengan pengadaan barang dan jasa.
+   * Survei Penilaian Integritas (SPI) 2024 KPK menemukan risiko benturan kepentingan tinggi, dengan **49% responden mengonfirmasi adanya indikasi pemenang tender yang telah diatur**.
 
 **BidSentry** hadir sebagai solusi kecerdasan buatan hibrida (*Local-First Deterministic Engine + IBM watsonx.ai Granite*) yang mengkorelasikan seluruh berkas tender dalam satu ruang kerja intelijen: throughput mesin lokal terukur (latensi eksekusi `engine_duration_ms` pada benchmark); estimasi waktu review manual belum diverifikasi, dengan jaminan kutipan bukti 100% persis (*exact substring verification*).
 
