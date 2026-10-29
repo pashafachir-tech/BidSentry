@@ -108,7 +108,7 @@ Sistem diuji dengan dua dataset terpisah:
 ## 6. Batasan yang Diketahui (Known Limitations)
 
 1. **Macro Precision, Recall, dan F1 Rendah**:
-   - Pada Validation Set v1 (Macro Precision ≈15%, Recall ≈29%, F1 ≈20%) dan Narrative Budget Set (Macro Precision ≈25%, Recall ≈17%, F1 ≈20%), metrik evaluasi per-aturan relatif rendah. Hal ini merupakan konsekuensi langsung dari kebijakan triase konservatif (*Human-in-the-Loop*): sistem sengaja menghindari vonis ekstrem otomatis dan mengalihkan status yang meragukan ke `BELUM CUKUP BUKTI`.
+   - Pada Validation Set v1 (Macro Precision ≈15%, Recall ≈29%, F1 ≈20%) dan Narrative Budget Set (Macro Precision ≈25%, Recall ≈17%, F1 ≈20%), metrik evaluasi per-aturan relatif rendah. Hasil inspeksi empiris per-dokumen (lihat [`docs/BENCHMARK_RESULTS.md`](BENCHMARK_RESULTS.md)) menunjukkan hal ini terutama disebabkan oleh diskrepansi penamaan ID aturan antara skema label pengujian dengan ID deklaratif engine, klausul sah tambahan di fixture draf kontrak yang tidak dilabeli, serta evaluasi administratif otomatis.
 2. **Cakupan Aturan Berbasis Pola Teks (Pattern-Based)**:
    - Logika deteksi mengandalkan ekspresi reguler deklaratif dan pencocokan teks substring; sistem tidak melakukan pemahaman semantik mendalam pada dokumen yang menggunakan metafora atau parafrasa kompleks tanpa model bahasa.
 3. **Keterbatasan Bahasa Dokumen**:

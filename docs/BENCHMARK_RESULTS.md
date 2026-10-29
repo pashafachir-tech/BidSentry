@@ -51,8 +51,8 @@ Untuk menguji kemampuan generalisasi sistem secara jujur, 10 dokumen uji di `dat
 - **Macro Recall:** 28.6% – 30.8%
 - **Macro F1 Score:** 19.6% – 21.1%
 
-> [!IMPORTANT] Memahami Metrik Macro Precision & Recall
-> Angka Macro Precision (~15%) dan Macro Recall (~30%) mencerminkan sifat BidSentry sebagai **sistem triase konservatif (Human-in-the-Loop triage filter)**, bukan penentu keputusan hukum otomatis. Sistem sengaja tidak mengeluarkan vonis ekstrem secara sembarangan, memprioritaskan perlindungan peserta dari false rejection, dan meneruskan dokumen berstatus meragukan ke antarmuka review auditor manusia.
+> [!NOTE] Analisis Metrik Macro Precision & Recall
+> Angka Macro Precision (~15%) dan Macro Recall (~29%) pada evaluasi per-aturan dianalisis secara terperinci pada Bagian IV berdasarkan output nyata eksekusi engine. Hasil analisis menunjukkan penyebab utama rendahnya metrik per-aturan bukanlah kegagalan penalaran deteksi, melainkan diskrepansi penamaan ID aturan antara skema label pengujian dengan ID deklaratif engine, klausul sah tambahan dalam teks draf kontrak yang tidak dilabeli, serta evaluasi administratif dasar (NIB/NPWP/KSWP).
 
 ### 3. Detail Hasil per Dokumen Validasi v1
 
@@ -100,7 +100,41 @@ Dataset baru di `data/test_narrative_budget/` disusun khusus untuk menguji kemam
 
 ## BAGIAN IV: Analisis Kegagalan & Area Kelemahan Engine (Error Analysis)
 
-Evaluasi jujur terhadap dokumen mismatch:
+### 1. Analisis Macro Precision & Recall (Empirical Finding Gap Analysis)
+
+Berdasarkan eksekusi skrip analisis [`scripts/analyze_benchmark_gaps.py`](../scripts/analyze_benchmark_gaps.py), metrik Macro Precision (14.9%) dan Macro Recall (28.6%) pada Validation Set v1 dan Narrative Set diuraikan secara per-dokumen di bawah ini.
+
+Penyebab rendahnya metrik per-aturan terbukti bersumber dari tiga faktor empiris nyata:
+1. **Diskrepansi Penamaan ID Aturan (Schema Aliasing)**: Label pengujian independen memakai konvensi ID aturan yang berbeda dengan ID deklaratif engine (misal: label `SPEC-LOCKIN-PROC` vs engine `SPEC-LOCKIN-CPU`; label `PROC-TIMELINE-PREP`/`SANGGAH` vs engine konsolidasi `PROC-TIMELINE-COMPRESSED`; label `FIN-HPS-OVER-PAGU` vs engine `FIN-OVER-BUDGET`; label `FIN-BILLING-RATE` vs engine `FIN-MARKUP-RATE`). Pada level vonis, seluruh temuan ini tepat menghasilkan `NO-GO`, namun pada pencocokan string ID eksak, perbedaan ini dihitung sebagai 1 False Negative berpasangan dengan 1 False Positive.
+2. **Klausul Tambahan Riil pada Fixture yang Tidak Dilabeli**: Pada skenario `blind_02`, `blind_03`, dan `blind_07`, berkas draf kontrak yang disertakan memuat klausul denda tanpa batas maksimal ("Denda keterlambatan 1/1000 per hari"). Mesin mendeteksi pelanggaran denda `CON-PENALTY` (GAP) secara sah, namun karena penyusun label minimal tidak mencantumkan denda pada `expected_findings`, temuan sah ini dihitung sebagai False Positive.
+3. **Pemicuan Evaluasi Administratif Otomatis**: Ketika teks dokumen menyebutkan NPWP, NIB, atau KSWP (`blind_01`, `blind_05`, `blind_08`, `budget_02`), engine secara deterministik menjalankan verifikasi kelayakan administratif (`ADM-NPWP`, `ADM-NIB`, `ADM-KSWP`). Pada dokumen tanpa slot berkas bukti penyedia terpisah, status `TERPENUHI` atau `REVIEW` terbit dan dihitung sebagai False Positive terhadap set ekspektasi kosong.
+
+#### Tabel Evaluasi Finding Per-Dokumen: Validation Set v1 (10 Dokumen)
+
+| Dokumen ID | Vonis (Exp / Act) | Finding ID Diharapkan | Finding ID Dihasilkan | Selisih (FP / FN) | Penyebab Nyata Berdasarkan Engine |
+| :--- | :---: | :--- | :--- | :--- | :--- |
+| `blind_01_konstruksi_standar_clean` | `GO` / `GO` ✅ | `ADM-NPWP`, `ADM-NIB`, `ADM-SBU` | `ADM-NPWP`, `ADM-KSWP`, `ADM-NIB`, `ADM-SBU` | FP: `ADM-KSWP` | Pemeriksaan administratif dasar (ADM-KSWP: TERPENUHI) terpicu dari teks |
+| `blind_02_pengadaan_laptop_lockin_intel` | `NO-GO` / `NO-GO` ✅ | `SPEC-LOCKIN-PROC` | `CON-PENALTY`, `SPEC-LOCKIN-CPU` | FP: `CON-PENALTY`, `SPEC-LOCKIN-CPU`<br>FN: `SPEC-LOCKIN-PROC` | Perbedaan ID Aturan: label 'SPEC-LOCKIN-PROC' vs engine 'SPEC-LOCKIN-CPU'; Klausul denda tanpa cap (CON-PENALTY) ada di teks draf kontrak namun tak tercatat di label |
+| `blind_03_konsultansi_jadwal_mepet` | `NO-GO` / `NO-GO` ✅ | `PROC-TIMELINE-PREP`, `PROC-TIMELINE-SANGGAH` | `CON-PENALTY`, `PROC-TIMELINE-COMPRESSED` | FP: `CON-PENALTY`, `PROC-TIMELINE-COMPRESSED`<br>FN: `PROC-TIMELINE-PREP`, `PROC-TIMELINE-SANGGAH` | Perbedaan ID Aturan: label 'PROC-TIMELINE-PREP' vs engine 'PROC-TIMELINE-COMPRESSED'; Perbedaan ID Aturan: label 'PROC-TIMELINE-SANGGAH' vs engine 'PROC-TIMELINE-COMPRESSED'; Klausul denda tanpa cap (CON-PENALTY) ada di teks draf kontrak namun tak tercatat di label |
+| `blind_04_alkes_denda_tanpa_batas` | `NO-GO` / `NO-GO` ✅ | `CON-PENALTY` | `CON-PENALTY` | Nihil | Identik (100% Cocok) |
+| `blind_05_outsourcing_pakta_integritas_trap` | `GO` / `GO` ✅ | *(kosong)* | `ADM-NPWP`, `ADM-NIB` | FP: `ADM-NPWP`, `ADM-NIB` | Pemeriksaan administratif dasar (ADM-NPWP: TERPENUHI) terpicu dari teks; Pemeriksaan administratif dasar (ADM-NIB: TERPENUHI) terpicu dari teks |
+| `blind_06_jasa_erp_over_budget` | `NO-GO` / `NO-GO` ✅ | `FIN-HPS-OVER-PAGU` | `FIN-OVER-BUDGET` | FP: `FIN-OVER-BUDGET`<br>FN: `FIN-HPS-OVER-PAGU` | Perbedaan ID Aturan: label 'FIN-HPS-OVER-PAGU' vs engine 'FIN-OVER-BUDGET' |
+| `blind_07_sewa_kendaraan_equivalent_trap` | `GO` / `NO-GO` ❌ | *(kosong)* | `CON-PENALTY` | FP: `CON-PENALTY` | Klausul denda tanpa cap (CON-PENALTY) ada di teks draf kontrak namun tak tercatat di label |
+| `blind_08_meubeler_sbu_hampir_kadaluwarsa` | `BELUM CUKUP BUKTI` / `BELUM CUKUP BUKTI` ✅ | `ADM-SBU` | `ADM-NPWP`, `ADM-SBU` | FP: `ADM-NPWP` | Pemeriksaan administratif dasar (ADM-NPWP: TERPENUHI) terpicu dari teks |
+| `blind_09_konsultan_billing_rate_tinggi` | `NO-GO` / `NO-GO` ✅ | `FIN-BILLING-RATE` | `FIN-MARKUP-RATE` | FP: `FIN-MARKUP-RATE`<br>FN: `FIN-BILLING-RATE` | Perbedaan ID Aturan: label 'FIN-BILLING-RATE' vs engine 'FIN-MARKUP-RATE' |
+| `blind_10_dokumen_narasi_lepas_tanpa_pasal` | `TIDAK ADA SYARAT TERBACA` / `TIDAK ADA SYARAT TERBACA` ✅ | *(kosong)* | *(kosong)* | Nihil | Identik (100% Cocok) |
+
+#### Tabel Evaluasi Finding Per-Dokumen: Narrative Budget Set (5 Dokumen)
+
+| Dokumen ID | Vonis (Exp / Act) | Finding ID Diharapkan | Finding ID Dihasilkan | Selisih (FP / FN) | Penyebab Nyata Berdasarkan Engine |
+| :--- | :---: | :--- | :--- | :--- | :--- |
+| `budget_01_prose_over_budget` | `NO-GO` / `NO-GO` ✅ | `FIN-OVER-BUDGET` | `FIN-OVER-BUDGET` | Nihil | Identik (100% Cocok) |
+| `budget_02_prose_within_budget` | `GO` / `BELUM CUKUP BUKTI` ❌ | *(kosong)* | `ADM-NPWP`, `ADM-NIB` | FP: `ADM-NPWP`, `ADM-NIB` | Pemeriksaan administratif dasar (ADM-NPWP: REVIEW) terpicu dari teks; Pemeriksaan administratif dasar (ADM-NIB: REVIEW) terpicu dari teks |
+| `budget_03_prose_hps_over_pagu` | `NO-GO` / `NO-GO` ✅ | `FIN-OVER-BUDGET` | `PROC-TIMELINE-COMPRESSED` | FP: `PROC-TIMELINE-COMPRESSED`<br>FN: `FIN-OVER-BUDGET` | Klausul 'FIN-OVER-BUDGET' tidak terdeteksi; Jadwal mepet terpicu dari teks dokumen pemilihan |
+| `budget_04_prose_normative_guideline_trap` | `GO` / `GO` ✅ | *(kosong)* | *(kosong)* | Nihil | Identik (100% Cocok) |
+| `budget_05_prose_multi_item_recap` | `NO-GO` / `NO-GO` ✅ | `FIN-OVER-BUDGET` | `FIN-OVER-BUDGET` | Nihil | Identik (100% Cocok) |
+
+### 2. Evaluasi Dokumen Mismatch Vonis (`blind_07` & `budget_02`)
 
 1. **Interaksi Multi-Slot Dokumen (Kasus `blind_07` & `budget_02`)**:
    - *Masalah*: Dokumen pengujian hanya melampirkan teks KAK/Draf Kontrak tanpa melampirkan bukti penyedia (slot NIB, NPWP kosong). Sesuai kebijakan verdict deterministik yang ketat, ketiadaan bukti dokumen legalitas memicu evaluasi administratif yang menurunkan verdict menjadi `BELUM CUKUP BUKTI` atau `NO-GO` jika syarat wajib tidak terpenuhi.
