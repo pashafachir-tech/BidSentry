@@ -954,6 +954,10 @@ document.addEventListener("click", async (event) => {
     setState({ userPerspective: perspective });
     toast(`Beralih ke Perspektif ${perspective === "pokja" ? "Panitia / Pokja" : "Peserta / Vendor"}.`);
   }
+  if (action === "set-summary-tab") {
+    const tab = target.dataset.tab || "project";
+    setState({ crossSummaryTab: tab });
+  }
   if (action === "export") exportData();
   if (action === "export-review") exportReview();
   if (action === "export-selected-review") exportSelectedReview();
