@@ -656,18 +656,28 @@ class EvaluationEngine:
             r"(?i)(?:total\s+(?:rincian\s+)?biaya|total\s+boq|total\s+hps|harga\s+perkiraan\s+sendiri|nilai\s+hps|\bhps\b|rekapitulasi\s+(?:perhitungan\s+)?(?:teknis\s+)?(?:boq|biaya)|total\s+kebutuhan\s+(?:anggaran|biaya)|bill\s+of\s+quantities)"
         )
 
-        pagu_val: float | None = None
-        boq_val: float | None = None
+        def _find_keyword_and_amount(keyword_pat: str, text: str) -> tuple[re.Match | None, float | None, str]:
+            normative_pre = re.compile(r"(?:tidak\s+(?:boleh\s+)?(?:melebihi|melampaui)|dilarang\s+(?:melebihi|melampaui))\s*$", re.I)
+            normative_post = re.compile(r"^\s*(?:tidak\s+(?:boleh\s+)?(?:melebihi|melampaui)|dilarang\s+(?:melebihi|melampaui))", re.I)
+            best_m: re.Match | None = None
+            best_v: float | None = None
+            best_snip: str = ""
+            for m in re.finditer(keyword_pat, text):
+                pre = text[max(0, m.start() - 30):m.start()]
+                post = text[m.end():min(len(text), m.end() + 30)]
+                if normative_pre.search(pre) or normative_post.search(post):
+                    continue
+                snip = text[m.start():m.start() + 150]
+                val = _parse_idr_amount(snip)
+                if val is not None:
+                    return m, val, snip
+                if best_m is None:
+                    best_m = m
+                    best_snip = snip
+            return best_m, best_v, best_snip
 
-        m_pagu = re.search(pagu_keyword_pat, request.dok_pemilihan)
-        if m_pagu:
-            pagu_snippet = request.dok_pemilihan[m_pagu.start():m_pagu.start() + 150]
-            pagu_val = _parse_idr_amount(pagu_snippet)
-
-        m_boq = re.search(boq_keyword_pat, request.dok_pemilihan)
-        if m_boq:
-            boq_snippet = request.dok_pemilihan[m_boq.start():m_boq.start() + 150]
-            boq_val = _parse_idr_amount(boq_snippet)
+        m_pagu, pagu_val, pagu_snippet = _find_keyword_and_amount(pagu_keyword_pat, request.dok_pemilihan)
+        m_boq, boq_val, boq_snippet = _find_keyword_and_amount(boq_keyword_pat, request.dok_pemilihan)
 
         pagu_line = _line_find(requirement_lines, pagu_keyword_pat)
         boq_line = _line_find(requirement_lines, boq_keyword_pat)
@@ -679,17 +689,29 @@ class EvaluationEngine:
             pagu_fmt = f"{int(round(pagu_val)):,}".replace(",", ".")
             def_fmt = f"{int(round(deficit)):,}".replace(",", ".")
             pct_fmt = f"{pct:.1f}".replace(".", ",")
-            pagu_line = _line_find(requirement_lines, r"(?i)pagu\s+(?:anggaran|dipa|dana|indikatif)|alokasi\s+pagu|anggaran\s+yang\s+(?:tersedia|dialokasikan)|nilai\s+pagu")
-            if not pagu_line and pagu_match:
-                pagu_line = ("Dokumen pemilihan", pagu_match.group(0).strip())
+            pagu_line = _line_find(requirement_lines, pagu_keyword_pat)
+            if pagu_line and pagu_line[1] not in request.dok_pemilihan:
+                pagu_line = None
+            if not pagu_line and m_pagu:
+                end_pos = request.dok_pemilihan.find("\n", m_pagu.start())
+                if end_pos == -1 or end_pos - m_pagu.start() > 120:
+                    end_pos = min(len(request.dok_pemilihan), m_pagu.start() + 100)
+                snip_text = request.dok_pemilihan[m_pagu.start():end_pos].strip()
+                pagu_line = ("Dokumen pemilihan", snip_text if snip_text else m_pagu.group(0).strip())
             elif not pagu_line:
-                pagu_line = ("Dokumen pemilihan", f"Pagu Anggaran: Rp {pagu_fmt}")
+                pagu_line = ("Dokumen pemilihan", request.dok_pemilihan[:80].strip() or "Pagu Anggaran")
 
-            boq_line = _line_find(requirement_lines, r"(?i)total\s+(?:rincian\s+)?biaya|total\s+boq|total\s+hps|harga\s+perkiraan|rekapitulasi.*biaya|bill\s+of\s+quantities")
-            if not boq_line and boq_match:
-                boq_line = ("Dokumen pemilihan", boq_match.group(0).strip())
+            boq_line = _line_find(requirement_lines, boq_keyword_pat)
+            if boq_line and boq_line[1] not in request.dok_pemilihan:
+                boq_line = None
+            if not boq_line and m_boq:
+                end_pos = request.dok_pemilihan.find("\n", m_boq.start())
+                if end_pos == -1 or end_pos - m_boq.start() > 120:
+                    end_pos = min(len(request.dok_pemilihan), m_boq.start() + 100)
+                snip_text = request.dok_pemilihan[m_boq.start():end_pos].strip()
+                boq_line = ("Dokumen pemilihan", snip_text if snip_text else m_boq.group(0).strip())
             elif not boq_line:
-                boq_line = ("Dokumen pemilihan", f"Total BoQ: Rp {boq_fmt}")
+                boq_line = ("Dokumen pemilihan", request.dok_pemilihan[:80].strip() or "Total BoQ")
             findings.append(_finding(
                 "FIN-OVER-BUDGET",
                 "Total BoQ Melebihi Pagu Anggaran (Over Budget)",
