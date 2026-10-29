@@ -109,6 +109,27 @@ Pengguna dapat berganti sudut pandang dengan satu klik di topbar:
 
 ---
 
+## 💼 Model Bisnis & Aksesibilitas (Micro-SaaS)
+
+BidSentry mengadopsi model **Lean Micro-Utility & Micro-SaaS** yang membumi dan dirancang tanpa friksi birokrasi bagi ekosistem pengadaan barang/jasa:
+
+| Skema Layanan | Sasaran Pengguna | Biaya & Model Pembayaran | Fitur & Benefit Inklusif |
+| :--- | :--- | :--- | :--- |
+| **Pay-Per-Audit (QRIS Instant)** | Kontraktor CV / UMKM (H-1 lelang) | **Rp 5.000 / 10 kali audit** (efektif **Rp 500 / dokumen**) | Scan kilat KAK/BoQ, validasi 14 aturan deterministik, verifikasi batas denda & over-budget. |
+| **Vendor Pro (Langganan)** | Kontraktor Aktif LPSE (Rutin lelang) | **Rp 300.000 / bulan** (setara **Rp 10.000 / hari**) | Kuota 30 tender/bln, deteksi klausul diskriminatif, generator draf Surat Sanggahan resmi (.docx). |
+| **BUMD / BLUD Pilot** | RSUD BLUD / BUMD Daerah / Satuan Pengawas | **Rp 800.000 / bulan** (setara **Rp 9,6 Jt / thn** — SPK Langsung) | Kuota 100 dokumen/bln, audit BoQ vs HPS, deteksi kolusi (Pasal 22 UU 5/1999), generator BAHP (.docx). |
+
+### 🧭 Matriks Lanskap Kompetitif Singkat
+
+| Alternatif Solusi | Cakupan Analisis | Kelemahan Utama | Posisi BidSentry (Neuro-Symbolic + IBM Granite) |
+| :--- | :--- | :--- | :--- |
+| **SPSE / LPSE LKPP** | Repositori transaksi lelang | Tidak ada engine audit isi dokumen | **Mitra Komplementer**: Audit mandiri pre-flight pra-submit berkas ke SPSE |
+| **Platform Info Tender (TenderPlus, dsb.)** | Notifikasi peluang lelang | Hanya scraping judul & pagu luar | **Audit Kedalaman Teknis**: Membedah detail KAK, BoQ Excel, dan draf kontrak |
+| **Enterprise AI Global (Luminance, Kira)** | Kontrak korporasi global | Ratusan juta/thn, buta hukum Perpres LKPP | **Spesifik Regulasi Lokal**: Selaras Perpres 12/2021 dengan harga mikro QRIS |
+| **Generic LLM Chatbot (ChatGPT, Claude)** | Analisis teks umum | Risiko halusinasi hitung BoQ & bocor data rahasia | **Grounded & Terlindungi**: Verifikasi matematika deterministik + PII Scrubber lokal |
+
+*Rincian analisis unit economics, TAM/SAM/SOM, dan parit pertahanan kompetitif (*moat*) disajikan lengkap pada [**docs/MONETIZATION_STRATEGY.md**](docs/MONETIZATION_STRATEGY.md).*
+
 ## 📊 Hasil Benchmark & Pengujian Nyata
 
 Seluruh angka di bawah dihitung secara dinamis dari eksekusi kode aktual tanpa manipulasi:
@@ -187,14 +208,13 @@ python tests/e2e_smoke.py
 
 ---
 
-## 📚 Dokumen Pendukung untuk Penjurian
+## 📚 Dokumentasi Teknis & Produk
 
-- 📑 [**Evidence Scorecard (Rubrik Juri)**](docs/EVIDENCE_SCORECARD.md) — Pemetaan pembuktian terhadap seluruh kriteria penjurian.
-- 💰 [**Strategi Monetisasi B2B SaaS**](docs/MONETIZATION_STRATEGY.md) — Model bisnis 3-tier, penetrasi B2B BUMN/Auditor, dan proyeksi unit economics.
+- 💰 [**Strategi Monetisasi & Micro-SaaS**](docs/MONETIZATION_STRATEGY.md) — Model Micro-Utility & Micro-SaaS, pricing eceran QRIS, proyeksi bottom-up TAM/SAM/SOM, dan lanskap kompetitor.
 - 🏗️ [**Peta Arsitektur Terkonsolidasi**](docs/ARCHITECTURE_CONSOLIDATED.md) — Struktur arsitektur backend, konsolidasi modul finansial, dan data flow.
 - 🧠 [**Model & System Card**](docs/MODEL_CARD.md) — Kebijakan vonis deterministik, mitigasi bias etika, dan batasan operasional.
 - 🔬 [**Laporan Hasil Benchmark Lengkap**](docs/BENCHMARK_RESULTS.md) — Analisis detail per dokumen uji, confusion matrix, dan mitigasi false positives.
-- 📋 [**Checklist Kesiapan Juri**](docs/JUDGE_READINESS.md) — Verifikasi tuntas terhadap 8 *red flags* audit teknis.
+- 🏛️ [**Analisis Komparatif Kompetitif**](docs/COMPETITIVE_COMPARISON.md) — Matriks perbandingan objektif vs Review Manual, Software Kontrak Global, dan Chatbot LLM Generik.
 
 ---
 

@@ -44,14 +44,6 @@ def update_docs(test_count: int) -> None:
         readme_path.write_text(content, encoding="utf-8")
         print(f"Updated {readme_path.name} to {test_count} tests.")
 
-    scorecard_path = ROOT / "docs" / "EVIDENCE_SCORECARD.md"
-    if scorecard_path.exists():
-        content = scorecard_path.read_text(encoding="utf-8")
-        content = re.sub(r"\(\d+\s*passed tests\)", f"({test_count} passed tests)", content)
-        content = re.sub(r"\*\*\d+\s*tests pass\*\*", f"**{test_count} tests pass**", content)
-        scorecard_path.write_text(content, encoding="utf-8")
-        print(f"Updated {scorecard_path.name} to {test_count} tests.")
-
     changelog_path = ROOT / "docs" / "CHANGELOG_ITERASI.md"
     if changelog_path.exists():
         content = changelog_path.read_text(encoding="utf-8")

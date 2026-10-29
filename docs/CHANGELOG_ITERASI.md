@@ -65,7 +65,7 @@ Dokumen ini mencatat riwayat perbaikan menyeluruh pada repositori BidSentry berd
 - **Pengujian E2E Smoke Test**: Menambahkan skrip pengujian Playwright `tests/e2e_smoke.py` untuk memvalidasi interaksi UI lengkap dari browser headless.
 
 ### Fase 4: Paket Bukti Rubrik Penilaian Juri
-- **Lembar Bukti Lengkap**: Menyusun `docs/EVIDENCE_SCORECARD.md` yang memetakan solusi terhadap 6 area rubrik (Problem Clarity 20%, Innovation/Feasibility/Monetization 25%, User Impact 15%, Technical Execution & Prototype 20%, Responsible AI 10%, Participation 5%).
+- **Lembar Bukti Lengkap**: Menyusun `dokumentasi kepatuhan teknis` yang memetakan solusi terhadap 6 area rubrik (Problem Clarity 20%, Innovation/Feasibility/Monetization 25%, User Impact 15%, Technical Execution & Prototype 20%, Responsible AI 10%, Participation 5%).
 - **Model & Decision System Card**: Menyusun `docs/MODEL_CARD.md` yang mendokumentasikan batasan deterministik vs LLM, sanitasi PII, limitasi sistem, dan mitigasi kegagalan.
 - **Dokumentasi Arsitektur Lengkap**: Menyusun `docs/ARCHITECTURE.md` disertai diagram Mermaid flowchart dan sequence diagram yang menggambarkan alur proses dan titik integrasi IBM.
 - **Probe IBM watsonx / Bob MCP**: Membuat skrip `scripts/verify_watsonx.py` dan dokumentasi transparansi `docs/INTEGRATION_STATUS.md` yang melaporkan status koneksi secara obyektif tanpa klaim palsu.
