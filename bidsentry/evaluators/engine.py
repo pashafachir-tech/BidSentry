@@ -507,6 +507,8 @@ class EvaluationEngine:
             r"\b(?:wajib|harus|hanya\s+menerima|mengunci\s+ke)\s+(?:merek|merk|brand|tipe|kendaraan|mobil|laptop|server|perangkat|komputer)?\s*(?:Lenovo|ThinkPad|Toyota|Innova|Dell|HP|HPE|Cisco|Oracle|Apple|MacBook|Asus|Acer|Samsung|Huawei)\b|"
             r"\b(?:must\s+be|exclusive\s+use\s+of)\s+[A-Za-z0-9_-]+|"
             r"\bonly\s+[A-Za-z0-9_-]+\s+accepted\b|"
+            r"\b(?:wajib|harus|hanya|diharuskan|diwajibkan)\s+(?:menggunakan|memakai)?\s*(?:perangkat\s+)?(?:produk|merek|merk|brand|perangkat|tipe|seri|model)\s+(?-i:(?!(?:SNI|ISO|TKDN|PDN|Standar|Pabrikan|Lokal)\b)[A-Z][A-Za-z0-9_-]+\s+[A-Z0-9][A-Za-z0-9_.-]*)|"
+            r"\b(?:must\s+use|must\s+be|exclusive\s+use\s+of|only\s+use)\s+(?:products?\s+(?:of\s+)?|brand\s+)?(?-i:(?!(?:SNI|ISO|TKDN|PDN)\b)[A-Z][A-Za-z0-9_-]+\s+[A-Z0-9][A-Za-z0-9_.-]*)|"
             r"vendor-tailored|mengarah(?:kan)?\s+spesifikasi|mengunci\s+(?:ke\s+)?(?:produk|merek|platform|vendor)"
         )
         general_lockin = _line_find(requirement_lines, general_lockin_pat)

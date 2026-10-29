@@ -467,3 +467,167 @@ class TestExpandedEnglishLiquidatedDamages:
         assert res["verdict"] == "GO"
         gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
         assert "CON-PENALTY" not in gap_ids
+
+
+class TestStructuredProductBrandLockin:
+    """Tests for generalized detection of (wajib|harus) (menggunakan)? (produk|merek) <Nama Kapital> <Model>."""
+
+    def test_structured_brand_lockin_printer_hp(self, engine: EvaluationEngine) -> None:
+        req = EvaluationRequest(
+            package_name="Pengadaan Perangkat Cetak Kantor",
+            tender_id="TND-PRN-01",
+            dok_pemilihan=(
+                "Spesifikasi Teknis:\n"
+                "Printer harus menggunakan produk HP LaserJet Pro M404.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" in gap_ids
+
+    def test_structured_brand_lockin_kamera_hikvision(self, engine: EvaluationEngine) -> None:
+        req = EvaluationRequest(
+            package_name="Sistem CCTV Keamanan",
+            tender_id="TND-CAM-01",
+            dok_pemilihan=(
+                "Spesifikasi Kamera:\n"
+                "Kamera wajib produk Hikvision DS-2CD2143.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" in gap_ids
+
+    def test_structured_brand_lockin_router_mikrotik(self, engine: EvaluationEngine) -> None:
+        req = EvaluationRequest(
+            package_name="Pengadaan Router Jaringan",
+            tender_id="TND-NET-01",
+            dok_pemilihan=(
+                "Perangkat Jaringan:\n"
+                "Router harus menggunakan perangkat merek MikroTik RB4011.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" in gap_ids
+
+    def test_structured_brand_lockin_english_hp_only(self, engine: EvaluationEngine) -> None:
+        req = EvaluationRequest(
+            package_name="Office Printer Upgrade",
+            tender_id="TND-EN-PRN-01",
+            dok_pemilihan=(
+                "Technical Requirements:\n"
+                "All bidders must use HP LaserJet Pro M404 products only.\n"
+                "Tender timeline: bidding period 10 working days, objection period 7 working days."
+            ),
+            contract_draft="Liquidated damages of 1/1000 per day capped at 5% of contract value.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "NO-GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" in gap_ids
+
+    def test_false_positive_produk_sni_tkdn(self, engine: EvaluationEngine) -> None:
+        req = EvaluationRequest(
+            package_name="Pengadaan Material Standar",
+            tender_id="TND-FP-01",
+            dok_pemilihan=(
+                "Kriteria Produk:\n"
+                "Produk harus memiliki sertifikat SNI dan TKDN minimal 40%.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" not in gap_ids
+
+    def test_false_positive_produk_dalam_negeri(self, engine: EvaluationEngine) -> None:
+        req = EvaluationRequest(
+            package_name="Pengadaan Seragam Kerja",
+            tender_id="TND-FP-02",
+            dok_pemilihan=(
+                "Ketentuan Pengadaan:\n"
+                "Penyedia harus menggunakan produk dalam negeri sesuai ketentuan TKDN.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" not in gap_ids
+
+    def test_false_positive_merek_apa_saja(self, engine: EvaluationEngine) -> None:
+        req = EvaluationRequest(
+            package_name="Pengadaan Komputer Operasional",
+            tender_id="TND-FP-03",
+            dok_pemilihan=(
+                "Spesifikasi Hardware:\n"
+                "Laptop merek apa saja dengan RAM minimal 16GB.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" not in gap_ids
+
+    def test_false_positive_printer_hp_atau_setara(self, engine: EvaluationEngine) -> None:
+        req = EvaluationRequest(
+            package_name="Pengadaan Printer Kantor Setara",
+            tender_id="TND-FP-04",
+            dok_pemilihan=(
+                "Spesifikasi Teknis:\n"
+                "Printer harus menggunakan produk HP LaserJet Pro M404 atau setara.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" not in gap_ids
+
+    def test_false_positive_produk_bersertifikat_iso(self, engine: EvaluationEngine) -> None:
+        req = EvaluationRequest(
+            package_name="Pengadaan Jasa Kebersihan",
+            tender_id="TND-FP-05",
+            dok_pemilihan=(
+                "Kriteria Mutu:\n"
+                "Penyedia wajib menggunakan produk bersertifikat ISO 9001.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" not in gap_ids
+
+    def test_false_positive_kemasan_standar_pabrikan(self, engine: EvaluationEngine) -> None:
+        req = EvaluationRequest(
+            package_name="Pengadaan Bahan Kimia Pembersih",
+            tender_id="TND-FP-06",
+            dok_pemilihan=(
+                "Ketentuan Pengemasan:\n"
+                "Barang harus menggunakan kemasan standar pabrikan.\n"
+                "Masa penawaran 10 hari kerja, masa sanggah 7 hari kerja."
+            ),
+            contract_draft="Denda 1/1000 per hari dengan batas maksimal 5% dari nilai kontrak.",
+        )
+        res = engine.evaluate(req)
+        assert res["verdict"] == "GO"
+        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
+        assert "SPEC-BRAND-LOCKIN" not in gap_ids

@@ -277,6 +277,30 @@ rules:
     severity: "HIGH"
     rekomendasi_template: "Sistem manajemen out-of-band eksklusif vendor tertentu membatasi partisipasi merek setara."
 
+  - id: SPEC-BRAND-LOCKIN
+    nama: "Spesifikasi Mengarah ke Merek/Produk Tertentu (Brand Lock-in)"
+    kategori: "Spesifikasi"
+    pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 19 ayat 1"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "\\b(?:wajib|harus|hanya|diharuskan|diwajibkan)\\s+(?:menggunakan|memakai)?\\s*(?:perangkat\\s+)?(?:produk|merek|merk|brand|perangkat|tipe|seri|model)\\s+(?-i:(?!(?:SNI|ISO|TKDN|PDN|Standar|Pabrikan|Lokal)\\b)[A-Z][A-Za-z0-9_-]+\\s+[A-Z0-9][A-Za-z0-9_.-]*)"
+      - "\\b(?:must\\s+use|must\\s+be|exclusive\\s+use\\s+of|only\\s+use)\\s+(?:products?\\s+(?:of\\s+)?|brand\\s+)?(?-i:(?!(?:SNI|ISO|TKDN|PDN)\\b)[A-Z][A-Za-z0-9_-]+\\s+[A-Z0-9][A-Za-z0-9_.-]*)"
+      - "\\b(?:wajib|harus|hanya\\s+(?:menerima)?)\\s+(?:merek|merk|brand)\\s+[A-Za-z0-9_-]+"
+    pengecualian_regex:
+      - "atau\\s+setara"
+      - "atau\\s+yang\\s+setara"
+      - "\\bsetara\\b"
+      - "atau\\s+ekuivalen"
+      - "\\bekuivalen\\b"
+      - "\\bequivalent\\b"
+      - "or\\s+equivalent"
+      - "produk\\s+setara"
+      - "equal\\s+or\\s+better"
+      - "acceptable\\s+alternative"
+    severity: "HIGH"
+    rekomendasi_template: "Spesifikasi teknis terindikasi mengarah kepada produk/merek tertentu tanpa membuka alternatif setara; melanggar Pasal 19 ayat (1) Perpres 12/2021."
+
   - id: SPEC-REGIONAL-LOCKIN
     nama: "Persyaratan Asosiasi Regional Diskriminatif (Regional Lock-in)"
     kategori: "Kualifikasi"
