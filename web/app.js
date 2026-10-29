@@ -1,7 +1,7 @@
-import { api, setAuthToken } from "./api.js";
-import { getState, setState, subscribe } from "./state.js";
-import { renderApp, renderDialogs, escapeHtml } from "./render.js";
-import { getReviewSnapshot } from "./review.js";
+import { api, setAuthToken } from "./api.js?v=2.2.0";
+import { getState, setState, subscribe } from "./state.js?v=2.2.0";
+import { renderApp, renderDialogs, escapeHtml } from "./render.js?v=2.2.0";
+import { getReviewSnapshot } from "./review.js?v=2.2.0";
 
 const root = document.getElementById("app");
 const dialogLayer = document.getElementById("dialog-layer");

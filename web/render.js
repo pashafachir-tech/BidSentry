@@ -1,4 +1,4 @@
-import { renderReview } from "./review.js";
+import { renderReview } from "./review.js?v=2.2.0";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const number = (value) => new Intl.NumberFormat("id-ID").format(Number(value || 0));
