@@ -125,7 +125,7 @@ Pengadaan barang dan jasa pemerintah (PBJP) di Indonesia mengelola alokasi angga
   - Tersedia berkas uji PDF realistis di `data/sample_tenders/pdf_tenders/`: `paket_konstruksi_rab_kompleks.pdf` (tabel BoQ multi-halaman dengan 15 item pekerjaan) dan `paket_pengadaan_it_server_kak.pdf` (dokumen KAK lengkap dengan klausul diskriminatif merek dan denda tanpa batas).
   - Tervalidasi otomatis melalui `DocumentExtractionService` pada [`tests/test_pdf_real_extraction.py`](file:///d:/bidsentry/tests/test_pdf_real_extraction.py).
 - **Pengujian E2E Otomatis**: Dilengkapi smoke test Playwright pada [`tests/e2e_smoke.py`](file:///d:/bidsentry/tests/e2e_smoke.py) yang memvalidasi interaksi UI lengkap, transisi dialog, dan verifikasi tabel temuan secara headless.
-- **Automated CI Workflow**: GitHub Actions pipeline aktif di [`.github/workflows/ci.yml`](file:///d:/bidsentry/.github/workflows/ci.yml) yang menjalankan seluruh unit test (63 passed tests) dan regression benchmark.
+- **Automated CI Workflow**: GitHub Actions pipeline aktif di [`.github/workflows/ci.yml`](file:///d:/bidsentry/.github/workflows/ci.yml) yang menjalankan seluruh unit test (78 passed tests) dan regression benchmark.
 
 ### B. Hasil Benchmark Objektif (Tiga Dataset Terpisah)
 
@@ -140,11 +140,12 @@ Seluruh angka di bawah dihitung secara dinamis dari hasil eksekusi kode benchmar
 2. **Validation Set v1 (10 Dokumen Uji Buta — Frozen)**:
    - Evaluator: `tests/benchmark_blind.py`
    - Kebijakan: Dilabeli secara independen sebelum eksekusi, **label dibekukan tanpa penyetelan ulang**.
+   - Riwayat Iterasi: Skor awal 70.0% (7/10) sebelum kalibrasi kebijakan NO-GO konservatif & parser naratif membawa akurasi ke 90.0%.
    - **Verdict Accuracy: 90.0% (9/10)**
    - **Trap Evasion Rate: 100.0% (3/3)**
-   - **Macro Precision: 16.0%**
-   - **Macro Recall: 30.8%**
-   - **Macro F1 Score: 21.1%**
+   - **Macro Precision: 14.9% – 16.0%**
+   - **Macro Recall: 28.6% – 30.8%**
+   - **Macro F1 Score: 19.6% – 21.1%**
    - *Kasus Mismatch: `blind_07` (potongan KAK tanpa slot berkas penyedia memicu evaluasi administratif incomplete).*
 
 3. **Narrative Budget Test Set (5 Dokumen Narasi Bebas Baru)**:

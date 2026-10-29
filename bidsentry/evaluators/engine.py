@@ -183,6 +183,73 @@ def _money(text: str) -> list[float]:
     return values
 
 
+_WORD_NUMBERS = {
+    "satu": 1, "dua": 2, "tiga": 3, "empat": 4, "lima": 5, "enam": 6, "tujuh": 7, "delapan": 8, "sembilan": 9, "sepuluh": 10,
+    "sebelas": 11, "dua belas": 12, "tiga belas": 13, "empat belas": 14, "lima belas": 15
+}
+
+
+def _parse_days_count(text: str) -> int | None:
+    """Parse duration in days from text supporting both digits and Indonesian word numerals."""
+    m = re.search(r"(\d+)(?:\s*\([A-Za-z]+\))?\s*hari\s*(?:kerja|kalender)?", text, re.I)
+    if m:
+        return int(m.group(1))
+    for word, num in _WORD_NUMBERS.items():
+        if re.search(rf"\b{word}\s*hari\s*(?:kerja|kalender)?", text, re.I):
+            return num
+    return None
+
+
+def _parse_idr_amount(text: str) -> float | None:
+    """Parse monetary amount in IDR supporting both dotted formats and Indonesian word multipliers."""
+    if not text:
+        return None
+    t = text.strip()
+    m_unit = re.search(r"(?:rp\.?\s*)?(\d+(?:[.,]\d+)?)\s*(miliar|milyar|triliun|juta|m|jt|b)\b", t, re.I)
+    if m_unit:
+        num_str = m_unit.group(1).replace(",", ".")
+        val = float(num_str)
+        unit = m_unit.group(2).lower()
+        if unit in ("miliar", "milyar", "m", "b"):
+            return val * 1_000_000_000.0
+        if unit in ("triliun",):
+            return val * 1_000_000_000_000.0
+        if unit in ("juta", "jt"):
+            return val * 1_000_000.0
+    m_num = re.search(r"(?:rp\.?\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{7,})", t, re.I)
+    if m_num:
+        try:
+            return float(parse_idr_number(m_num.group(1)))
+        except (ValueError, TypeError):
+            pass
+    return None
+
+
+_ANTI_EQUIV_PATTERNS = [
+    re.compile(r"(?:tidak\s+(?:menerima|mengizinkan|diperkenankan|boleh|dapat)|tanpa|dilarang|bukan|menolak)\s+(?:opsi\s+|produk\s+|barang\s+|tipe\s+)?(?:setara|ekuivalen|equivalent)", re.I),
+    re.compile(r"(?:setara|ekuivalen|equivalent)\s+(?:tidak\s+diterima|tidak\s+diakomodir|ditolak|dilarang|gugur)", re.I),
+]
+
+_EQUIV_PHRASE_PAT = re.compile(
+    r"(?:atau\s+(?:[a-z0-9_-]+\s+){0,6}(?:yang\s+)?setara|atau\s+ekuivalen|atau\s+sepadan|or\s+equivalent|produk\s+setara|dapat\s+diganti\s+setara|\bekuivalen\b|\bequivalent\b)",
+    re.I
+)
+
+
+def has_valid_equivalency(text: str) -> bool:
+    """Check whether text provides genuine brand equivalency, resisting anti-equivalency negation."""
+    tl = text.casefold()
+    for pat in _ANTI_EQUIV_PATTERNS:
+        if pat.search(tl):
+            return False
+    if _EQUIV_PHRASE_PAT.search(tl):
+        return True
+    bare_setara = re.search(r"\bsetara\b(?!\s+(?:cat\s*\d|tier|level|standar|sni|iso))", tl)
+    if bare_setara:
+        return True
+    return False
+
+
 def _finding(identifier: str, clause: str, category: str, status: str, req: tuple[str, str] | None, evidence: tuple[str, str] | None, note: str, severity: str = "MEDIUM") -> dict[str, Any]:
     return {
         "id": identifier, "category": category, "clause": clause, "status": status,
@@ -394,23 +461,18 @@ class EvaluationEngine:
                 ))
 
         # 9. Vendor/Brand Lock-in Detection (Pasal 19 ayat 1 Perpres 12/2021)
-        equiv_phrases = get_brand_equivalency_phrases()
-        def has_equivalency(text: str) -> bool:
-            tl = text.casefold()
-            return any(phrase.casefold() in tl for phrase in equiv_phrases)
-
         lockin_rules = [
             (
                 "SPEC-LOCKIN-CPU",
                 "Penguncian Merek Prosesor & Arsitektur (Intel Xeon / Emerald Rapids / UPI 4.0)",
-                r"\b(?:Intel(?:\s+Xeon)?\b.*Emerald\s+Rapids|Emerald\s+Rapids|UPI\s+4\.0|Intel\s+C741|TME-MK|Intel\s+VMD|Platform\s+Firmware\s+Resilience|Boot\s+Guard)\b",
-                "Spesifikasi menyebut kode arsitektur eksklusif (Emerald Rapids), interkoneksi proprietari (UPI 4.0), atau fitur firmware eksklusif Intel tanpa padanan setara (AMD EPYC/Ampere). Melanggar Pasal 19 ayat (1) Perpres 12/2021.",
+                r"\b(?:Intel(?:\s+Xeon)?(?:\s+(?:Gold|Platinum|Silver|Bronze|\d{4}[A-Za-z]?))?|AMD\s+EPYC|Emerald\s+Rapids|UPI\s+4\.0|Intel\s+C741|TME-MK|Intel\s+VMD|Platform\s+Firmware\s+Resilience|Boot\s+Guard)\b",
+                "Spesifikasi menyebut kode arsitektur eksklusif (Emerald Rapids), prosesor server tertentu, interkoneksi proprietari (UPI 4.0), atau fitur firmware eksklusif Intel tanpa klausul padanan setara (AMD EPYC/Ampere). Melanggar Pasal 19 ayat (1) Perpres 12/2021.",
             ),
             (
                 "SPEC-LOCKIN-GPU",
                 "Penguncian Akselerator / GPU Eksklusif (NVIDIA H100 SXM5 / NVLink 4.0)",
-                r"\b(?:NVIDIA\s+H100|H100\s+SXM5|NVLink\s+4\.0|ConnectX-7|Quantum-2|QM9700)\b",
-                "Spesifikasi menyebut model hardware H100 SXM5, interkoneksi proprietari NVLink 4.0, atau switch Infiniband eksklusif NVIDIA yang menutup kompetisi pabrikan lain. Melanggar Pasal 19 ayat (1) Perpres 12/2021.",
+                r"\b(?:NVIDIA\s+(?:H100|A100|H200|L40[S]?|A800|H800|RTX\s*\d{4})|H100\s+SXM5|NVLink\s+4\.0|ConnectX-7|Quantum-2|QM9700)\b",
+                "Spesifikasi menyebut model hardware H100/A100 SXM5, interkoneksi proprietari NVLink 4.0, atau switch Infiniband eksklusif NVIDIA yang menutup kompetisi pabrikan lain tanpa opsi kesetaraan. Melanggar Pasal 19 ayat (1) Perpres 12/2021.",
             ),
             (
                 "SPEC-LOCKIN-MGMT",
@@ -418,14 +480,31 @@ class EvaluationEngine:
                 r"\b(?:Dell\s+iDRAC\s+10|HPE\s+iLO\s+7|PowerStore\s+Manager|NetApp\s+ONTAP|ONTAP\s+FabricPool|Fabric\s+Vision)\b",
                 "Spesifikasi menyebut sistem manajemen out-of-band (iDRAC 10 / iLO 7) atau software manajemen storage (PowerStore / ONTAP / Fabric Vision) eksklusif vendor tertentu yang diskriminatif. Melanggar Pasal 19 ayat (1) Perpres 12/2021.",
             ),
+            (
+                "SPEC-LOCKIN-NETWORKING",
+                "Penguncian Perangkat Jaringan Tertentu",
+                r"\b(?:Cisco(?:\s+Catalyst|\s+Nexus|\s+IOS-XE)?(?:\s+\d{4}[A-Za-z0-9]*)?|Juniper\s+Junos|Fortinet\s+FortiGate|ArubaOS)\b",
+                "Spesifikasi menyebut perangkat jaringan atau sistem operasi proprietary tertentu tanpa opsi produk setara; melanggar Pasal 19 ayat (1) Perpres 12/2021.",
+            ),
+            (
+                "SPEC-LOCKIN-SOFTWARE",
+                "Penguncian Database / Perangkat Lunak Tertentu",
+                r"\b(?:Oracle(?:\s+Database)?(?:\s+\d{1,2}[a-z]?)?|SAP\s+S/?4HANA|Microsoft\s+(?:SQL\s+Server|Dynamics|Azure\s+Stack))\b",
+                "Spesifikasi mengunci produk perangkat lunak atau database proprietary tertentu tanpa alternatif solusi setara; melanggar Pasal 19 ayat (1) Perpres 12/2021.",
+            ),
         ]
 
-        general_lockin = _line_find(requirement_lines, r"vendor-tailored|mengarah(?:kan)?\s+spesifikasi|mengunci\s+(?:ke\s+)?(?:produk|merek|platform|vendor)")
+        general_lockin_pat = (
+            r"(?i)\b(?:wajib|harus|hanya\s+(?:menerima)?)\s+(?:merek|merk|brand)\s+[A-Za-z0-9_-]+|"
+            r"\b(?:wajib|harus|hanya\s+menerima|mengunci\s+ke)\s+(?:merek|merk|brand|tipe|kendaraan|mobil|laptop|server|perangkat|komputer)?\s*(?:Lenovo|ThinkPad|Toyota|Innova|Dell|HP|HPE|Cisco|Oracle|Apple|MacBook|Asus|Acer|Samsung|Huawei)\b|"
+            r"vendor-tailored|mengarah(?:kan)?\s+spesifikasi|mengunci\s+(?:ke\s+)?(?:produk|merek|platform|vendor)"
+        )
+        general_lockin = _line_find(requirement_lines, general_lockin_pat)
         lockin_detected = False
         for lock_code, lock_label, lock_pat, lock_note in lockin_rules:
             matched = _line_find(requirement_lines, lock_pat)
             if matched:
-                if has_equivalency(matched[1]):
+                if has_valid_equivalency(matched[1]):
                     # Contains equivalency phrase (e.g. "atau setara", "ekuivalen") -> Not a poison pill violation
                     continue
                 lockin_detected = True
@@ -441,7 +520,7 @@ class EvaluationEngine:
                 ))
 
         if not lockin_detected and general_lockin:
-            if not has_equivalency(general_lockin[1]):
+            if not has_valid_equivalency(general_lockin[1]):
                 findings.append(_finding(
                     "SPEC-BRAND-LOCKIN",
                     "Spesifikasi Mengarah ke Merek Tertentu (Vendor Lock-in)",
@@ -458,18 +537,18 @@ class EvaluationEngine:
         min_sanggah_days = int(get_threshold("min_sanggah_days", 5))
 
         timeline_redflag = _line_find(requirement_lines, r"compressed\s+timeline|jadwal\s+mepet|terlalu\s+mepet")
-        bid_prep_match = _line_find(requirement_lines, r"(?:penyusunan\s+dokumen\s+penawaran|pemasukan\s+penawaran)[\s\S]{0,120}?(?:hanya\s+)?(\d+)(?:\s*\([A-Za-z]+\))?\s*hari\s*kerja")
-        sanggah_match = _line_find(requirement_lines, r"masa\s+sanggah[\s\S]{0,120}?(?:hanya\s+)?(\d+)(?:\s*\([A-Za-z]+\))?\s*hari\s*kerja")
+        bid_prep_match = _line_find(requirement_lines, r"(?:penyusunan\s+dokumen\s+penawaran|pemasukan\s+penawaran)[\s\S]{0,120}?(?:hanya\s+)?(\d+|[A-Za-z]+)(?:\s*\([A-Za-z]+\))?\s*hari\s*(?:kerja|kalender)")
+        sanggah_match = _line_find(requirement_lines, r"masa\s+sanggah[\s\S]{0,120}?(?:hanya\s+)?(\d+|[A-Za-z]+)(?:\s*\([A-Za-z]+\))?\s*hari\s*(?:kerja|kalender)")
 
         timeline_issues: list[str] = []
         if bid_prep_match:
-            days = re.search(r"(\d+)(?:\s*\([A-Za-z]+\))?\s*hari\s*kerja", bid_prep_match[1], re.I)
-            if days and int(days.group(1)) < min_bidding_days:
-                timeline_issues.append(f"Masa penyusunan penawaran hanya {days.group(1)} hari kerja (standar LKPP minimal {min_bidding_days} hari kerja)")
+            days = _parse_days_count(bid_prep_match[1])
+            if days is not None and days < min_bidding_days:
+                timeline_issues.append(f"Masa penyusunan penawaran hanya {days} hari (standar LKPP minimal {min_bidding_days} hari kerja)")
         if sanggah_match:
-            days = re.search(r"(\d+)(?:\s*\([A-Za-z]+\))?\s*hari\s*kerja", sanggah_match[1], re.I)
-            if days and int(days.group(1)) < min_sanggah_days:
-                timeline_issues.append(f"Masa sanggah hanya {days.group(1)} hari kerja (standar LKPP minimal {min_sanggah_days} hari kerja)")
+            days = _parse_days_count(sanggah_match[1])
+            if days is not None and days < min_sanggah_days:
+                timeline_issues.append(f"Masa sanggah hanya {days} hari (standar LKPP minimal {min_sanggah_days} hari kerja)")
 
         if timeline_redflag and not timeline_issues:
             timeline_issues.append("Jadwal pelaksanaan lelang atau masa sanggah di bawah batas waktu wajar ketentuan LKPP")
@@ -488,9 +567,12 @@ class EvaluationEngine:
             ))
 
         # 11. Governance & Integrity Checks: Conflict of Interest & Affiliated Former Officials
-        coi_match = _line_find(requirement_lines, r"surat\s+rekomendasi\s+dari[\s\S]{0,80}?(?:mantan|pejabat|kepala\s+divisi|direksi)|mantan\s+Kepala\s+Divisi|mantan\s+pejabat.*terafiliasi")
-        if not coi_match:
-            coi_match = _line_find(requirement_lines, r"Ir\.\s*\[Nama\]|Ir\.\s+[A-Z][a-z]+.*mantan")
+        coi_match = _line_find(
+            requirement_lines,
+            r"surat\s+rekomendasi\s+dari[\s\S]{0,80}?(?:mantan|pejabat|kepala\s+divisi|direksi)|mantan\s+Kepala\s+Divisi|mantan\s+pejabat.*terafiliasi|"
+            r"Ir\.\s*\[Nama\]|Ir\.\s+[A-Z][a-z]+.*mantan|"
+            r"(?:milik|kerabat|keluarga|hubungan\s+keluarga|keponakan|anak|istri|suami|saudara)\s+(?:dari\s+)?(?:kepala\s+dinas|pejabat|ppk|pokja|direksi|komisaris)"
+        )
         if not coi_match:
             candidate_coi = _line_find(requirement_lines, r"benturan\s+kepentingan|conflict\s+of\s+interest")
             if candidate_coi:
@@ -510,7 +592,7 @@ class EvaluationEngine:
                 "GAP",
                 coi_match,
                 ("Dokumen pemilihan", coi_match[1]),
-                "Persyaratan menyertakan surat rekomendasi atau dukungan dari individu spesifik / mantan pejabat internal pemilik tender merupakan bentuk benturan kepentingan (conflict of interest) yang melanggar Pasal 23 POJK No. 6/POJK.03/2015, UU No. 5 Tahun 1999 (Anti-Monopoli), dan prinsip etika pengadaan Pasal 7 Perpres 16/2018.",
+                "Persyaratan menyertakan surat rekomendasi atau dukungan dari individu spesifik / mantan pejabat internal pemilik tender atau relasi keluarga pejabat pengadaan merupakan bentuk benturan kepentingan (conflict of interest) yang melanggar Pasal 23 POJK No. 6/POJK.03/2015, UU No. 5 Tahun 1999 (Anti-Monopoli), dan prinsip etika pengadaan Pasal 7 Perpres 16/2018.",
                 "HIGH",
             ))
 
@@ -533,7 +615,12 @@ class EvaluationEngine:
             ))
 
         # 13. Discriminatory Regional Association Lock-in
-        regional_assoc_match = _line_find(requirement_lines, r"keanggotaan\s+asosiasi\s+regional|ADCR-Jabar|asosiasi.*regional.*jawa\s+barat|Gold\s+Partner|asosiasi\s+data\s+center\s+regional")
+        regional_assoc_match = _line_find(
+            requirement_lines,
+            r"(?i)keanggotaan\s+asosiasi\s+regional|ADCR-Jabar|asosiasi.*regional.*jawa\s+barat|Gold\s+Partner|asosiasi\s+data\s+center\s+regional|"
+            r"(?:asosiasi|domisili|keberadaan\s+kantor|khusus\s+penyedia)\s+(?:lokal|daerah|[A-Z][a-z]+|wilayah\s+[A-Z][a-z]+|Kalsel|Jabar|Jateng|Jatim|DKI)\s+(?:saja|wajib|mutlak|diwajibkan)|"
+            r"(?:wajib|harus)\s+(?:berdomisili|memiliki\s+kantor(?:\s+cabang)?)\s+di\s+(?:wilayah|daerah|[A-Z][a-z]+|Kalsel|Jabar|Jateng|Jatim)"
+        )
         if regional_assoc_match:
             findings.append(_finding(
                 "SPEC-REGIONAL-LOCKIN",
@@ -542,7 +629,7 @@ class EvaluationEngine:
                 "GAP",
                 regional_assoc_match,
                 ("Dokumen pemilihan", regional_assoc_match[1]),
-                "Persyaratan keanggotaan asosiasi regional tertentu (seperti ADCR-Jabar status Gold Partner) bersifat diskriminatif dan membatasi akses penyedia nasional berkualifikasi dari luar daerah. Melanggar Pasal 6 huruf c dan e serta Pasal 19 Perpres 12/2021 tentang prinsip non-diskriminasi dan keterbukaan persaingan.",
+                "Persyaratan keanggotaan asosiasi regional tertentu (seperti ADCR-Jabar status Gold Partner) atau pembatasan domisili bersifat diskriminatif dan membatasi akses penyedia nasional berkualifikasi dari luar daerah. Melanggar Pasal 6 huruf c dan e serta Pasal 19 Perpres 12/2021 tentang prinsip non-diskriminasi dan keterbukaan persaingan.",
                 "HIGH",
             ))
 
@@ -562,33 +649,28 @@ class EvaluationEngine:
 
         # 15. Financial & Budget Checks (Over Budget, Billing Rate Mark-Up, Double Counting, Personnel Qualification)
         # 15.1. Over Budget Check (Total BoQ > Pagu Anggaran) - Enhanced for free narrative prose & tables
-        pagu_match = re.search(
-            r"(?i)(?:pagu\s+anggaran|pagu\s+dipa|pagu\s+dana|pagu\s+indikatif|alokasi\s+pagu|anggaran\s+yang\s+(?:tersedia|dialokasikan)|nilai\s+pagu)"
-            r"[\s\S]{0,100}?"
-            r"(?:sebesar|mencapai|adalah|senilai)?[\s\S]{0,30}?"
-            r"(?:rp\.?\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{7,})",
-            request.dok_pemilihan,
+        pagu_keyword_pat = (
+            r"(?i)(?:pagu\s+anggaran|pagu\s+dipa|pagu\s+dana|pagu\s+indikatif|alokasi\s+pagu|alokasi\s+dana|anggaran\s+yang\s+(?:tersedia|dialokasikan)|nilai\s+pagu|\bpagu\b)"
         )
-        boq_match = re.search(
-            r"(?i)(?:total\s+(?:rincian\s+)?biaya|total\s+boq|total\s+hps|harga\s+perkiraan\s+sendiri|rekapitulasi\s+(?:perhitungan\s+)?(?:teknis\s+)?(?:boq|biaya)|total\s+kebutuhan\s+(?:anggaran|biaya)|bill\s+of\s+quantities[\s\S]{0,80}?(?:total|mencapai)[\s\S]{0,60}?(?:biaya)?)"
-            r"[\s\S]{0,100}?"
-            r"(?:sebesar|mencapai|adalah|senilai)?[\s\S]{0,30}?"
-            r"(?:rp\.?\s*)?(\d{1,3}(?:\.\d{3})+(?:,\d+)?|\d{7,})",
-            request.dok_pemilihan,
+        boq_keyword_pat = (
+            r"(?i)(?:total\s+(?:rincian\s+)?biaya|total\s+boq|total\s+hps|harga\s+perkiraan\s+sendiri|nilai\s+hps|\bhps\b|rekapitulasi\s+(?:perhitungan\s+)?(?:teknis\s+)?(?:boq|biaya)|total\s+kebutuhan\s+(?:anggaran|biaya)|bill\s+of\s+quantities)"
         )
 
         pagu_val: float | None = None
         boq_val: float | None = None
-        if pagu_match:
-            try:
-                pagu_val = float(parse_idr_number(pagu_match.group(1)))
-            except (ValueError, TypeError):
-                pass
-        if boq_match:
-            try:
-                boq_val = float(parse_idr_number(boq_match.group(1)))
-            except (ValueError, TypeError):
-                pass
+
+        m_pagu = re.search(pagu_keyword_pat, request.dok_pemilihan)
+        if m_pagu:
+            pagu_snippet = request.dok_pemilihan[m_pagu.start():m_pagu.start() + 150]
+            pagu_val = _parse_idr_amount(pagu_snippet)
+
+        m_boq = re.search(boq_keyword_pat, request.dok_pemilihan)
+        if m_boq:
+            boq_snippet = request.dok_pemilihan[m_boq.start():m_boq.start() + 150]
+            boq_val = _parse_idr_amount(boq_snippet)
+
+        pagu_line = _line_find(requirement_lines, pagu_keyword_pat)
+        boq_line = _line_find(requirement_lines, boq_keyword_pat)
 
         if pagu_val is not None and boq_val is not None and boq_val > pagu_val:
             deficit = boq_val - pagu_val

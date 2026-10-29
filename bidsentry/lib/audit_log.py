@@ -65,14 +65,84 @@ class AuditLog:
         source_file = self.sources_dir / f"{safe_name}.txt"
         return source_file.is_file() and source_file.stat().st_size > 0
 
-    def append(self, event: dict[str, Any]) -> None:
+    def _get_last_hash_locked(self) -> str:
+        if not self.path.is_file():
+            return "0" * 64
+        last_hash = "0" * 64
+        try:
+            with self.path.open("r", encoding="utf-8") as stream:
+                for line in stream:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        item = json.loads(line)
+                        if isinstance(item, dict) and "hash" in item:
+                            last_hash = str(item["hash"])
+                    except Exception:
+                        pass
+        except OSError:
+            pass
+        return last_hash
+
+    def append(self, event: dict[str, Any]) -> dict[str, Any]:
+        import hashlib
         # Document text is deliberately excluded from audit_log.jsonl for privacy compliance
-        cleaned_event = {k: v for k, v in event.items() if k != "source_text"}
-        record = {"schema_version": "1.0", "created_at": datetime.now(timezone.utc).isoformat(), **cleaned_event}
+        cleaned_event = {k: v for k, v in event.items() if k not in ("source_text", "hash", "previous_hash")}
+        created_at = datetime.now(timezone.utc).isoformat()
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
-        with self._lock, self.path.open("a", encoding="utf-8") as stream:
-            stream.write(line)
+        with self._lock:
+            prev_hash = self._get_last_hash_locked()
+            base_record = {
+                "schema_version": "1.0",
+                "created_at": created_at,
+                "previous_hash": prev_hash,
+                **cleaned_event,
+            }
+            canonical_payload = json.dumps(base_record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+            entry_hash = hashlib.sha256(f"{prev_hash}|{canonical_payload}".encode("utf-8")).hexdigest()
+            record = {**base_record, "hash": entry_hash}
+            line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
+            with self.path.open("a", encoding="utf-8") as stream:
+                stream.write(line)
+            return record
+
+    def verify_chain(self) -> tuple[bool, int, str]:
+        """Verify cryptographic integrity of the SHA-256 hash chain.
+        
+        Returns (is_valid, record_count, status_message).
+        """
+        import hashlib
+        if not self.path.is_file():
+            return True, 0, "No audit log file present."
+        expected_prev = "0" * 64
+        count = 0
+        with self._lock:
+            try:
+                with self.path.open("r", encoding="utf-8") as stream:
+                    for idx, line in enumerate(stream, start=1):
+                        line = line.strip()
+                        if not line:
+                            continue
+                        count += 1
+                        try:
+                            item = json.loads(line)
+                        except json.JSONDecodeError as exc:
+                            return False, count, f"Corrupted JSON on line {idx}: {exc}"
+                        if "hash" not in item or "previous_hash" not in item:
+                            return False, count, f"Missing hash chain fields on line {idx}"
+                        if item["previous_hash"] != expected_prev:
+                            return False, count, f"Broken chain on line {idx}: expected prev {expected_prev}, got {item['previous_hash']}"
+                        actual_hash = item["hash"]
+                        base = {k: v for k, v in item.items() if k != "hash"}
+                        canonical_payload = json.dumps(base, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+                        recomputed = hashlib.sha256(f"{expected_prev}|{canonical_payload}".encode("utf-8")).hexdigest()
+                        if recomputed != actual_hash:
+                            return False, count, f"Tampered record on line {idx}: hash mismatch"
+                        expected_prev = actual_hash
+                return True, count, "Hash chain verified successfully."
+            except OSError as exc:
+                return False, count, f"IO error reading audit log: {exc}"
 
     def _iter_events(self):
         if not self.path.is_file():

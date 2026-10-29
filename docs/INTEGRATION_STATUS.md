@@ -1,7 +1,7 @@
 # Status Integrasi Teknologi IBM & Layanan Eksternal
 
 > **Dokumen Transparansi Teknis**: Dihasilkan oleh `scripts/verify_watsonx.py`.
-> Terakhir diperbarui: 2026-10-28 15:32:00 UTC
+> Terakhir diperbarui: 2026-10-29 01:31:26 UTC
 
 Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated Data). Evaluator dan juri dapat memverifikasi status secara mandiri.
 
@@ -11,10 +11,10 @@ Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated
 
 | Komponen | Status Saat Ini | Keterangan |
 | :--- | :--- | :--- |
-| **Kredensial** | `BELUM DIVERIFIKASI (UNCONFIGURED)` | `SKIPPED - Kredensial IBM watsonx tidak dikonfigurasi pada lingkungan lokal.` |
+| **Kredensial** | `CONNECTION_FAILED` | `Gagal menghubungi endpoint watsonx: WMLClientError - Model 'ibm/granite-3-8b-instruct' is not supported for this environment. Supported models: ['ibm/gra` |
 | **Model ID** | `ibm/granite-3-8b-instruct` | Standar: `ibm/granite-3-8b-instruct` |
 | **Latensi Uji** | `—` | Nilai aktual saat probe dijalankan |
-| **Panduan Aktivasi** | — | Setel WATSONX_API_KEY dan WATSONX_PROJECT_ID pada environment atau file .env lokal untuk mengaktifkan ekstraksi semantik via IBM Granite. |
+| **Panduan Aktivasi** | — | Pastikan API key, Project ID, dan kuota watsonx Cloud aktif. |
 
 ### Peran IBM watsonx dalam Arsitektur BidSentry:
 - **Tingkat 1 (Local Engine)**: Menjalankan aturan deterministik Perpres 12/2021 secara 100% lokal, offline, dan tanpa LLM untuk kepatuhan regulasi mutlak.

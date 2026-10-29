@@ -25,15 +25,20 @@ thresholds:
 brand_lockin:
   equivalency_phrases:
     - "atau setara"
-    - "setara"
+    - "atau yang setara"
     - "atau ekuivalen"
     - "ekuivalen"
     - "equivalent"
     - "or equivalent"
     - "sepadan"
+    - "produk setara"
+    - "dapat diganti setara"
   vendors:
     cpu:
       - "Intel Xeon"
+      - "Intel Xeon Gold"
+      - "Intel Xeon Platinum"
+      - "AMD EPYC"
       - "Emerald Rapids"
       - "UPI 4.0"
       - "Intel C741"
@@ -43,11 +48,24 @@ brand_lockin:
       - "Boot Guard"
     gpu:
       - "NVIDIA H100"
+      - "NVIDIA A100"
+      - "NVIDIA H200"
+      - "NVIDIA L40"
       - "H100 SXM5"
       - "NVLink 4.0"
       - "ConnectX-7"
       - "Quantum-2"
       - "QM9700"
+    networking:
+      - "Cisco Catalyst"
+      - "Cisco Nexus"
+      - "Juniper Junos"
+      - "Fortinet FortiGate"
+      - "ArubaOS"
+    software:
+      - "Oracle Database"
+      - "SAP S/4HANA"
+      - "Microsoft SQL Server"
     management:
       - "Dell iDRAC 10"
       - "HPE iLO 7"
@@ -158,40 +176,84 @@ rules:
     rekomendasi_template: "Periksa bukti kualifikasi sertifikasi dan CV per masing-masing slot personel inti."
 
   - id: SPEC-LOCKIN-CPU
-    nama: "Penguncian Merek Prosesor & Arsitektur (Intel Xeon / Emerald Rapids / UPI 4.0)"
+    nama: "Penguncian Merek Prosesor & Arsitektur (Intel Xeon / AMD EPYC / Emerald Rapids / UPI 4.0)"
     kategori: "Spesifikasi"
     pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 19 ayat 1"
     sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
     terakhir_diverifikasi: "BELUM DIVERIFIKASI"
     pola_regex:
-      - "\\b(?:Intel(?:\\s+Xeon)?\\b.*Emerald\\s+Rapids|Emerald\\s+Rapids|UPI\\s+4\\.0|Intel\\s+C741|TME-MK|Intel\\s+VMD|Platform\\s+Firmware\\s+Resilience|Boot\\s+Guard)\\b"
+      - "\\b(?:Intel(?:\\s+Xeon)?(?:\\s+(?:Gold|Platinum|Silver|Bronze|\\d{4}[A-Za-z]?))?|AMD\\s+EPYC|Emerald\\s+Rapids|UPI\\s+4\\.0|Intel\\s+C741|TME-MK|Intel\\s+VMD|Platform\\s+Firmware\\s+Resilience|Boot\\s+Guard)\\b"
     pengecualian_regex:
       - "atau\\s+setara"
+      - "atau\\s+yang\\s+setara"
       - "\\bsetara\\b"
       - "atau\\s+ekuivalen"
       - "\\bekuivalen\\b"
       - "\\bequivalent\\b"
       - "or\\s+equivalent"
+      - "produk\\s+setara"
     severity: "HIGH"
-    rekomendasi_template: "Spesifikasi menyebut kode arsitektur eksklusif tanpa padanan setara; melanggar Pasal 19 ayat (1) Perpres 12/2021."
+    rekomendasi_template: "Spesifikasi menyebut kode arsitektur eksklusif atau prosesor server tertentu tanpa padanan setara; melanggar Pasal 19 ayat (1) Perpres 12/2021."
 
   - id: SPEC-LOCKIN-GPU
-    nama: "Penguncian Akselerator / GPU Eksklusif (NVIDIA H100 SXM5 / NVLink 4.0)"
+    nama: "Penguncian Akselerator / GPU Eksklusif (NVIDIA H100 / A100 / NVLink 4.0)"
     kategori: "Spesifikasi"
     pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 19 ayat 1"
     sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
     terakhir_diverifikasi: "BELUM DIVERIFIKASI"
     pola_regex:
-      - "\\b(?:NVIDIA\\s+H100|H100\\s+SXM5|NVLink\\s+4\\.0|ConnectX-7|Quantum-2|QM9700)\\b"
+      - "\\b(?:NVIDIA\\s+(?:H100|A100|H200|L40[S]?|A800|H800|RTX\\s*\\d{4})|H100\\s+SXM5|NVLink\\s+4\\.0|ConnectX-7|Quantum-2|QM9700)\\b"
     pengecualian_regex:
       - "atau\\s+setara"
+      - "atau\\s+yang\\s+setara"
       - "\\bsetara\\b"
       - "atau\\s+ekuivalen"
       - "\\bekuivalen\\b"
       - "\\bequivalent\\b"
       - "or\\s+equivalent"
+      - "produk\\s+setara"
     severity: "HIGH"
     rekomendasi_template: "Spesifikasi menyebut model GPU/interkoneksi proprietari tanpa opsi kesetaraan kompetitif."
+
+  - id: SPEC-LOCKIN-NETWORKING
+    nama: "Penguncian Perangkat Jaringan Tertentu (Cisco / Juniper / Fortinet)"
+    kategori: "Spesifikasi"
+    pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 19 ayat 1"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "\\b(?:Cisco(?:\\s+Catalyst|\\s+Nexus|\\s+IOS-XE)?(?:\\s+\\d{4}[A-Za-z0-9]*)?|Juniper\\s+Junos|Fortinet\\s+FortiGate|ArubaOS)\\b"
+    pengecualian_regex:
+      - "atau\\s+setara"
+      - "atau\\s+yang\\s+setara"
+      - "\\bsetara\\b"
+      - "atau\\s+ekuivalen"
+      - "\\bekuivalen\\b"
+      - "\\bequivalent\\b"
+      - "or\\s+equivalent"
+      - "produk\\s+setara"
+    severity: "HIGH"
+    rekomendasi_template: "Spesifikasi menyebut perangkat jaringan atau sistem operasi proprietary tertentu tanpa opsi produk setara; melanggar Pasal 19 ayat (1) Perpres 12/2021."
+
+  - id: SPEC-LOCKIN-SOFTWARE
+    nama: "Penguncian Database / Perangkat Lunak Tertentu (Oracle / SAP)"
+    kategori: "Spesifikasi"
+    pasal_rujukan: "Perpres 16/2018 jo Perpres 12/2021 Pasal 19 ayat 1"
+    sumber: "https://jdih.lkpp.go.id/regulation/peraturan-presiden/peraturan-presiden-no-12-tahun-2021"
+    terakhir_diverifikasi: "BELUM DIVERIFIKASI"
+    pola_regex:
+      - "\\b(?:Oracle(?:\\s+Database)?(?:\\s+\\d{1,2}[a-z]?)?|SAP\\s+S/?4HANA|Microsoft\\s+(?:SQL\\s+Server|Dynamics|Azure\\s+Stack))\\b"
+    pengecualian_regex:
+      - "atau\\s+setara"
+      - "atau\\s+yang\\s+setara"
+      - "\\bsetara\\b"
+      - "atau\\s+ekuivalen"
+      - "\\bekuivalen\\b"
+      - "\\bequivalent\\b"
+      - "or\\s+equivalent"
+      - "produk\\s+setara"
+    severity: "HIGH"
+    rekomendasi_template: "Spesifikasi mengunci produk perangkat lunak atau database proprietary tertentu tanpa alternatif solusi setara."
 
   - id: SPEC-LOCKIN-MGMT
     nama: "Penguncian Manajemen & Sistem Storage Eksklusif Vendor Tertentu"
@@ -203,11 +265,13 @@ rules:
       - "\\b(?:Dell\\s+iDRAC\\s+10|HPE\\s+iLO\\s+7|PowerStore\\s+Manager|NetApp\\s+ONTAP|ONTAP\\s+FabricPool|Fabric\\s+Vision)\\b"
     pengecualian_regex:
       - "atau\\s+setara"
+      - "atau\\s+yang\\s+setara"
       - "\\bsetara\\b"
       - "atau\\s+ekuivalen"
       - "\\bekuivalen\\b"
       - "\\bequivalent\\b"
       - "or\\s+equivalent"
+      - "produk\\s+setara"
     severity: "HIGH"
     rekomendasi_template: "Sistem manajemen out-of-band eksklusif vendor tertentu membatasi partisipasi merek setara."
 
@@ -223,9 +287,11 @@ rules:
       - "asosiasi.*regional.*jawa\\s+barat"
       - "Gold\\s+Partner"
       - "asosiasi\\s+data\\s+center\\s+regional"
+      - "(?:asosiasi|domisili|keberadaan\\s+kantor|khusus\\s+penyedia)\\s+(?:lokal|daerah|[A-Z][a-z]+|wilayah\\s+[A-Z][a-z]+|Kalsel|Jabar|Jateng|Jatim|DKI)\\s+(?:saja|wajib|mutlak|diwajibkan)"
+      - "(?:wajib|harus)\\s+(?:berdomisili|memiliki\\s+kantor(?:\\s+cabang)?)\\s+di\\s+(?:wilayah|daerah|[A-Z][a-z]+|Kalsel|Jabar|Jateng|Jatim)"
     pengecualian_regex: []
     severity: "HIGH"
-    rekomendasi_template: "Persyaratan keanggotaan asosiasi regional bersifat diskriminatif terhadap penyedia kualified nasional."
+    rekomendasi_template: "Persyaratan keanggotaan asosiasi regional atau domisili bersifat diskriminatif terhadap penyedia kualified nasional."
 
   - id: SPEC-INCUMBENT-LOCKIN
     nama: "Penguncian Kriteria Pengalaman Kerja Serupa ke Vendor Inkumben"
@@ -253,6 +319,7 @@ rules:
       - "compressed\\s+timeline"
       - "jadwal\\s+mepet"
       - "terlalu\\s+mepet"
+      - "(?:pemasukan\\s+penawaran|masa\\s+sanggah)[\\s\\S]{0,120}?(?:hanya\\s+)?(?:satu|dua|tiga|empat|lima|enam|\\d+)\\s*hari\\s*(?:kerja|kalender)"
     pengecualian_regex: []
     severity: "HIGH"
     rekomendasi_template: "Masa penyusunan penawaran atau masa sanggah berada di bawah batas waktu standar LKPP."
@@ -283,12 +350,13 @@ rules:
       - "mantan\\s+pejabat.*terafiliasi"
       - "Ir\\.\\s*\\[Nama\\]"
       - "Ir\\.\\s+[A-Z][a-z]+.*mantan"
+      - "(?:milik|kerabat|keluarga|hubungan\\s+keluarga|keponakan|anak|istri|suami|saudara)\\s+(?:dari\\s+)?(?:kepala\\s+dinas|pejabat|ppk|pokja|direksi|komisaris)"
     pengecualian_regex:
       - "\\b(?:tidak\\s+ada|bebas\\s+(?:dari\\s+)?|tidak\\s+terdapat|tidak\\s+memiliki|tanpa|pernyataan\\s+tidak|tidak\\s+sedang\\s+mengalami)\\s+(?:adanya\\s+)?benturan\\s+kepentingan"
       - "pakta\\s+integritas"
       - "surat\\s+pernyataan\\s+tidak\\s+menuntut"
     severity: "HIGH"
-    rekomendasi_template: "Persyaratan surat rekomendasi mantan pejabat/afiliasi internal melanggar prinsip integritas dan etika pengadaan."
+    rekomendasi_template: "Persyaratan surat rekomendasi mantan pejabat/afiliasi internal atau hubungan keluarga melanggar prinsip integritas dan etika pengadaan."
 
   - id: FIN-OVER-BUDGET
     nama: "Total BoQ Melebihi Pagu Anggaran (Over Budget)"
