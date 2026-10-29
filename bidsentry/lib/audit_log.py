@@ -207,6 +207,7 @@ class AuditLog:
                     "adendum_reconciliation": event.get("adendum_reconciliation", {}),
                     "penalty_simulation": event.get("penalty_simulation", {}),
                     "contextual_extraction": event.get("contextual_extraction", {}),
+                    "ai_governance_metadata": event.get("ai_governance_metadata", {}),
                     "source_text": source_text,
                     "has_source_text": has_source,
                 }

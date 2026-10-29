@@ -84,6 +84,17 @@ async def on_worker_shutdown(ctx: MutableMapping[str, Any]) -> None:
         await database.dispose()
 
 
+_CONCURRENCY_SEMAPHORE: asyncio.Semaphore | None = None
+
+
+def get_concurrency_semaphore() -> asyncio.Semaphore:
+    """Return bounded queue concurrency semaphore to prevent event-loop lock contention."""
+    global _CONCURRENCY_SEMAPHORE
+    if _CONCURRENCY_SEMAPHORE is None:
+        _CONCURRENCY_SEMAPHORE = asyncio.Semaphore(4)
+    return _CONCURRENCY_SEMAPHORE
+
+
 async def execute_procurement_audit_job(
     ctx: MutableMapping[str, Any],
     job_id: str,
@@ -110,7 +121,8 @@ async def execute_procurement_audit_job(
         await _advance(ctx, job_id, status="running", progress=35, stage="forensic_analysis")
 
         service: ComprehensiveAuditService = ctx["audit_service"]
-        result = await asyncio.to_thread(service.audit, request, audit_run_id=job_id)
+        async with get_concurrency_semaphore():
+            result = await asyncio.to_thread(service.audit, request, audit_run_id=job_id)
 
         await _advance(ctx, job_id, status="running", progress=95, stage="persisting_result")
         updated = await database.update_job(

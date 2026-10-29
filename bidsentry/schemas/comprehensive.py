@@ -163,6 +163,7 @@ class ComprehensiveModules(StrictModel):
     module_8_entity_network_graph: dict[str, Any]
     module_9_execution_risk_forecast: dict[str, Any]
     module_10_statutory_mapping: dict[str, Any]
+    ai_governance_metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class TamperEvidentTrail(StrictModel):

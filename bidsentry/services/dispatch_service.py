@@ -14,7 +14,7 @@ class DispatchService:
     def dispatch(self, payload: dict[str, Any]) -> dict[str, Any]:
         safe_payload = mask_value(payload)
         try:
-            from composio_dispatcher import dispatch_tender_workspace
+            from bidsentry.services.composio_dispatcher import dispatch_tender_workspace
             result = dispatch_tender_workspace(safe_payload, settings=self.settings)
         except Exception as exc:  # Keep the local app available when an optional connector fails.
             result = {

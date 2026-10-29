@@ -60,7 +60,7 @@ class ApiRouter:
             elif method == "GET" and path == "/api/settings/integrations":
                 data = self.app.settings_service.public_settings(self.app.settings, self.app.settings_service.env_path.is_file())
             elif method == "GET" and path == "/api/settings/integrations/test":
-                from composio_dispatcher import test_composio_connection
+                from bidsentry.services.composio_dispatcher import test_composio_connection
                 data = {
                     "watsonx": self.app.watsonx.test_connection(),
                     "langflow": self.app.langflow.test_connection(),

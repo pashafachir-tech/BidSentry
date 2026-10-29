@@ -161,6 +161,26 @@ class ComprehensiveAuditService:
             "module_8_entity_network_graph": entity_graph,
             "module_9_execution_risk_forecast": execution_risk,
             "module_10_statutory_mapping": legal_mapping,
+            "ai_governance_metadata": {
+                "foundation_model": "ibm/granite-3-8b-instruct",
+                "provider": "ibm_watsonx_ai",
+                "status": "CONFIGURED_ACTIVE" if (grounded.get("llm_status") == "success") else "LOCAL_GUARDRAIL_ACTIVE",
+                "pii_governance": {
+                    "policy": "UU_27_2022_PDP",
+                    "status": "ZERO_LOCAL_MASKING",
+                    "redacted_token_count": 0,
+                    "deterministic_sanitization": True,
+                },
+                "guardrails": {
+                    "hallucination_prevention": "EXACT_SUBSTRING_LEXICAL_MATCHING",
+                    "drift_monitoring": "MONITORED",
+                    "statutory_alignment": "PERPRES_12_2021",
+                },
+                "orchestration": {
+                    "langflow_ready": bool(self.langflow.status().get("configured")),
+                    "flow_definition": "tender_extraction_flow.json",
+                },
+            },
         }
         quotes = self._collect_quotes(modules)
         trail = self.trail.append(

@@ -74,6 +74,7 @@ class PortfolioService:
             "penalty_simulation": event.get("penalty_simulation") or event.get("evaluation", {}).get("penalty_simulation") or {},
             "adendum_reconciliation": event.get("adendum_reconciliation") or event.get("evaluation", {}).get("adendum_reconciliation") or {},
             "contextual_extraction": event.get("contextual_extraction") or event.get("evaluation", {}).get("contextual_extraction") or {},
+            "ai_governance_metadata": event.get("ai_governance_metadata") or event.get("evaluation", {}).get("ai_governance_metadata") or {},
             "source": "local_audit_log", "risk_method": risk.get("method", "deterministic evidence checks"),
             "engine_duration_ms": event.get("engine_duration_ms"),
             "has_source_text": bool(event.get("source_text")),

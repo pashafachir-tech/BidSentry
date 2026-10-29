@@ -48,7 +48,7 @@ def create_application(settings: Settings | None = None) -> Application:
     evaluation_engine = EvaluationEngine(config, langflow)
     return Application(
         settings=config,
-        audit=AuditController(AuditService(evaluation_engine), langflow, audit_log),
+        audit=AuditController(AuditService(evaluation_engine), langflow, audit_log, watsonx=watsonx),
         portfolio=PortfolioController(PortfolioService(audit_log)),
         dispatch=DispatchController(DispatchService(config), audit_log),
         documents=DocumentExtractionService(),

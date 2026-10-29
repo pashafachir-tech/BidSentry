@@ -36,6 +36,16 @@ def contains_unmasked_pii(text: str) -> bool:
     return False
 
 
+def count_redacted_pii(text: str) -> int:
+    """Count how many PII entities (NIK, NPWP, Rekening, Telp, Email) match in text."""
+    if not isinstance(text, str) or not text:
+        return 0
+    total = 0
+    for pattern, _ in _PATTERNS:
+        total += len(pattern.findall(text))
+    return total
+
+
 def mask_text(value: str) -> str:
     if not isinstance(value, str) or not value:
         return value

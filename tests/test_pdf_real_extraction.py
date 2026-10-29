@@ -60,6 +60,34 @@ class RealPdfExtractionTests(unittest.TestCase):
         self.assertIn("CON-PENALTY", finding_ids)
         self.assertIn("PROC-TIMELINE-COMPRESSED", finding_ids)
 
+    def test_extract_real_boq_excel_file(self):
+        excel_path = ROOT / "data" / "sample_tenders" / "rab_konstruksi_boq.xlsx"
+        self.assertTrue(excel_path.is_file(), f"Excel file {excel_path} not found")
+        content = excel_path.read_bytes()
+
+        result = self.extractor.extract(excel_path.name, content)
+        self.assertEqual(result["extraction_mode"], "excel_table_parser")
+        self.assertEqual(result.get("excel_items_count"), 5)
+        text = result["text"]
+        self.assertIn("Mobilisasi dan Demobilisasi", text)
+        self.assertIn("Perkerasan Aspal Laston", text)
+        self.assertIn("2.478.000.000", text)
+
+    def test_scanned_pdf_detection_and_fallback(self):
+        # Create a synthetic 1-page PDF containing minimal or zero text layer
+        import pymupdf
+        doc = pymupdf.open()
+        page = doc.new_page(width=595, height=842)
+        # Empty text on page, simulating a scanned document
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        result = self.extractor.extract("dokumen_scan_lpse.pdf", pdf_bytes)
+        self.assertTrue(result["scanned_pdf"])
+        self.assertEqual(result["extraction_mode"], "ocr_vision_fallback")
+        self.assertIn("[DOKUMEN PINDAIAN / SCANNED PDF DETECTED", result["text"])
+        self.assertIn("bidsentry/vision/verifier.py", result["text"])
+
 
 if __name__ == "__main__":
     unittest.main()

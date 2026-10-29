@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from sqlalchemy import DateTime, Integer, JSON, String, Text
+from sqlalchemy import DateTime, Integer, JSON, String, Text, event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -45,6 +45,15 @@ class AsyncDatabase:
 
     def __init__(self, database_url: str, *, echo: bool = False) -> None:
         self.engine: AsyncEngine = create_async_engine(database_url, echo=echo, pool_pre_ping=True)
+        if "sqlite" in str(database_url).lower():
+            @event.listens_for(self.engine.sync_engine, "connect")
+            def set_sqlite_pragma(dbapi_connection, connection_record):
+                cursor = dbapi_connection.cursor()
+                cursor.execute("PRAGMA journal_mode=WAL;")
+                cursor.execute("PRAGMA synchronous=NORMAL;")
+                cursor.execute("PRAGMA busy_timeout=5000;")
+                cursor.close()
+
         self.sessions: async_sessionmaker[AsyncSession] = async_sessionmaker(
             self.engine,
             expire_on_commit=False,
@@ -53,6 +62,10 @@ class AsyncDatabase:
 
     async def initialize(self) -> None:
         async with self.engine.begin() as connection:
+            if "sqlite" in str(self.engine.url).lower():
+                await connection.execute(text("PRAGMA journal_mode=WAL;"))
+                await connection.execute(text("PRAGMA synchronous=NORMAL;"))
+                await connection.execute(text("PRAGMA busy_timeout=5000;"))
             await connection.run_sync(Base.metadata.create_all)
 
     async def dispose(self) -> None:

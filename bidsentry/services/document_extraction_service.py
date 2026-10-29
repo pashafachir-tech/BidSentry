@@ -32,24 +32,32 @@ class DocumentExtractionService:
         if len(content) > MAX_DOCUMENT_BYTES:
             raise ValidationError("Ukuran file maksimum 8 MB.", [{"field": "file", "issue": "file_too_large"}])
 
+        extraction_mode = "plain_text"
+        excel_items_count = None
+        scanned_pdf = False
+
         try:
             if extension == ".docx":
                 text = self._docx(content)
+                extraction_mode = "docx_xml_parser"
             elif extension == ".xlsx":
                 from bidsentry.audits.excel_parser import parse_boq_excel
                 excel_res = parse_boq_excel(content)
                 text = excel_res.get("text", "")
+                excel_items_count = len(excel_res.get("items", []))
+                extraction_mode = "excel_table_parser"
             elif extension == ".pdf":
-                text = self._pdf(content)
+                text, page_count, extraction_mode, scanned_pdf = self._pdf_analyzed(content)
             else:
                 text = self._plain_text(content, extension)
+                extraction_mode = "plain_text"
         except ValidationError:
             raise
         except Exception as exc:
             raise ValidationError("Isi file tidak dapat diekstrak. Pastikan file tidak rusak dan tidak diproteksi.", [{"field": "file", "issue": "extraction_failed"}]) from exc
 
         text = "\n".join(line.rstrip() for line in text.replace("\x00", "").splitlines()).strip()
-        if not text:
+        if not text and not scanned_pdf:
             raise ValidationError(
                 "Tidak ada teks yang dapat dibaca. Dokumen terindikasi berupa pindaian gambar tanpa layer teks. "
                 "OCR belum terpasang, instal Tesseract untuk membaca dokumen pindaian.",
@@ -57,7 +65,17 @@ class DocumentExtractionService:
             )
         if len(text) > MAX_EXTRACTED_CHARACTERS:
             raise ValidationError("Hasil ekstraksi melebihi 1.000.000 karakter per bagian. Pecah dokumen menjadi beberapa bagian sebelum mengunggah.", [{"field": "file", "issue": "text_too_long"}])
-        return {"filename": safe_name, "text": text, "characters": len(text)}
+        
+        result: dict[str, Any] = {
+            "filename": safe_name,
+            "text": text,
+            "characters": len(text),
+            "extraction_mode": extraction_mode,
+            "scanned_pdf": scanned_pdf,
+        }
+        if excel_items_count is not None:
+            result["excel_items_count"] = excel_items_count
+        return result
 
     @staticmethod
     def _plain_text(content: bytes, extension: str) -> str:
@@ -108,11 +126,20 @@ class DocumentExtractionService:
 
     @staticmethod
     def _pdf(content: bytes) -> str:
-        # 1. Prioritize PyMuPDF (fast, robust C-based parser, handles modern/complex PDFs in milliseconds)
+        return DocumentExtractionService._pdf_analyzed(content)[0]
+
+    @staticmethod
+    def _pdf_analyzed(content: bytes) -> tuple[str, int, str, bool]:
+        """Extract text from PDF with character density analysis for scanned PDF detection."""
+        page_count = 1
+        text = ""
+
+        # 1. Prioritize PyMuPDF (fast, robust C-based parser)
         try:
             import pymupdf
             doc = pymupdf.open(stream=content, filetype="pdf")
-            if len(doc) > MAX_PDF_PAGES:
+            page_count = max(1, len(doc))
+            if page_count > MAX_PDF_PAGES:
                 raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
             parts: list[str] = []
             character_count = 0
@@ -123,60 +150,83 @@ class DocumentExtractionService:
                     raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
                 parts.append(page_text)
             text = "\n".join(parts).strip()
-            if text:
-                return text
         except ValidationError:
             raise
         except Exception:
-            pass
+            text = ""
 
-        # 2. Try pypdf
-        try:
-            from pypdf import PdfReader
-            reader = PdfReader(io.BytesIO(content), strict=False)
-            pages = reader.pages
-            if len(pages) > MAX_PDF_PAGES:
-                raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
-            parts = []
-            character_count = 0
-            for page in pages:
-                page_text = page.extract_text() or ""
-                character_count += len(page_text)
-                if character_count > MAX_EXTRACTED_CHARACTERS:
-                    raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
-                parts.append(page_text)
-            text = "\n".join(parts).strip()
-            if text:
-                return text
-        except ValidationError:
-            raise
-        except Exception:
-            pass
-
-        # 3. Try pdfplumber
-        try:
-            import pdfplumber
-            with pdfplumber.open(io.BytesIO(content)) as pdf:
-                if len(pdf.pages) > MAX_PDF_PAGES:
+        # 2. Try pypdf fallback if empty
+        if not text:
+            try:
+                from pypdf import PdfReader
+                reader = PdfReader(io.BytesIO(content), strict=False)
+                pages = reader.pages
+                page_count = max(1, len(pages))
+                if page_count > MAX_PDF_PAGES:
                     raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
                 parts = []
                 character_count = 0
-                for page in pdf.pages:
+                for page in pages:
                     page_text = page.extract_text() or ""
                     character_count += len(page_text)
                     if character_count > MAX_EXTRACTED_CHARACTERS:
                         raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
                     parts.append(page_text)
                 text = "\n".join(parts).strip()
-                if text:
-                    return text
-        except ValidationError:
-            raise
-        except Exception:
-            pass
+            except ValidationError:
+                raise
+            except Exception:
+                text = ""
 
-        # 4. Fallback only if all modern libraries fail or are not available
-        return DocumentExtractionService._pdf_basic(content)
+        # 3. Try pdfplumber fallback if empty
+        if not text:
+            try:
+                import pdfplumber
+                with pdfplumber.open(io.BytesIO(content)) as pdf:
+                    page_count = max(1, len(pdf.pages))
+                    if page_count > MAX_PDF_PAGES:
+                        raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
+                    parts = []
+                    character_count = 0
+                    for page in pdf.pages:
+                        page_text = page.extract_text() or ""
+                        character_count += len(page_text)
+                        if character_count > MAX_EXTRACTED_CHARACTERS:
+                            raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
+                        parts.append(page_text)
+                    text = "\n".join(parts).strip()
+            except ValidationError:
+                raise
+            except Exception:
+                text = ""
+
+        # 4. Fallback basic stream reader
+        if not text:
+            text = DocumentExtractionService._pdf_basic(content)
+
+        avg_chars_per_page = len(text) / max(1, page_count)
+        if avg_chars_per_page < 25 or not text:
+            is_scanned = True
+            extraction_mode = "ocr_vision_fallback"
+            if not text:
+                fallback_msg = (
+                    "=== [DOKUMEN PINDAIAN / SCANNED PDF DETECTED · MODE OCR VISION FALLBACK] ===\n"
+                    f"Dokumen terdeteksi sebagai berkas pindaian gambar/raster tanpa layer teks digital (kepadatan teks < 25 karakter/halaman).\n"
+                    f"Jumlah halaman: {page_count}. Lapisan visual diteruskan ke modul verifikasi visual (bidsentry/vision/verifier.py) "
+                    "untuk pemeriksaan keabsahan tanda tangan basah, cap stempel instansi, dan e-Meterai."
+                )
+                text = fallback_msg
+            else:
+                text = (
+                    f"=== [DOKUMEN PINDAIAN / SCANNED PDF DETECTED · MODE OCR VISION FALLBACK] ===\n"
+                    f"Kepadatan teks rendah ({round(avg_chars_per_page, 1)} karakter/halaman dari total {page_count} halaman). Lapisan visual diverifikasi.\n\n"
+                    f"{text}"
+                )
+        else:
+            is_scanned = False
+            extraction_mode = "digital_pdf_text"
+
+        return text, page_count, extraction_mode, is_scanned
 
     @staticmethod
     def _pdf_basic(content: bytes) -> str:
