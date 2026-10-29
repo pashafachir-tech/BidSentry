@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY bidsentry/ ./bidsentry/
 COPY web/ ./web/
+COPY config/ ./config/
+COPY data/ ./data/
 COPY langflow/ ./langflow/
 COPY index.html server.py composio_dispatcher.py ./
 COPY bob/ ./bob/

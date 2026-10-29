@@ -149,13 +149,13 @@ Sistem berjalan secara mandiri (*zero-build step*) tanpa perlu instalasi Node.js
 
 ---
 
-## 🧪 Rangkaian Pengujian Mandiri (78 Test Cases)
+## 🧪 Rangkaian Pengujian Mandiri (80 Test Cases)
 
 Seluruh komponen dapat diverifikasi secara independen oleh juri teknis melalui perintah berikut:
 
 ```bash
-# 1. Jalankan seluruh unit & integration test (78 passed tests)
-pytest tests/ -v
+# 1. Jalankan seluruh unit & integration test (80 passed tests, 0 warnings)
+pytest tests/ -v -W default
 
 # 2. Jalankan benchmark Development Set (24 dokumen)
 python tests/benchmark_heldout.py
@@ -169,9 +169,14 @@ python tests/benchmark_budget_narrative.py
 # 5. Jalankan verifikasi status integrasi IBM watsonx (Exit 0 aman)
 python scripts/verify_watsonx.py
 
-# 6. Jalankan pengujian ekstraksi berkas PDF nyata multi-halaman
+# 6. Jalankan pengujian ekstraksi berkas PDF nyata & BoQ Excel
 pytest tests/test_pdf_real_extraction.py -v
+
+# 7. Jalankan uji asap end-to-end (E2E) dan pembaruan tangkapan layar browser
+python tests/e2e_smoke.py
 ```
+
+> **Tangkapan Layar Bukti Hasil E2E:** Tersedia pada [docs/screenshots/e2e_results.png](docs/screenshots/e2e_results.png).
 
 ---
 

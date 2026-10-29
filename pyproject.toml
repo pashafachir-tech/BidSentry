@@ -41,3 +41,10 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["bidsentry*"]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore::ResourceWarning",
+    "ignore:Using `httpx` with `starlette\\.testclient` is deprecated.*:Warning",
+    "ignore:Setting per-request cookies=.*is being deprecated.*:DeprecationWarning",
+]

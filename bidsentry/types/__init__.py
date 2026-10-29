@@ -1,1 +1,1 @@
-"""Request and response contracts."""
+"""Backward-compatibility re-export shim for request and response contracts."""

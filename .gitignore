@@ -55,9 +55,13 @@ desktop.ini
 
 # Database & runtime files
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 bidsentry_jobs.db
+bidsentry_jobs.db-shm
+bidsentry_jobs.db-wal
 
 # Build & temp tool artifacts
 .codex-build/
@@ -92,3 +96,5 @@ htmlcov/
 *.jpg
 *.jpeg
 !docs/screenshots/*.png
+!data/sample_tenders/rab_konstruksi_boq.xlsx
+!data/sample_tenders/pdf_tenders/*.pdf

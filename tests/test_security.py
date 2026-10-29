@@ -7,7 +7,10 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
+import warnings
 import pytest
+
+warnings.filterwarnings("ignore", message=r".*httpx.*")
 from starlette.testclient import TestClient
 
 from bidsentry.asgi import create_asgi_app
@@ -93,7 +96,8 @@ def test_access_token_enforcement(base_settings: Settings) -> None:
     assert res_good.status_code == 200
 
     # Valid cookie token succeeds
-    res_cookie = client.get("/api/overview", cookies={"bidsentry_token": "secret-token-123"})
+    client.cookies.set("bidsentry_token", "secret-token-123")
+    res_cookie = client.get("/api/overview")
     assert res_cookie.status_code == 200
 
 

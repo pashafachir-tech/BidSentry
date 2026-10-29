@@ -1,4 +1,4 @@
-"""Financial audit engine facade.
+"""Backward-compatibility re-export shim for the financial audit engine.
 
 All core financial calculations are unified in `bidsentry.audits.financial`.
 This module provides backward-compatible imports for `run_financial_audit`,

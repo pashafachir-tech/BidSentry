@@ -1,5 +1,8 @@
 from pathlib import Path
+import warnings
 import pytest
+
+warnings.filterwarnings("ignore", message=r".*httpx.*")
 from starlette.testclient import TestClient
 
 from bidsentry.asgi import create_asgi_app

@@ -1,4 +1,4 @@
-"""Legacy HTTP transport module (Deprecated).
+"""Backward-compatibility re-export shim for HTTP transport.
 
 The canonical server entry points for BidSentry are:
 - `server.py`: CLI wrapper for development and local execution.

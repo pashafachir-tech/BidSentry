@@ -1,4 +1,4 @@
-"""Compatibility facade for the unified procurement evaluation engine."""
+"""Backward-compatibility re-export shim for the unified procurement evaluation engine."""
 
 from __future__ import annotations
 
