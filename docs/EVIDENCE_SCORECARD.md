@@ -128,7 +128,7 @@ Pengadaan barang dan jasa pemerintah (PBJP) di Indonesia mengelola alokasi angga
   - Tersedia berkas uji PDF realistis di `data/sample_tenders/pdf_tenders/`: `paket_konstruksi_rab_kompleks.pdf` (tabel BoQ multi-halaman dengan 15 item pekerjaan) dan `paket_pengadaan_it_server_kak.pdf` (dokumen KAK lengkap dengan klausul diskriminatif merek dan denda tanpa batas).
   - Tervalidasi otomatis melalui `DocumentExtractionService` pada [`tests/test_pdf_real_extraction.py`](../tests/test_pdf_real_extraction.py).
 - **Pengujian E2E Otomatis**: Dilengkapi smoke test Playwright pada [`tests/e2e_smoke.py`](../tests/e2e_smoke.py) yang memvalidasi interaksi UI lengkap, transisi dialog, dan verifikasi tabel temuan secara headless.
-- **Automated CI Workflow**: GitHub Actions pipeline aktif di [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) yang menjalankan seluruh unit test (103 passed tests) dan regression benchmark.
+- **Automated CI Workflow**: GitHub Actions pipeline aktif di [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) yang menjalankan seluruh unit test (114 passed tests) dan regression benchmark.
 
 ### B. Hasil Benchmark Objektif (Tiga Dataset Terpisah)
 
@@ -180,5 +180,5 @@ Laporan lengkap dan analisis kegagalan disajikan pada [`docs/BENCHMARK_RESULTS.m
 
 ## 6. Participation & Engineering Discipline (Bobot 5%)
 - **Penilaian Participation**: Kriteria Participation (5%) mencakup kehadiran workshop, konsultasi mentor, dan keterlibatan komunitas selama program hackathon yang dinilai secara mandiri oleh panitia/juri.
-- **Disiplin Rekayasa Kode**: Repositori ini membuktikan keseriusan implementasi melalui commit Git modular berkesinambungan, pengujian unit test menyeluruh (**103 tests pass** tanpa regresi), dan transparansi pelaporan hasil benchmark tanpa memalsukan data.
+- **Disiplin Rekayasa Kode**: Repositori ini membuktikan keseriusan implementasi melalui commit Git modular berkesinambungan, pengujian unit test menyeluruh (**114 tests pass** tanpa regresi), dan transparansi pelaporan hasil benchmark tanpa memalsukan data.
 - **Riwayat Perubahan**: Tercatat lengkap pada [`docs/CHANGELOG_ITERASI.md`](CHANGELOG_ITERASI.md).
