@@ -48,11 +48,11 @@ class ResponsibleAiTests(unittest.TestCase):
         self.assertEqual(status["provider"], "ibm_watsonx_ai")
         self.assertEqual(status["model_id"], "ibm/granite-3-8b-instruct")
 
-        # Test governance guardrails simulation
-        gov = service.evaluate_governance_guardrails(["MATH_MISMATCH", "HARGA_TIMPANG_HIGH"])
-        self.assertEqual(gov["watsonx_governance_status"], "MONITORED")
-        self.assertEqual(gov["hallucination_guard"], "LEXICAL_EXACT_SUBSTRING_ENFORCED")
-        self.assertEqual(gov["pii_leakage_risk"], "ZERO_LOCAL_MASKING")
+        # Test preflight guardrails (verbatim grounding & pattern-based PII scrubbing)
+        preflight = service.evaluate_preflight_guardrails(candidate_quotes=["MATH_MISMATCH", "HARGA_TIMPANG_HIGH"])
+        self.assertEqual(preflight["local_guardrails_status"], "ACTIVE_DETERMINISTIC")
+        self.assertEqual(preflight["hallucination_guard"], "LEXICAL_EXACT_SUBSTRING_ENFORCED")
+        self.assertEqual(preflight["pii_scrubbing"]["method"], "deterministic_pattern_based")
 
         # Without consent, extraction returns not_requested
         res_no_consent = service.generate_grounded_extraction("Doc text", consent=False)

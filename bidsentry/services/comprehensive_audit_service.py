@@ -167,13 +167,14 @@ class ComprehensiveAuditService:
                 "status": "CONFIGURED_ACTIVE" if (grounded.get("llm_status") == "success") else "LOCAL_GUARDRAIL_ACTIVE",
                 "pii_governance": {
                     "policy": "UU_27_2022_PDP",
-                    "status": "ZERO_LOCAL_MASKING",
+                    "status": "RULE_BASED_REDACTION",
                     "redacted_token_count": 0,
+                    "scope": "pola NIK, NPWP, nomor rekening, telepon, dan email (tidak menyensor nama/alamat)",
                     "deterministic_sanitization": True,
                 },
                 "guardrails": {
                     "hallucination_prevention": "EXACT_SUBSTRING_LEXICAL_MATCHING",
-                    "drift_monitoring": "MONITORED",
+                    "drift_monitoring": "NOT_IMPLEMENTED",
                     "statutory_alignment": "PERPRES_12_2021",
                 },
                 "orchestration": {

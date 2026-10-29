@@ -57,13 +57,14 @@ class AuditController:
             "mode": "enterprise_granite" if watsonx_status.get("configured") else "local_guardrail_active",
             "pii_governance": {
                 "policy": "UU_27_2022_PDP",
-                "status": "ZERO_LOCAL_MASKING",
+                "status": "RULE_BASED_REDACTION",
                 "redacted_token_count": pii_tokens,
+                "scope": "pola NIK, NPWP, nomor rekening, telepon, dan email (tidak menyensor nama/alamat)",
                 "deterministic_sanitization": True,
             },
             "guardrails": {
                 "hallucination_prevention": "EXACT_SUBSTRING_LEXICAL_MATCHING",
-                "drift_monitoring": "MONITORED",
+                "drift_monitoring": "NOT_IMPLEMENTED",
                 "statutory_alignment": "PERPRES_12_2021",
             },
             "orchestration": {

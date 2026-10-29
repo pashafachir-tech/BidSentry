@@ -269,7 +269,7 @@ function renderProjectCrossSummary(project, state) {
               <span class="cross-bullet-icon">🔒</span>
               <div>
                 <strong>Integritas Kriptografis SHA-256</strong>
-                <p>100% kutipan bukti terikat ke substring teks asli dokumen (Zero-hallucination). Rantai hash SHA-256 tersimpan untuk audit trail.</p>
+                <p>100% kutipan bukti terikat ke substring teks asli dokumen (Verbatim Substring Grounding). Rantai hash SHA-256 tersimpan untuk audit trail.</p>
               </div>
             </div>
 
@@ -277,7 +277,7 @@ function renderProjectCrossSummary(project, state) {
               <span class="cross-bullet-icon">🤖</span>
               <div>
                 <strong>IBM watsonx.ai &amp; Governance Telemetry</strong>
-                <p>Model: <code>${escapeHtml(aiGov.model_id || "ibm/granite-3-8b-instruct")}</code> · Guardrail: <em>Drift &amp; Substring Grounded</em> · Sanitasi PII: <strong>${escapeHtml(aiGov.pii_governance?.framework || "UU 27/2022 PDP Terlindungi")}</strong> (${aiGov.pii_governance?.redacted_token_count || 0} entitas disensor).</p>
+                <p>Model: <code>${escapeHtml(aiGov.model_id || "ibm/granite-3-8b-instruct")}</code> · Guardrail: <em>Substring Grounded (Drift monitoring: roadmap)</em> · Sanitasi PII: <strong>${escapeHtml(aiGov.pii_governance?.status === "RULE_BASED_REDACTION" ? "Redaksi Berbasis Aturan" : "UU 27/2022 PDP Terlindungi")}</strong> (${aiGov.pii_governance?.redacted_token_count || 0} entitas disensor: NIK/NPWP/Rek/Kontak).</p>
               </div>
             </div>
           </div>
@@ -619,7 +619,7 @@ export function renderApp(state) {
                   <div><span class="integration-symbol symbol-local">R</span><span><strong>Mesin aturan lokal (rules.yaml)</strong><small>Aktif · hasil deterministik</small></span><em class="connection-ready">SIAP</em></div>
                   <div><span class="integration-symbol symbol-langflow">L</span><span><strong>Langflow</strong><small>${state.integrations?.langflow?.configured ? "Opt-in · flow sudah diatur" : "Belum dikonfigurasi"}</small></span><em class="connection-idle">${state.integrations?.langflow?.configured ? "DIATUR" : "OPSIONAL"}</em></div>
                   <div><span class="integration-symbol symbol-composio">C</span><span><strong>Composio</strong><small>${state.integrations?.composio?.configured ? "API key diatur; koneksi belum diverifikasi" : "Belum dikonfigurasi; tindakan belum tersedia"}</small></span><em class="connection-idle">${state.integrations?.composio?.configured ? "DIATUR" : "OPSIONAL"}</em></div>
-                  <div><span class="integration-symbol symbol-bob">B</span><span><strong>IBM watsonx.ai &amp; Governance</strong><small>${state.integrations?.ibm_bob?.mcp_config_present ? "Granite-3-8b · Guardrails Active" : "Terkonfigurasi (Local fallback &amp; MCP)"}</small></span><em class="connection-ready">SIAP</em></div>
+                  <div><span class="integration-symbol symbol-bob">B</span><span><strong>IBM watsonx.ai &amp; Governance</strong><small>${state.integrations?.ibm_bob?.mcp_config_present ? "Granite-3-8b · Preflight Guardrail" : "Terkonfigurasi (Local fallback &amp; MCP)"}</small></span><em class="connection-ready">SIAP</em></div>
                 </div>
                 <div style="margin-top:10px;text-align:right">
                   <button type="button" class="button button-quiet button-small" data-action="open-settings">Buka konfigurasi koneksi ›</button>

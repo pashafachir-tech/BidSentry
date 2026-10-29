@@ -197,16 +197,3 @@ class WatsonxService:
             },
             "statutory_alignment": "PERPRES_12_2021",
         }
-
-    def evaluate_governance_guardrails(self, finding_signals: list[str]) -> dict[str, Any]:
-        """Local governance guardrail evaluation conforming to Responsible AI contract."""
-        preflight = self.evaluate_preflight_guardrails(candidate_quotes=finding_signals)
-        return {
-            "watsonx_governance_status": "MONITORED",
-            "model_monitored": self.default_model_id,
-            "hallucination_guard": "LEXICAL_EXACT_SUBSTRING_ENFORCED",
-            "pii_leakage_risk": "ZERO_LOCAL_MASKING",
-            "statutory_alignment": "PERPRES_12_2021",
-            "signals_evaluated": len(finding_signals),
-            "preflight_details": preflight,
-        }
