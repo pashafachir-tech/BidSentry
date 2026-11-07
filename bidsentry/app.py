@@ -10,6 +10,7 @@ from bidsentry.controllers.dispatch_controller import DispatchController
 from bidsentry.evaluators.engine import EvaluationEngine
 from bidsentry.lib.audit_log import AuditLog
 from bidsentry.services.audit_service import AuditService
+from bidsentry.services.boq_export_service import BoQExportService
 from bidsentry.services.comprehensive_audit_service import ComprehensiveAuditService
 from bidsentry.services.dispatch_service import DispatchService
 from bidsentry.services.document_extraction_service import DocumentExtractionService
@@ -34,6 +35,15 @@ class Application:
     settings_service: SettingsService
     workbook_export: WorkbookExportService
     evaluation_engine: EvaluationEngine
+    boq_export: BoQExportService
+
+    def apply_settings(self, settings: Settings) -> None:
+        """Propagate saved settings to every service that holds a reference."""
+        self.settings = settings
+        self.langflow.settings = settings
+        self.watsonx.settings = settings
+        self.evaluation_engine.settings = settings
+        self.dispatch.service.settings = settings
 
 
 def create_application(settings: Settings | None = None) -> Application:
@@ -59,4 +69,5 @@ def create_application(settings: Settings | None = None) -> Application:
         settings_service=SettingsService(config.workspace_root / ".env"),
         workbook_export=WorkbookExportService(),
         evaluation_engine=evaluation_engine,
+        boq_export=BoQExportService(),
     )

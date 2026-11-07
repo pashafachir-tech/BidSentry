@@ -19,7 +19,7 @@ class AuditController:
         self.audit_log = audit_log
         self.watsonx = watsonx
 
-    def create(self, payload: Any) -> dict[str, Any]:
+    def create(self, payload: Any, role: str | None = None) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise ValidationError("Request body harus berupa objek JSON.", [{"field": "$", "issue": "expected_object"}])
         try:
@@ -42,19 +42,30 @@ class AuditController:
             "provider": contextual.get("provider"),
         }
         result["integrations"] = {"langflow": integration}
+        result["owner_role"] = role
         result["has_source_text"] = bool(request.all_document_text)
 
         from bidsentry.lib.pii import count_redacted_pii
 
         pii_tokens = count_redacted_pii(request.all_document_text)
-        watsonx_status = self.watsonx.status() if hasattr(self, "watsonx") and self.watsonx else {"configured": False, "model_id": "ibm/granite-3-8b-instruct"}
-        langflow_status = self.langflow.status() if hasattr(self, "langflow") and self.langflow else {"configured": False}
+        watsonx_status = self.watsonx.status() if self.watsonx else {"configured": False, "model_id": None}
+        langflow_status = self.langflow.status() if self.langflow else {"configured": False}
+        telemetry = contextual.get("telemetry") or {}
+        ai_ran = contextual.get("status") == "success"
 
         ai_governance = {
-            "foundation_model": watsonx_status.get("model_id") or "ibm/granite-3-8b-instruct",
-            "provider": "ibm_watsonx_ai",
-            "watsonx_connected": watsonx_status.get("configured", False),
-            "mode": "enterprise_granite" if watsonx_status.get("configured") else "local_guardrail_active",
+            # What actually ran for THIS audit, taken from call telemetry, not from configuration.
+            "ai_used_for_this_audit": ai_ran,
+            "provider_used": telemetry.get("provider") if ai_ran else None,
+            "model_used": telemetry.get("model_id") if ai_ran else None,
+            "ai_call_status": contextual.get("status", "not_requested"),
+            "role_of_ai": "Ekstraksi kutipan saja; verdict dan tingkat risiko dihitung aturan Python.",
+            "configured_providers": {
+                "watsonx": {"configured": watsonx_status.get("configured", False), "model_id": watsonx_status.get("model_id")},
+                "langflow": {"configured": langflow_status.get("configured", False), "flow_id": langflow_status.get("flow_id")},
+                "active_provider": langflow_status.get("active_provider"),
+            },
+            "mode": "ai_extraction_plus_local_rules" if ai_ran else "local_rules_only",
             "pii_governance": {
                 "policy": "UU_27_2022_PDP",
                 "status": "RULE_BASED_REDACTION",
@@ -64,12 +75,12 @@ class AuditController:
             },
             "guardrails": {
                 "hallucination_prevention": "EXACT_SUBSTRING_LEXICAL_MATCHING",
+                "ai_candidates_revalidated_by_python": True,
                 "drift_monitoring": "NOT_IMPLEMENTED",
-                "statutory_alignment": "PERPRES_12_2021",
             },
             "orchestration": {
                 "langflow_ready": langflow_status.get("configured", False),
-                "flow_definition": "tender_extraction_flow.json",
+                "flow_definition": "langflow/tender_extraction_flow.json",
             },
         }
         result["ai_governance_metadata"] = ai_governance
@@ -83,6 +94,7 @@ class AuditController:
             "event_type": "audit.completed",
             "audit_id": result["audit_id"],
             "review_role": request.review_role,
+            "owner_role": role,
             "package_name": request.package_name,
             "tender_id": request.tender_id,
             "notice_number": request.notice_number,
@@ -99,6 +111,8 @@ class AuditController:
             "adendum_reconciliation": result.get("adendum_reconciliation", {}),
             "contextual_extraction": result.get("contextual_extraction", {}),
             "ai_governance_metadata": ai_governance,
+            "proof_log": result.get("proof_log", []),
+            "proof_summary": result.get("proof_summary", {}),
             "has_source_text": bool(request.all_document_text),
             "integrations": {"langflow": integration.get("status", "not_requested")},
         })
@@ -109,8 +123,8 @@ class PortfolioController:
     def __init__(self, portfolio: PortfolioService):
         self.portfolio = portfolio
 
-    def overview(self) -> dict[str, Any]:
-        return self.portfolio.overview()
+    def overview(self, role: str | None = None) -> dict[str, Any]:
+        return self.portfolio.overview(role=role)
 
-    def list_audits(self, query: str = "", risk: str = "ALL") -> dict[str, Any]:
-        return {"audits": self.portfolio.list_audits(query, risk)}
+    def list_audits(self, query: str = "", risk: str = "ALL", role: str | None = None) -> dict[str, Any]:
+        return {"audits": self.portfolio.list_audits(query, risk, role=role)}

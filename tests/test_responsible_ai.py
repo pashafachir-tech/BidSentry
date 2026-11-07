@@ -55,8 +55,9 @@ class ResponsibleAiTests(unittest.TestCase):
         self.assertEqual(preflight["pii_scrubbing"]["method"], "deterministic_pattern_based")
 
         # Without consent, extraction returns not_requested
-        res_no_consent = service.generate_grounded_extraction("Doc text", consent=False)
+        res_no_consent = service.generate_json("Doc text", consent=False)
         self.assertEqual(res_no_consent["status"], "not_requested")
+        self.assertIsNone(res_no_consent["text"])
 
     def test_collusion_legal_caveat_compliance(self):
         vendors = [

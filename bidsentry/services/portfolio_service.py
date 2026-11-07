@@ -14,8 +14,11 @@ class PortfolioService:
     def __init__(self, audit_log: AuditLog):
         self.audit_log = audit_log
 
-    def list_audits(self, query: str = "", risk: str = "ALL") -> list[dict[str, Any]]:
+    def list_audits(self, query: str = "", risk: str = "ALL", role: str | None = None) -> list[dict[str, Any]]:
         rows = [self._history_row(event) for event in self.audit_log.recent()]
+        if role:
+            # Pokja and Vendor workspaces are separate; legacy rows without an owner stay visible.
+            rows = [row for row in rows if row.get("owner_role") in (None, role)]
         normalized_query = query.strip().casefold()
         normalized_risk = risk.strip().upper()
         if normalized_query:
@@ -24,9 +27,9 @@ class PortfolioService:
             rows = [row for row in rows if row.get("risk_level") == normalized_risk]
         return rows
 
-    def overview(self) -> dict[str, Any]:
-        rows = self.list_audits()
-        levels = ("LOW", "MEDIUM", "HIGH", "CRITICAL")
+    def overview(self, role: str | None = None) -> dict[str, Any]:
+        rows = self.list_audits(role=role)
+        levels = ("NOT_ASSESSABLE", "LOW", "MEDIUM", "HIGH", "CRITICAL")
         distribution = {level: sum(row.get("risk_level") == level for row in rows) for level in levels}
         runtimes = [
             float(value) for row in rows
@@ -59,6 +62,7 @@ class PortfolioService:
                 "requirement_evidence": item.get("requirement_evidence"),
                 "evidence_source": item.get("evidence_source"),
                 "review_note": item.get("review_note", ""),
+                **{key: item[key] for key in ("rule_family", "party", "objectionable", "legal_reference", "legal_verification", "origin", "calculation_ref") if key in item},
             }
             for item in findings if isinstance(item, dict)
         ]
@@ -68,14 +72,16 @@ class PortfolioService:
             "tender_id": event.get("tender_id", ""), "agency": event.get("pokja_name", ""),
             "company_name": event.get("company_name", ""), "vendor_name": event.get("company_name") or "Tidak disimpan",
             "contract_value_idr": event.get("contract_value_idr"),
-            "verdict": event.get("verdict", "REVIEW"), "risk_score": risk.get("score", 0), "risk_level": risk.get("level", "LOW"),
+            "verdict": event.get("verdict", "REVIEW"), "risk_level": risk.get("level", "NOT_ASSESSABLE"),
+            "risk_label": risk.get("label") or {"LOW": "Rendah", "MEDIUM": "Sedang", "HIGH": "Tinggi", "CRITICAL": "Kritis"}.get(str(risk.get("level")), "Tidak Dapat Dinilai"),
+            "risk": risk, "owner_role": event.get("owner_role"), "proof_summary": event.get("proof_summary") or {},
             "summary": {**summary, "findings": len(normalized_findings)}, "findings": normalized_findings,
             "executive_summary": event.get("executive_summary") or event.get("evaluation", {}).get("executive_summary") or {},
             "penalty_simulation": event.get("penalty_simulation") or event.get("evaluation", {}).get("penalty_simulation") or {},
             "adendum_reconciliation": event.get("adendum_reconciliation") or event.get("evaluation", {}).get("adendum_reconciliation") or {},
             "contextual_extraction": event.get("contextual_extraction") or event.get("evaluation", {}).get("contextual_extraction") or {},
             "ai_governance_metadata": event.get("ai_governance_metadata") or event.get("evaluation", {}).get("ai_governance_metadata") or {},
-            "source": "local_audit_log", "risk_method": risk.get("method", "deterministic evidence checks"),
+            "source": "local_audit_log", "risk_method": risk.get("method", "legacy-score"),
             "engine_duration_ms": event.get("engine_duration_ms"),
             "has_source_text": bool(event.get("source_text")),
         }

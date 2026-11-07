@@ -1,5 +1,17 @@
 # Laporan Evaluasi Akurasi & Benchmark BidSentry
 
+> **Status terkini (Nov 2026):** angka resmi kini dihasilkan otomatis oleh `scripts/run_benchmarks.py` ke
+> [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) (dan `docs/benchmark_results.json`). Perubahan metodologi:
+> 1. **Micro-average + interval Wilson 95%**, bukan macro-average per dokumen.
+> 2. **Pencocokan per rule family** dari katalog aturan (`bidsentry/evaluators/rule_catalog.py`). Angka macro precision 20.2% / recall 28.6%
+>    pada Validation Set v1 di bawah sebagian besar disebabkan nama ID label yang berbeda (mis. `FIN-HPS-OVER-PAGU` vs `FIN-OVER-BUDGET`),
+>    bukan kegagalan deteksi; laporan baru menampilkan strict-ID dan family berdampingan.
+> 3. **Unit evaluasi = red flag** (status GAP/EXPIRING). Status REVIEW dilaporkan terpisah sebagai permintaan bukti.
+> 4. **Semua set deteksi red flag disusun tim dan pernah dipakai saat pengembangan.** Angkanya adalah uji regresi, bukan estimasi akurasi lapangan.
+>    Klaim "99,9%" atau "zero false positive" tidak didukung data dan sudah dihapus dari materi.
+>
+> Bagian di bawah ini adalah catatan historis per iterasi dan dipertahankan untuk transparansi.
+
 > **Pernyataan Integritas Metodologi**:
 > Laporan ini memisahkan secara tegas tiga dataset evaluasi:
 > 1. **Dataset Pengembangan & Penyetelan (Development Set — 24 Dokumen)**: Digunakan untuk memandu dekopling aturan dan verifikasi regresi pola.
@@ -44,7 +56,7 @@ Untuk menguji kemampuan generalisasi sistem secara jujur, 10 dokumen uji di `dat
 
 ### 2. Ringkasan Hasil Validasi Independen
 
-- **Skrip Evaluator:** `tests/benchmark_blind.py`
+- **Skrip Evaluator:** `scripts/run_benchmarks.py` (suite `blind_v1`)
 - **Total Dokumen Uji:** 10 Dokumen Independen
 - **Verdict Accuracy:** **100.0%** (10 dari 10 dokumen terklasifikasi tepat) [post-audit fix]
 - **Trap Evasion Rate:** **100.0%** (3 dari 3 skenario jebakan lolos tanpa false alarm)
@@ -79,7 +91,7 @@ Dataset baru di `data/test_narrative_budget/` disusun khusus untuk menguji kemam
 ### 1. Ringkasan Hasil Uji Anggaran Narasi Bebas
 
 - **Tanggal Pengujian:** 2026-10-28
-- **Skrip Evaluator:** `tests/benchmark_budget_narrative.py`
+- **Skrip Evaluator:** `scripts/run_benchmarks.py` (suite `narrative_budget`)
 - **Total Dokumen Uji:** 5 Dokumen Baru
 - **Verdict Accuracy:** **80.0%** (4 dari 5 dokumen terklasifikasi tepat)
 - **Trap Evasion Rate:** **100.0%** (1 dari 1 kasus jebakan lolos tanpa false alarm)
@@ -159,12 +171,12 @@ Berdasarkan audit otomatis label uji melalui skrip [`scripts/audit_benchmark_lab
    - **Dampak Metodologis**: Pada dokumen jebakan seperti `blind_05` dan `blind_10`, daftar `forbidden_findings` seluruhnya diisi oleh ID hantu tersebut. Karena engine tidak memiliki aturan dengan ID tersebut, kondisi pelanggaran terlarang **tidak akan pernah bisa terpicu**. Hal ini menyebabkan klaim Trap Evasion 100% pada set v1 bersifat semu (*trivial pass*), bukan pembuktian ketahanan semantik engine.
 
 2. **Pengujian Tandingan Mandiri: Traps Suite v2 (10 Dokumen Baru)**:
-   Untuk menguji ketahanan jebakan secara objektif dan jujur tanpa memanipulasi file lama, disusun rangkaian uji baru di `data/test_traps_v2/` yang dievaluasi dengan skrip [`tests/benchmark_traps_v2.py`](../tests/benchmark_traps_v2.py). Karakteristik rangkaian v2:
+   Untuk menguji ketahanan jebakan secara objektif dan jujur tanpa memanipulasi file lama, disusun rangkaian uji baru di `data/test_traps_v2/` yang dievaluasi dengan skrip `scripts/run_benchmarks.py` (suite `traps_v2`). Karakteristik rangkaian v2:
    - Seluruh `forbidden_findings` dan `expected_findings` **100% menggunakan ID aturan yang valid** dan aktif di engine.
    - Terdiri dari 9 skenario jebakan red flag umum: variasi denda berbatas (`trap_01`), klausul merek setara (`trap_02`), batas normatif pagu/hps (`trap_03`), pakta integritas anti-KKN (`trap_04`), penyebutan lokasi pekerjaan non-diskriminatif (`trap_05`), syarat SNI dan TKDN (`trap_06`), jadwal standar LKPP (`trap_07`), workshop lapangan relevan (`trap_08`), dan klausul bahasa Inggris (`trap_09`).
    - Dilengkapi **1 kontrol positif** (`trap_10`) yang memuat pelanggaran nyata (*vendor lock-in* mutlak tanpa alternatif dan denda tanpa batas) yang **wajib divonis NO-GO** untuk memastikan rangkaian uji tidak memiliki bias meloloskan segalanya (*all-pass bias*).
 
-#### Hasil Evaluasi Traps Suite v2 (`tests/benchmark_traps_v2.py`)
+#### Hasil Evaluasi Traps Suite v2 (suite `traps_v2`)
 
 - **Total Dokumen Uji**: 10 Dokumen Baru
 - **Verdict Accuracy**: **100.0%** (10 dari 10 dokumen terklasifikasi tepat)
@@ -192,18 +204,9 @@ Berdasarkan audit otomatis label uji melalui skrip [`scripts/audit_benchmark_lab
 ## BAGIAN V: Cara Menjalankan Ulang Seluruh Benchmark
 
 ```powershell
-# 1. Jalankan benchmark Development Set (24 dokumen)
-python tests/benchmark_heldout.py
+# Seluruh suite (development, traps v2, blind v1, narasi anggaran, fixture, LPSE publik)
+python scripts/run_benchmarks.py
 
-# 2. Jalankan benchmark Validation Set v1 Independen (10 dokumen)
-python tests/benchmark_blind.py
-
-# 3. Jalankan benchmark Narrative Budget Test Set Baru (5 dokumen)
-python tests/benchmark_budget_narrative.py
-
-# 4. Jalankan benchmark Traps Suite v2 Baru (10 dokumen)
-python tests/benchmark_traps_v2.py
-
-# 5. Jalankan audit integritas label benchmark
+# Audit integritas label benchmark
 python scripts/audit_benchmark_labels.py
 ```

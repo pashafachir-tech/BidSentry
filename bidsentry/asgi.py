@@ -18,6 +18,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.concurrency import run_in_threadpool
 
+from bidsentry.api.auth_router import create_auth_router, session_role
 from bidsentry.api.routes import ApiResponse, ApiRouter
 from bidsentry.api.stream import router as audit_stream_router
 from bidsentry.api.v1_router import create_v1_router
@@ -154,6 +155,7 @@ def create_asgi_app(settings: Settings | None = None) -> FastAPI:
         openapi_url=None,
         lifespan=lifespan,
     )
+    api.include_router(create_auth_router(application))
     api.include_router(create_v1_router(application))
     api.include_router(audit_stream_router)
 
@@ -231,6 +233,7 @@ def create_asgi_app(settings: Settings | None = None) -> FastAPI:
                 path,
                 request.url.query,
                 payload,
+                session_role(request, application),
             )
             return JSONResponse(result.body, status_code=result.status, headers=result.headers or {})
         except OverflowError:

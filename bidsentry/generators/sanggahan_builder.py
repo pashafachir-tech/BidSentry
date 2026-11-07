@@ -6,88 +6,92 @@ import io
 from html import escape
 from typing import Any
 
+from bidsentry.evaluators.rule_catalog import get_rule
 from bidsentry.generators._document_support import DocumentGenerationError, clean_cell, render_pdf, require_docx
 
 
+_EXCLUDED_REVIEW_OUTCOMES = {"NOT_SUPPORTED", "IGNORED"}
+# Fallback for findings whose code is not in the rule catalog (e.g. hand-written rows).
+_TENDER_CATEGORIES = (
+    "spesifikasi", "jadwal", "integritas", "keuangan", "kontrak",
+    "diskrimin", "persaingan", "kolusi", "anti-kompetitif", "administrasi", "kualifikasi", "adendum",
+)
+
+
+def _is_tender_document_issue(item: dict[str, Any]) -> bool:
+    """Only gaps in the tender document can be objected to; bidder credentials cannot."""
+    if item.get("party"):
+        return item.get("party") == "tender_document"
+    try:
+        return get_rule(str(item.get("id", ""))).party == "tender_document"
+    except KeyError:
+        category = str(item.get("issue_type", item.get("category", ""))).casefold()
+        return any(word in category for word in _TENDER_CATEGORIES)
+
+
+def _quote_of(item: dict[str, Any]) -> str | None:
+    quote = item.get("verbatim_quote") or item.get("source_quote")
+    if not quote:
+        req = item.get("requirement_evidence")
+        if isinstance(req, (list, tuple)) and len(req) >= 2 and isinstance(req[1], str):
+            quote = req[1]
+        elif isinstance(req, str):
+            quote = req
+    if not quote:
+        ev = item.get("evidence")
+        if isinstance(ev, (list, tuple)) and len(ev) >= 2 and isinstance(ev[1], str):
+            quote = ev[1]
+        elif isinstance(ev, str):
+            quote = ev
+    return quote if isinstance(quote, str) and quote.strip() else None
+
+
 def _eligible(items: list[dict[str, Any]], source_text: str) -> list[dict[str, Any]]:
+    """Keep confirmed tender-document gaps whose quote is verbatim in the source.
+
+    Excluded: findings that are not GAP (TERPENUHI/REVIEW/EXPIRING/SUPERSEDED),
+    the bidder's own credential findings, findings a reviewer marked
+    NOT_SUPPORTED, and any finding whose quote is not in the source text.
+    """
     output: list[dict[str, Any]] = []
-    # Relevant tender violation categories that warrant objection to Pokja / PPK
-    valid_categories = (
-        "spesifikasi", "jadwal", "integritas", "keuangan", "kontrak",
-        "diskrimin", "persaingan", "kolusi", "anti-kompetitif", "administrasi", "kualifikasi", "adendum"
-    )
-    # Gaps in the bidder's own credentials (e.g. bidder's SBU expired) are internal issues, not grounds for sanggahan against Pokja
-    bidder_credential_ids = {"ADM-SBU", "ADM-NIB", "ADM-NPWP", "ADM-KSWP"}
     clean_source = " ".join(source_text.split()).casefold()
     for item in items:
         if not isinstance(item, dict):
             continue
-        fid = str(item.get("id", ""))
-        clause = str(item.get("clause", "")).casefold()
-        if fid in bidder_credential_ids or "masa berlaku" in clause:
+        status = str(item.get("status") or "GAP").upper()
+        if status != "GAP":
             continue
-        category = str(item.get("issue_type", item.get("category", ""))).casefold()
-        if not any(word in category for word in valid_categories):
+        if str(item.get("reviewer_outcome") or item.get("reviewer_status") or "").upper() in _EXCLUDED_REVIEW_OUTCOMES:
             continue
-        
-        quote = item.get("verbatim_quote") or item.get("source_quote")
-        if not quote:
-            req = item.get("requirement_evidence")
-            if isinstance(req, (list, tuple)) and len(req) >= 2 and isinstance(req[1], str):
-                quote = req[1]
-            elif isinstance(req, str):
-                quote = req
-        if not quote:
-            ev = item.get("evidence")
-            if isinstance(ev, (list, tuple)) and len(ev) >= 2 and isinstance(ev[1], str):
-                quote = ev[1]
-            elif isinstance(ev, str):
-                quote = ev
-
-        if isinstance(quote, str) and quote.strip():
-            clean_q = " ".join(quote.split()).casefold()
-            if clean_q in clean_source or quote in source_text:
-                output.append({**item, "verbatim_quote": quote})
+        if not _is_tender_document_issue(item):
+            continue
+        quote = _quote_of(item)
+        if quote and (" ".join(quote.split()).casefold() in clean_source or quote in source_text):
+            output.append({**item, "verbatim_quote": quote})
     return output
 
 
 def _candidate_legal_citations(items: list[dict[str, Any]]) -> list[dict[str, str]]:
+    """Candidate references from the rule catalog; every one needs legal verification."""
     if not items:
         return []
     citations = [{
         "reference": "Perpres 16/2018 sebagaimana diubah dengan Perpres 12/2021 dan Perpres 46/2025, Pasal 6 (prinsip pengadaan)",
-        "provision": "Rujukan awal untuk ditelaah terhadap fakta dan dokumen paket; kutipan ini tidak menyatakan bahwa suatu pelanggaran telah terjadi. Naskah konsolidasi LKPP: https://jdih.lkpp.go.id/regulation/konsolidasi/konsolidasi-nomor-46-tahun-2025",
+        "provision": "Rujukan awal untuk ditelaah terhadap fakta dan dokumen paket; tidak menyatakan bahwa suatu pelanggaran telah terjadi. Naskah konsolidasi LKPP: https://jdih.lkpp.go.id/regulation/konsolidasi/konsolidasi-nomor-46-tahun-2025",
     }]
-    categories = " ".join(str(item.get("issue_type", item.get("category", ""))).casefold() for item in items)
-    ids = " ".join(str(item.get("id", "")).casefold() for item in items)
-    notes = " ".join(str(item.get("review_note", "")).casefold() for item in items)
-
-    if any(word in categories or word in ids for word in ("spesifikasi", "spec", "lockin")):
-        citations.append({
-            "reference": "Perpres 12/2021, Pasal 19 ayat (1) (larangan penguncian merek / spesifikasi diskriminatif)",
-            "provision": "Pengadaan barang/jasa dilarang mengarah pada produk/merek tertentu kecuali pada pengadaan suku cadang atau komponen pengganti.",
-        })
-    if any(word in categories or word in ids for word in ("jadwal", "proc", "timeline")):
-        citations.append({
-            "reference": "Perpres 12/2021, Pasal 54 jo. Pedoman LKPP (waktu penyusunan dokumen penawaran dan masa sanggah)",
-            "provision": "Pemberian waktu yang cukup bagi peserta pemilihan untuk menyusun dokumen penawaran (minimal 7 hari kerja) dan masa sanggah (minimal 5 hari kerja).",
-        })
-    if any(word in categories or word in ids for word in ("integritas", "gov", "coi", "benturan")):
-        citations.append({
-            "reference": "Perpres 16/2018 Pasal 7 jo. POJK No. 6/POJK.03/2015 Pasal 23 (etika pengadaan & benturan kepentingan)",
-            "provision": "Para pihak dilarang mempengaruhi pengadaan yang menimbulkan persaingan usaha tidak sehat atau benturan kepentingan pribadi/afiliasi.",
-        })
-    if any(word in categories or word in ids for word in ("keuangan", "fin", "budget", "pagu")):
-        citations.append({
-            "reference": "Perpres 16/2018 Pasal 26 ayat (1) (batas penetapan HPS terhadap pagu)",
-            "provision": "HPS tidak boleh ditetapkan melampaui Pagu Anggaran yang tersedia.",
-        })
-    if any(word in categories or word in ids for word in ("kontrak", "con", "penalty", "denda")):
-        citations.append({
-            "reference": "Perpres 16/2018 Pasal 78 jo. Standar Dokumen Pemilihan LKPP (batasan sanksi denda keterlambatan)",
-            "provision": "Sanksi denda keterlambatan 1/1000 per hari memiliki batas maksimum 5% (atau maksimum 100% dari jaminan pelaksanaan) dan dikenakan terhadap bagian pekerjaan atau nilai kontrak secara proporsional.",
-        })
-    if any(word in categories or word in notes for word in ("kolusi", "persekongkol", "persaingan", "kartel", "bid rigging")):
+    seen = {citations[0]["reference"]}
+    for item in items:
+        reference = item.get("legal_reference")
+        if not reference:
+            try:
+                reference = get_rule(str(item.get("id", ""))).legal_reference
+            except KeyError:
+                reference = ""
+        if reference and reference not in seen:
+            seen.add(reference)
+            citations.append({"reference": reference, "provision": "PERLU VERIFIKASI HUKUM: cocokkan nomor pasal dengan naskah yang berlaku pada tanggal paket sebelum surat diajukan."})
+    signals = " ".join(f"{item.get('issue_type', item.get('category', ''))} {item.get('review_note', '')}" for item in items).casefold()
+    if any(word in signals for word in ("kolusi", "persekongkol", "persaingan", "kartel", "bid rigging")):
         citations.append({
             "reference": "UU 5/1999, Pasal 22 (larangan persekongkolan tender)",
             "provision": "Cantumkan hanya jika fakta pendukung dan unsur pasal ditelaah secara terpisah. Kemiripan dokumen atau hubungan entitas saja bukan kesimpulan pelanggaran. Naskah: https://peraturan.bpk.go.id/Details/45280/uu-no-5-tahun-1999",

@@ -104,7 +104,7 @@ BidSentry diposisikan secara strategis untuk mengisi celah kritis yang tidak dil
 
 ### Parit Pertahanan & Keunggulan Kompetitif (Moat):
 
-1. **Arsitektur Hibrida Neuro-Symbolic**: Putusan audit hukum (*verdict* GO / NO-GO) dan validasi aritmetika BoQ dijamin 100% deterministik oleh kode Python lokal bebas halusinasi, sementara IBM watsonx.ai Granite 3-8B Instruct bertugas mensintesis temuan kompleks ke dalam bahasa manusia yang persuasif.
+1. **Arsitektur Hibrida Neuro-Symbolic**: Verdict GO / NO-GO, tingkat risiko, dan aritmetika BoQ dihitung oleh kode Python deterministik (input yang sama selalu menghasilkan keluaran yang sama dan dapat ditelusuri di jejak audit). IBM watsonx.ai Granite hanya mengekstrak kutipan; setiap kutipan diverifikasi substring-persis lalu divalidasi ulang aturan Python. Deterministik tidak berarti selalu benar: akurasi diukur di [BENCHMARK_REPORT.md](BENCHMARK_REPORT.md) dan belum divalidasi pada dokumen nyata independen.
 2. **Kepatuhan Kedaulatan Data (UU PDP No. 27/2022)**: Seluruh metadata identitas, NIK, NPWP, dan nomor rekening disanitasi secara lokal sebelum dikirimkan ke model AI, melindungi kerahasiaan dokumen penawaran vendor.
 3. **Harga Mikro Tanpa Hambatan Birokrasi**: Menawarkan voucher QRIS instan Rp 500/dokumen yang dapat langsung dibeli dari ponsel cerdas penawar lelang tanpa kontrak korporasi berbelit.
 

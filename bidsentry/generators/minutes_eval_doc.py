@@ -1,13 +1,48 @@
-"""Generate a draft Berita Acara Hasil Evaluasi with evidence rows."""
+"""Generate a draft Berita Acara Hasil Evaluasi (BAHE) with evidence rows.
+
+Rows come from :func:`normalize_finding`, so engine findings (``clause`` /
+``requirement_evidence``) and forensic anomalies (``anomaly_type`` /
+``source_quote``) both render with their real title, quote and status.
+"""
 
 from __future__ import annotations
 
 import io
-from html import escape
 from collections.abc import Sequence
+from html import escape
 from typing import Any
 
-from bidsentry.generators._document_support import DocumentGenerationError, clean_cell, render_pdf, require_docx
+from bidsentry.generators._document_support import DocumentGenerationError, clean_cell, normalize_finding, render_pdf, require_docx
+
+_DISCLAIMER = (
+    "Draf ini menyajikan catatan pemeriksaan berbasis bukti untuk verifikasi dan pengesahan manusia. "
+    "Sinyal otomatis bukan keputusan lulus/gugur, kesimpulan pelanggaran, atau penetapan persekongkolan."
+)
+_HEADERS = ("No.", "Kode / temuan", "Status", "Bukti / lokasi", "Catatan pemeriksaan", "Keputusan Pokja")
+
+
+def _rows(findings: Sequence[dict[str, Any]]) -> list[dict[str, str]]:
+    return [normalize_finding(item) for item in findings if isinstance(item, dict)]
+
+
+def _risk_line(risk: dict[str, Any] | None) -> str | None:
+    if not risk or not risk.get("label"):
+        return None
+    return f"Tingkat risiko sistem: {clean_cell(risk.get('label'), 40)} (aturan {clean_cell(risk.get('rule_applied'), 8)}). {clean_cell(risk.get('rationale'), 400)}"
+
+
+def _meta_lines(tender_id: str, vendor_name: str, meta: dict[str, Any] | None) -> list[str]:
+    meta = meta or {}
+    lines = [f"Paket/Tender: {clean_cell(meta.get('package_name') or tender_id, 240)}"]
+    if meta.get("package_name") and tender_id:
+        lines.append(f"Kode tender: {clean_cell(tender_id, 200)}")
+    if meta.get("pokja_name"):
+        lines.append(f"Pokja: {clean_cell(meta['pokja_name'], 240)}")
+    lines.append(f"Peserta: {clean_cell(vendor_name, 240)}")
+    if meta.get("audit_id"):
+        lines.append(f"ID audit BidSentry: {clean_cell(meta['audit_id'], 80)}")
+    lines.append("Nomor: [diisi]    Tanggal: [diisi]")
+    return lines
 
 
 def build_minutes_markdown(
@@ -15,51 +50,37 @@ def build_minutes_markdown(
     vendor_name: str,
     findings: Sequence[dict[str, Any]],
     legal_mappings: Sequence[dict[str, Any]] = (),
+    *,
+    risk: dict[str, Any] | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> str:
     """Build a portable Markdown BAHE review draft."""
-
-    lines = [
-        "# BERITA ACARA HASIL EVALUASI (DRAF)",
-        "",
-        f"**Paket/Tender:** {_markdown_cell(tender_id)}  ",
-        f"**Peserta:** {_markdown_cell(vendor_name)}  ",
-        "**Nomor:** [diisi]  ",
-        "**Tanggal:** [diisi]",
-        "",
-        "> Draf ini menyajikan catatan pemeriksaan untuk verifikasi dan pengesahan manusia. Sinyal otomatis bukan keputusan lulus/gugur, kesimpulan pelanggaran, atau penetapan persekongkolan.",
-        "",
-        "| No. | Temuan | Bukti / halaman | Pemeriksaan | Status review |",
-        "| --- | --- | --- | --- | --- |",
-    ]
-    for index, item in enumerate(findings, 1):
-        kind = item.get("anomaly_type") or item.get("signal") or item.get("type") or "Temuan"
-        quote = item.get("source_quote") or item.get("verbatim_quote") or "Kutipan tidak tersedia."
-        evidence = f"{item.get('page_ref') or 'Tidak tersedia'} — {quote}"
-        review = item.get("description") or item.get("interpretation") or "Cocokkan dengan dokumen sumber dan kriteria paket."
+    lines = ["# BERITA ACARA HASIL EVALUASI (DRAF)", ""]
+    lines += [f"**{line.split(':', 1)[0]}:**{line.split(':', 1)[1]}  " for line in _meta_lines(tender_id, vendor_name, meta)]
+    lines += ["", f"> {_DISCLAIMER}", ""]
+    if (risk_text := _risk_line(risk)):
+        lines += [f"**{risk_text}**", ""]
+    lines += ["| " + " | ".join(_HEADERS) + " |", "| " + " | ".join("---" for _ in _HEADERS) + " |"]
+    for index, row in enumerate(_rows(findings), 1):
         lines.append(
-            f"| {index} | {_markdown_cell(kind)} | {_markdown_cell(evidence)} | {_markdown_cell(review)} | [Keputusan reviewer] |"
+            f"| {index} | {_markdown_cell(row['code'] + ' — ' + row['title'])} | {_markdown_cell(row['status_label'])} | "
+            f"{_markdown_cell(row['locator'] + ' — ' + row['quote'])} | {_markdown_cell(row['note'])} | {_markdown_cell(row['reviewer'])} |"
         )
-    if legal_mappings:
-        lines.extend(["", "## Rujukan hukum kandidat untuk telaah", ""])
+    references = [row for row in _rows(findings) if row["legal_reference"]]
+    if references or legal_mappings:
+        lines += ["", "## Rujukan hukum kandidat (perlu verifikasi hukum)", ""]
+        for row in references:
+            lines.append(f"- **{_markdown_cell(row['code'])}:** {_markdown_cell(row['legal_reference'])}")
         for item in legal_mappings:
             refs = item.get("candidate_references") or []
             titles = "; ".join(str(ref.get("title") or "") for ref in refs) or "Belum dipetakan"
             lines.append(f"- **{_markdown_cell(item.get('signal') or 'Temuan')}:** {_markdown_cell(titles)}")
             for question in item.get("review_questions", [])[:4]:
                 lines.append(f"  - {_markdown_cell(question)}")
-    lines.extend([
-        "",
-        "## Catatan dan kesimpulan Pokja",
-        "",
-        "[Diisi setelah verifikasi]",
-        "",
-        "## Anggota Pokja Pemilihan",
-        "",
-        "1. [Nama / tanda tangan]",
-        "2. [Nama / tanda tangan]",
-        "3. [Nama / tanda tangan]",
-        "",
-    ])
+    lines += [
+        "", "## Catatan dan kesimpulan Pokja", "", "[Diisi setelah verifikasi]", "",
+        "## Anggota Pokja Pemilihan", "", "1. [Nama / tanda tangan]", "2. [Nama / tanda tangan]", "3. [Nama / tanda tangan]", "",
+    ]
     return "\n".join(lines)
 
 
@@ -68,38 +89,33 @@ def build_minutes_html(
     vendor_name: str,
     findings: Sequence[dict[str, Any]],
     legal_mappings: Sequence[dict[str, Any]] = (),
+    *,
+    risk: dict[str, Any] | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> str:
     """Build an HTML BAHE draft with escaped evidence values."""
-
-    rows: list[str] = []
-    for index, item in enumerate(findings, 1):
-        kind = item.get("anomaly_type") or item.get("signal") or item.get("type") or "Temuan"
-        quote = item.get("source_quote") or item.get("verbatim_quote") or "Kutipan tidak tersedia."
-        review = item.get("description") or item.get("interpretation") or "Cocokkan dengan dokumen sumber dan kriteria paket."
-        rows.append(
-            "<tr>"
-            f"<td>{index}</td><td>{escape(clean_cell(kind, 120))}</td>"
-            f"<td>{escape(clean_cell(item.get('page_ref') or 'Tidak tersedia', 100))}<br>{escape(clean_cell(quote, 900))}</td>"
-            f"<td>{escape(clean_cell(review, 500))}</td><td>[Keputusan reviewer]</td>"
-            "</tr>"
-        )
-    references = []
+    body_rows = "".join(
+        "<tr>"
+        f"<td>{index}</td><td><strong>{escape(row['code'])}</strong><br>{escape(row['title'])}</td><td>{escape(row['status_label'])}</td>"
+        f"<td>{escape(row['locator'])}<br>{escape(row['quote'])}</td><td>{escape(row['note'])}</td><td>{escape(row['reviewer'])}</td>"
+        "</tr>"
+        for index, row in enumerate(_rows(findings), 1)
+    )
+    references = "".join(f"<li><strong>{escape(row['code'])}:</strong> {escape(row['legal_reference'])}</li>" for row in _rows(findings) if row["legal_reference"])
     for item in legal_mappings:
         refs = item.get("candidate_references") or []
         title_text = "; ".join(clean_cell(ref.get("title"), 220) for ref in refs) or "Belum dipetakan"
         questions = "".join(f"<li>{escape(clean_cell(question, 500))}</li>" for question in item.get("review_questions", [])[:4])
-        references.append(f"<li><strong>{escape(clean_cell(item.get('signal') or 'Temuan', 120))}:</strong> {escape(title_text)}<ul>{questions}</ul></li>")
+        references += f"<li><strong>{escape(clean_cell(item.get('signal') or 'Temuan', 120))}:</strong> {escape(title_text)}<ul>{questions}</ul></li>"
+    meta_html = "<br>".join(escape(line) for line in _meta_lines(tender_id, vendor_name, meta))
+    risk_html = f"<p><strong>{escape(text)}</strong></p>" if (text := _risk_line(risk)) else ""
     return (
         "<!doctype html><html lang=\"id\"><head><meta charset=\"utf-8\">"
         "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>BAHE (Draf)</title></head><body>"
-        "<h1>BERITA ACARA HASIL EVALUASI (DRAF)</h1>"
-        f"<p><strong>Paket/Tender:</strong> {escape(clean_cell(tender_id, 200))}<br>"
-        f"<strong>Peserta:</strong> {escape(clean_cell(vendor_name, 240))}<br>"
-        "<strong>Nomor:</strong> [diisi] &nbsp; <strong>Tanggal:</strong> [diisi]</p>"
-        "<p>Draf ini menyajikan catatan pemeriksaan untuk verifikasi dan pengesahan manusia. Sinyal otomatis bukan keputusan lulus/gugur atau kesimpulan hukum.</p>"
-        "<table border=\"1\" cellspacing=\"0\" cellpadding=\"6\"><thead><tr><th>No.</th><th>Temuan</th><th>Bukti / halaman</th><th>Pemeriksaan</th><th>Status review</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
-        + (f"<h2>Rujukan hukum kandidat untuk telaah</h2><ul>{''.join(references)}</ul>" if references else "")
+        f"<h1>BERITA ACARA HASIL EVALUASI (DRAF)</h1><p>{meta_html}</p><p>{escape(_DISCLAIMER)}</p>{risk_html}"
+        "<table border=\"1\" cellspacing=\"0\" cellpadding=\"6\"><thead><tr>" + "".join(f"<th>{escape(h)}</th>" for h in _HEADERS) + "</tr></thead>"
+        f"<tbody>{body_rows}</tbody></table>"
+        + (f"<h2>Rujukan hukum kandidat (perlu verifikasi hukum)</h2><ul>{references}</ul>" if references else "")
         + "<h2>Catatan dan kesimpulan Pokja</h2><p>[Diisi setelah verifikasi]</p>"
         "<h2>Anggota Pokja Pemilihan</h2><ol><li>[Nama / tanda tangan]</li><li>[Nama / tanda tangan]</li><li>[Nama / tanda tangan]</li></ol>"
         "</body></html>"
@@ -111,38 +127,46 @@ def build_minutes_docx(
     vendor_name: str,
     findings: Sequence[dict[str, Any]],
     legal_mappings: Sequence[dict[str, Any]] = (),
+    *,
+    risk: dict[str, Any] | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> bytes:
     Document = require_docx()
     document = Document()
     document.add_heading("BERITA ACARA HASIL EVALUASI (DRAF)", 0)
-    document.add_paragraph(f"Paket/Tender: {clean_cell(tender_id, 200)}")
-    document.add_paragraph(f"Peserta: {clean_cell(vendor_name, 240)}")
-    document.add_paragraph("Nomor: [diisi]    Tanggal: [diisi]")
-    document.add_paragraph(
-        "Draf ini menyajikan catatan pemeriksaan berbasis bukti untuk verifikasi dan pengesahan manusia. "
-        "Sinyal otomatis bukan keputusan lulus/gugur, kesimpulan pelanggaran, atau penetapan persekongkolan."
-    )
-    table = document.add_table(rows=1, cols=5)
+    for line in _meta_lines(tender_id, vendor_name, meta):
+        document.add_paragraph(line)
+    document.add_paragraph(_DISCLAIMER)
+    if (risk_text := _risk_line(risk)):
+        document.add_paragraph().add_run(risk_text).bold = True
+    table = document.add_table(rows=1, cols=len(_HEADERS))
     table.style = "Table Grid"
-    for cell, label in zip(table.rows[0].cells, ("No.", "Temuan", "Bukti / halaman", "Pemeriksaan", "Status review")):
+    for cell, label in zip(table.rows[0].cells, _HEADERS):
         cell.text = label
-    for index, item in enumerate(findings, 1):
-        row = table.add_row().cells
-        row[0].text = str(index)
-        row[1].text = clean_cell(item.get("anomaly_type") or item.get("signal") or item.get("type") or "Temuan", 120)
-        row[2].text = f"{clean_cell(item.get('page_ref') or 'Tidak tersedia', 100)}\n{clean_cell(item.get('source_quote') or item.get('verbatim_quote') or 'Kutipan tidak tersedia.', 900)}"
-        row[3].text = clean_cell(item.get("description") or item.get("interpretation") or "Cocokkan dengan dokumen sumber dan kriteria paket.", 500)
-        row[4].text = "[Keputusan reviewer]"
-    if legal_mappings:
-        document.add_heading("Rujukan hukum kandidat untuk telaah", level=1)
+    for index, row in enumerate(_rows(findings), 1):
+        cells = table.add_row().cells
+        cells[0].text = str(index)
+        cells[1].text = f"{row['code']}\n{row['title']}"
+        cells[2].text = row["status_label"]
+        cells[3].text = f"{row['locator']}\n{row['quote']}"
+        cells[4].text = row["note"]
+        cells[5].text = row["reviewer"]
+    references = [row for row in _rows(findings) if row["legal_reference"]]
+    if references or legal_mappings:
+        document.add_heading("Rujukan hukum kandidat (perlu verifikasi hukum)", level=1)
+        for row in references:
+            document.add_paragraph(f"{row['code']}: {row['legal_reference']}", style="List Bullet")
         for item in legal_mappings:
             refs = item.get("candidate_references") or []
             ref_names = "; ".join(clean_cell(ref.get("title"), 220) for ref in refs) or "Belum dipetakan"
             document.add_paragraph(f"{clean_cell(item.get('signal'), 120)}: {ref_names}")
             for question in item.get("review_questions", [])[:4]:
                 document.add_paragraph(clean_cell(question, 500), style="List Bullet")
-    document.add_paragraph("Catatan dan kesimpulan Pokja: [diisi setelah verifikasi]")
-    document.add_paragraph("Anggota Pokja Pemilihan:\n1. [Nama / tanda tangan]\n2. [Nama / tanda tangan]\n3. [Nama / tanda tangan]")
+    document.add_heading("Catatan dan kesimpulan Pokja", level=1)
+    document.add_paragraph("[Diisi setelah verifikasi]")
+    document.add_heading("Anggota Pokja Pemilihan", level=1)
+    for number in range(1, 4):
+        document.add_paragraph(f"{number}. [Nama / tanda tangan]")
     stream = io.BytesIO()
     document.save(stream)
     return stream.getvalue()
@@ -153,22 +177,18 @@ def build_minutes_pdf(
     vendor_name: str,
     findings: Sequence[dict[str, Any]],
     legal_mappings: Sequence[dict[str, Any]] = (),
+    *,
+    risk: dict[str, Any] | None = None,
+    meta: dict[str, Any] | None = None,
 ) -> bytes:
-    rows = [["No.", "Temuan", "Bukti / halaman", "Pemeriksaan", "Status review"]]
-    for index, item in enumerate(findings, 1):
-        rows.append([
-            str(index),
-            clean_cell(item.get("anomaly_type") or item.get("signal") or item.get("type") or "Temuan", 120),
-            f"{clean_cell(item.get('page_ref') or 'Tidak tersedia', 100)}\n{clean_cell(item.get('source_quote') or item.get('verbatim_quote') or 'Kutipan tidak tersedia.', 900)}",
-            clean_cell(item.get("description") or item.get("interpretation") or "Cocokkan dengan dokumen sumber dan kriteria paket.", 500),
-            "[Keputusan reviewer]",
-        ])
-    paragraphs = [
-        f"Paket/Tender: {clean_cell(tender_id, 200)}",
-        f"Peserta: {clean_cell(vendor_name, 240)}",
-        "Nomor: [diisi]    Tanggal: [diisi]",
-        "Draf untuk verifikasi dan pengesahan manusia. Sinyal otomatis bukan keputusan lulus/gugur atau kesimpulan hukum.",
-        "Rujukan kandidat: " + ("; ".join(clean_cell(ref.get("title"), 220) for item in legal_mappings for ref in item.get("candidate_references", [])) or "Belum dipetakan."),
+    rows = [list(_HEADERS)]
+    for index, row in enumerate(_rows(findings), 1):
+        rows.append([str(index), f"{row['code']}\n{row['title']}", row["status_label"], f"{row['locator']}\n{row['quote']}", row["note"], row["reviewer"]])
+    paragraphs = [*_meta_lines(tender_id, vendor_name, meta), _DISCLAIMER]
+    if (risk_text := _risk_line(risk)):
+        paragraphs.append(risk_text)
+    paragraphs += [
+        "Rujukan kandidat (perlu verifikasi hukum): " + ("; ".join(f"{row['code']}: {row['legal_reference']}" for row in _rows(findings) if row["legal_reference"]) or "Belum dipetakan."),
         "Catatan dan kesimpulan Pokja: [diisi setelah verifikasi]",
         "Anggota Pokja Pemilihan: [Nama / tanda tangan]",
     ]

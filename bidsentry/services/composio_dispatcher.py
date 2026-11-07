@@ -140,7 +140,7 @@ def _build_docs_params(audit_data: dict) -> dict:
     """Build the input dict for GOOGLEDOCS_CREATE_DOCUMENT_MARKDOWN."""
     package_name   = audit_data.get("nama_paket", "Audit pengadaan")
     verdict        = audit_data.get("verdict", "GO-WITH-CAUTION")
-    risk_score     = audit_data.get("risk_score", "—")
+    risk_label     = {"NOT_ASSESSABLE": "Tidak Dapat Dinilai", "LOW": "Rendah", "MEDIUM": "Sedang", "HIGH": "Tinggi", "CRITICAL": "Kritis"}.get(str(audit_data.get("risk_level", "")), "—")
     alasan         = audit_data.get("alasan_utama", [])
     now_str        = datetime.now(tz=timezone(timedelta(hours=7))).strftime("%d %B %Y %H:%M WIB")
 
@@ -150,7 +150,7 @@ def _build_docs_params(audit_data: dict) -> dict:
         f"ID      : {audit_data.get('tender_id') or '—'}",
         f"Dibuat  : {now_str}",
         f"Status review : {verdict}",
-        f"Indeks triase : {risk_score}/100",
+        f"Tingkat risiko: {risk_label}",
         "",
         "═══ SINYAL UNTUK VERIFIKASI MANUAL ═══",
         "\n".join(f"• {a}" for a in alasan),

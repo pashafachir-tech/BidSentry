@@ -84,7 +84,13 @@ def test_quote_not_in_source_rejected_in_builder():
     assert eligible_real[0]["verbatim_quote"] == "Server harus memiliki 64 core CPU"
 
 
+def _login(client: TestClient, role: str) -> None:
+    response = client.post("/api/auth/login", json={"role": role})
+    assert response.status_code == 200, response.text
+
+
 def test_api_sanggahan_rejects_unverified_quote(client: TestClient):
+    _login(client, "vendor")
     source_text = "BAB I. KETENTUAN UMUM: Pengadaan barang komputer kantor tahun 2026."
     payload = {
         "tender_id": "TND-TEST-001",
@@ -113,6 +119,7 @@ def test_api_sanggahan_rejects_unverified_quote(client: TestClient):
 
 
 def test_api_sanggahan_rejects_missing_source_text(client: TestClient):
+    _login(client, "vendor")
     payload = {
         "tender_id": "TND-TEST-002",
         "package_name": "Paket Server",
@@ -129,3 +136,51 @@ def test_api_sanggahan_rejects_missing_source_text(client: TestClient):
     data = response.json()
     assert "error" in data
     assert "tidak tersedia" in data["error"]["message"].lower() or "source_text" in str(data)
+
+
+def test_sanggahan_requires_vendor_role_and_berita_acara_requires_pokja(client: TestClient):
+    payload = {"source_text": "Denda 1/1000 per hari tanpa batas maksimal.", "findings": [], "format": "markdown"}
+    assert client.post("/api/v1/audit/sanggahan-doc", json=payload).status_code == 401
+    _login(client, "pokja")
+    forbidden = client.post("/api/v1/audit/sanggahan-doc", json=payload)
+    assert forbidden.status_code == 403
+    assert forbidden.json()["error"]["code"] == "ROLE_FORBIDDEN"
+    minutes = client.post("/api/v1/audit/minutes-eval-doc", json={"tender_id": "T-1", "vendor_name": "PT Uji", "format": "markdown", "findings": []})
+    assert minutes.status_code == 200
+    _login(client, "vendor")
+    assert client.post("/api/v1/audit/minutes-eval-doc", json={"tender_id": "T-1", "vendor_name": "PT Uji", "format": "markdown"}).status_code == 403
+
+
+def test_role_workspaces_are_separated_and_documents_render_engine_findings(client: TestClient):
+    _login(client, "pokja")
+    audit = client.post("/api/audit", json={
+        "package_name": "Paket Pokja",
+        "dok_pemilihan": "Spesifikasi wajib menggunakan prosesor Intel Xeon Gold 6430.\nMasa sanggah hanya 2 hari kerja.",
+        "contract_draft": "Denda keterlambatan 1/1000 per hari dari nilai kontrak tanpa batas maksimal.",
+    }).json()["data"]
+    assert audit["owner_role"] == "pokja"
+    assert audit["risk_level"] == "CRITICAL" and audit["risk"]["rule_applied"] == "R1"
+    assert any(step["kind"] == "calculation" for step in audit["proof_log"])
+    proof = client.get(f"/api/audits/{audit['audit_id']}/proof").json()["data"]
+    assert proof["steps"] and proof["decision_table"]
+
+    minutes = client.post("/api/v1/audit/minutes-eval-doc", json={"audit_id": audit["audit_id"], "format": "markdown"}).json()["data"]
+    import base64
+    text = base64.b64decode(minutes["content_base64"]).decode("utf-8")
+    assert "CON-PENALTY" in text and "tanpa batas" in text and "Kutipan tidak tersedia" not in text
+    assert "Kritis" in text
+
+    _login(client, "vendor")
+    rows = client.get("/api/audits").json()["data"]["audits"]
+    assert all(row["audit_id"] != audit["audit_id"] for row in rows)
+    assert client.get(f"/api/audits/{audit['audit_id']}").status_code == 400
+
+    vendor_audit = client.post("/api/audit", json={
+        "package_name": "Paket Vendor",
+        "dok_pemilihan": "Spesifikasi wajib menggunakan prosesor Intel Xeon Gold 6430.\nGaransi minimal 12 bulan.",
+        "pustaka": "Garansi pabrikan 12 bulan.",
+    }).json()["data"]
+    draft = client.post("/api/v1/audit/sanggahan-doc", json={"audit_id": vendor_audit["audit_id"], "format": "markdown"}).json()["data"]
+    assert draft["findings_included"] == ["SPEC-LOCKIN-CPU"]
+    boq = client.post("/api/export/boq", json={"audit_id": vendor_audit["audit_id"]})
+    assert boq.status_code == 200 and boq.json()["data"]["filename"].endswith(".xlsx")

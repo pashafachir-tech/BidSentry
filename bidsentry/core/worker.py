@@ -48,7 +48,8 @@ def build_redis_settings(url: str) -> RedisSettings:
         username=unquote(parsed.username) if parsed.username else None,
         password=unquote(parsed.password) if parsed.password else None,
         ssl=parsed.scheme == "rediss",
-        conn_retries=3,
+        conn_retries=1,
+        conn_timeout=1,
     )
 
 

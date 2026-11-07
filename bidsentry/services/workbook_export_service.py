@@ -20,9 +20,9 @@ _STATUS_LABELS = {
     "SUPERSEDED": "Digantikan adendum",
     "REVIEW": "Perlu ditinjau",
 }
-_RISK_LABELS = {"LOW": "Rendah", "MEDIUM": "Sedang", "HIGH": "Tinggi", "CRITICAL": "Kritis"}
+_RISK_LABELS = {"NOT_ASSESSABLE": "Tidak Dapat Dinilai", "LOW": "Rendah", "MEDIUM": "Sedang", "HIGH": "Tinggi", "CRITICAL": "Kritis"}
 _STYLE_BY_STATUS = {"TERPENUHI": 12, "GAP": 10, "EXPIRING": 11, "SUPERSEDED": 13, "REVIEW": 9}
-_STYLE_BY_RISK = {"LOW": 12, "MEDIUM": 11, "HIGH": 10, "CRITICAL": 10}
+_STYLE_BY_RISK = {"NOT_ASSESSABLE": 9, "LOW": 12, "MEDIUM": 11, "HIGH": 10, "CRITICAL": 10}
 _COLUMNS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 
@@ -204,7 +204,7 @@ class WorkbookExportService:
             [("BidSentry | Risk Review", 1)],
             [("Ringkasan untuk pimpinan · dibuat " + datetime.now(timezone.utc).astimezone().strftime("%d %b %Y %H:%M %Z"), 2)],
             [("Nama paket", 3), (_safe_text(review.get("package_name") or "Audit dokumen"), 4), ("ID paket", 3), (_safe_text(review.get("tender_id") or review.get("audit_id") or "—"), 4), ("Peran", 3), (role, 4), ("Status", 3), (status_label, 4)],
-            [("Instansi", 3), (_safe_text(review.get("agency") or "—"), 4), ("Nilai kontrak / penawaran", 3), (contract_value if has_contract_value else "—", 14 if has_contract_value else 4), ("Prioritas", 3), (_RISK_LABELS.get(risk, risk or "Perlu ditinjau"), _STYLE_BY_RISK.get(risk, 9)), ("Indeks triase / 100", 3), (review.get("risk_score", "—"), 4)],
+            [("Instansi", 3), (_safe_text(review.get("agency") or "—"), 4), ("Nilai kontrak / penawaran", 3), (contract_value if has_contract_value else "—", 14 if has_contract_value else 4), ("Tingkat risiko", 3), (_RISK_LABELS.get(risk, risk or "Perlu ditinjau"), _STYLE_BY_RISK.get(risk, 9)), ("Aturan keputusan", 3), (_safe_text((review.get("risk") or {}).get("rule_applied") or "—"), 4)],
             [("Perlu ditinjau", 3), (counts["review"], 4), ("Sinyal terdeteksi", 3), (counts["total"], 4), ("Ditampilkan", 3), (min(total_findings, 300), 4)],
             [("Batas penggunaan", 3), ("Indeks triase dan sinyal aturan; bukan verdict kepatuhan, opini hukum, atau temuan fraud. Skor 0 bukan bukti paket bebas risiko. Verifikasi sumber asli sebelum bertindak.", 5)],
             [("Batas ekspor", 3), (f"Menampilkan 300 dari {total_findings} sinyal; buka aplikasi untuk meninjau daftar lengkap." if total_findings > 300 else "Semua sinyal review yang tersedia ditampilkan.", 5)],
@@ -292,10 +292,10 @@ class WorkbookExportService:
         rows: list[list[tuple[Any, int]]] = [
             [("BidSentry | Register Audit", 1)],
             [("Ringkasan audit lokal dan prioritas pemeriksaan", 2)],
-            [("Catatan", 3), ("Skor adalah indeks triase. Data sumber dokumen tidak termasuk dalam register ini.", 5)],
+            [("Catatan", 3), ("Tingkat risiko ditentukan tabel keputusan deterministik (R0–R6). Data sumber dokumen tidak termasuk dalam register ini.", 5)],
             [("", 0)],
             [("DAFTAR PAKET", 6)],
-            [("Nama paket", 7), ("ID paket", 7), ("Tanggal", 7), ("Instansi", 7), ("Penyedia", 7), ("Nilai kontrak / penawaran (Rp)", 7), ("Skor triase", 7), ("Tingkat risiko", 7), ("Status review", 7), ("Jumlah temuan", 7), ("Sumber data", 7)],
+            [("Nama paket", 7), ("ID paket", 7), ("Tanggal", 7), ("Instansi", 7), ("Penyedia", 7), ("Nilai kontrak / penawaran (Rp)", 7), ("Aturan keputusan", 7), ("Tingkat risiko", 7), ("Status review", 7), ("Jumlah temuan", 7), ("Sumber data", 7)],
         ]
         for item in audits[:1000]:
             level = str(item.get("risk_level", "MEDIUM")).upper()
@@ -311,7 +311,7 @@ class WorkbookExportService:
                 (_safe_text(item.get("agency", "")), 8),
                 (_safe_text(item.get("vendor_name", "")), 8),
                 (contract_value if has_contract_value else "—", 14 if has_contract_value else 8),
-                (item.get("risk_score", 0) or 0, 8),
+                (_safe_text((item.get("risk") or {}).get("rule_applied") or "—"), 8),
                 (_RISK_LABELS.get(level, level), _STYLE_BY_RISK.get(level, 9)),
                 (_safe_text(item.get("verdict", "REVIEW_REQUIRED")), 8),
                 (finding_count, 8),

@@ -92,6 +92,9 @@ class Settings:
     audit_retention_days: int = 90
     watsonx_api_key: str = ""
     watsonx_model_id: str = "ibm/granite-3-8b-instruct"
+    pokja_pin: str = ""
+    vendor_pin: str = ""
+    session_secret: str = ""
 
     @property
     def composio_entity_id(self) -> str:
@@ -174,6 +177,9 @@ class Settings:
             audit_retention_days=audit_retention_days,
             watsonx_api_key=os.environ.get("WATSONX_API_KEY", "").strip(),
             watsonx_model_id=os.environ.get("WATSONX_MODEL_ID", "ibm/granite-3-8b-instruct").strip() or "ibm/granite-3-8b-instruct",
+            pokja_pin=os.environ.get("BIDSENTRY_POKJA_PIN", "").strip(),
+            vendor_pin=os.environ.get("BIDSENTRY_VENDOR_PIN", "").strip(),
+            session_secret=os.environ.get("BIDSENTRY_SESSION_SECRET", "").strip(),
         )
 
 

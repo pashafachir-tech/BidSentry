@@ -39,14 +39,6 @@ jobs:
         run: |
           pytest tests/ -v
 
-      - name: Run Held-Out Benchmark Regression Test (Zero-Regression Guard)
+      - name: Run Benchmark Regression Guard (all labelled suites)
         run: |
-          python tests/benchmark_heldout.py
-
-      - name: Run Independent Blind Benchmark Test
-        run: |
-          python tests/benchmark_blind.py
-
-      - name: Run Narrative Budget Benchmark Test
-        run: |
-          python tests/benchmark_budget_narrative.py
+          python scripts/run_benchmarks.py --no-write --min-pooled-f1 0.9

@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 from starlette.concurrency import run_in_threadpool
 
+from bidsentry.api.auth_router import session_role
 from bidsentry.api.routes import ApiRouter
 from bidsentry.app import Application
 from bidsentry.core.database import AsyncDatabase, serialize_job
@@ -34,7 +35,7 @@ def create_v1_router(application: Application) -> APIRouter:
         payload, error = await _json_payload(request, application.settings.max_request_bytes)
         if error is not None:
             return error
-        result = await run_in_threadpool(dispatch.dispatch, "POST", "/api/v1/audit/comprehensive", "", payload)
+        result = await run_in_threadpool(dispatch.dispatch, "POST", "/api/v1/audit/comprehensive", "", payload, session_role(request, application))
         return JSONResponse(result.body, status_code=result.status, headers=result.headers or {})
 
     @router.post("/audit/evaluate")
@@ -42,7 +43,7 @@ def create_v1_router(application: Application) -> APIRouter:
         payload, error = await _json_payload(request, application.settings.max_request_bytes)
         if error is not None:
             return error
-        result = await run_in_threadpool(dispatch.dispatch, "POST", "/api/v1/audit/evaluate", "", payload)
+        result = await run_in_threadpool(dispatch.dispatch, "POST", "/api/v1/audit/evaluate", "", payload, session_role(request, application))
         return JSONResponse(result.body, status_code=result.status, headers=result.headers or {})
 
     @router.post("/audit/sanggahan-doc")
@@ -50,7 +51,7 @@ def create_v1_router(application: Application) -> APIRouter:
         payload, error = await _json_payload(request, application.settings.max_request_bytes)
         if error is not None:
             return error
-        result = await run_in_threadpool(dispatch.dispatch, "POST", "/api/v1/audit/sanggahan-doc", "", payload)
+        result = await run_in_threadpool(dispatch.dispatch, "POST", "/api/v1/audit/sanggahan-doc", "", payload, session_role(request, application))
         return JSONResponse(result.body, status_code=result.status, headers=result.headers or {})
 
     @router.post("/audit/clarification-doc")
@@ -58,7 +59,7 @@ def create_v1_router(application: Application) -> APIRouter:
         payload, error = await _json_payload(request, application.settings.max_request_bytes)
         if error is not None:
             return error
-        result = await run_in_threadpool(dispatch.dispatch, "POST", "/api/v1/audit/clarification-doc", "", payload)
+        result = await run_in_threadpool(dispatch.dispatch, "POST", "/api/v1/audit/clarification-doc", "", payload, session_role(request, application))
         return JSONResponse(result.body, status_code=result.status, headers=result.headers or {})
 
     @router.post("/audit/minutes-eval-doc")
@@ -66,7 +67,7 @@ def create_v1_router(application: Application) -> APIRouter:
         payload, error = await _json_payload(request, application.settings.max_request_bytes)
         if error is not None:
             return error
-        result = await run_in_threadpool(dispatch.dispatch, "POST", "/api/v1/audit/minutes-eval-doc", "", payload)
+        result = await run_in_threadpool(dispatch.dispatch, "POST", "/api/v1/audit/minutes-eval-doc", "", payload, session_role(request, application))
         return JSONResponse(result.body, status_code=result.status, headers=result.headers or {})
 
     @router.post("/audit/jobs", status_code=202)

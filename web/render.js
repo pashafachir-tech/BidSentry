@@ -1,15 +1,11 @@
-import { renderReview } from "./review.js?v=2.2.0";
+import { renderReview, riskBadge, RISK_META } from "./review.js?v=3.0.0";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const number = (value) => new Intl.NumberFormat("id-ID").format(Number(value || 0));
 const rupiah = (value) => `Rp ${number(value)}`;
 
-const riskMeta = {
-  LOW: { label: "Rendah", css: "risk-low" },
-  MEDIUM: { label: "Sedang", css: "risk-medium" },
-  HIGH: { label: "Tinggi", css: "risk-high" },
-  CRITICAL: { label: "Kritis", css: "risk-critical" },
-};
+const riskMeta = RISK_META;
+const ROLE_LABELS = { pokja: "Pokja Pemilihan", vendor: "Penyedia / Vendor" };
 
 function icon(name) {
   const paths = {
@@ -33,8 +29,12 @@ function icon(name) {
 }
 
 function badge(level) {
-  const meta = riskMeta[level] || riskMeta.MEDIUM;
-  return `<span class="risk-badge ${meta.css}"><i></i>${meta.label}</span>`;
+  return riskBadge(level);
+}
+
+function verdictPill(verdict) {
+  const css = verdict === "NO-GO" ? "is-no-go" : verdict === "BELUM CUKUP BUKTI" ? "is-review" : verdict === "TIDAK ADA SYARAT TERBACA" ? "is-muted" : "is-go";
+  return `<span class="eligibility-badge eligibility-small ${css}">${escapeHtml(verdict || "—")}</span>`;
 }
 
 function statusPill(status) {
@@ -49,7 +49,7 @@ function rowsMarkup(rows, selectedId) {
     <tr class="audit-row ${row.audit_id === selectedId ? "is-selected" : ""}" data-action="select-audit" data-audit-id="${escapeHtml(row.audit_id)}" tabindex="0" aria-label="Lihat audit ${escapeHtml(row.package_name)}">
       <td><div class="package-cell"><span class="package-dot ${riskMeta[row.risk_level]?.css || "risk-medium"}"></span><span><strong>${escapeHtml(row.package_name)}</strong><small>${escapeHtml(row.tender_id || row.audit_id)} · ${escapeHtml(row.agency || "Workspace lokal")}</small></span></div></td>
       <td>${escapeHtml(row.vendor_name || "—")}</td><td class="amount-cell">${row.contract_value_idr ? rupiah(row.contract_value_idr) : "—"}</td>
-      <td>${badge(row.risk_level)}</td><td><div class="score-row-wrapper"><span class="score-cell">${number(row.risk_score)}<small>/100</small></span><button type="button" class="row-delete-action" data-action="delete-audit" data-audit-id="${escapeHtml(row.audit_id)}" data-package-name="${escapeHtml(row.package_name)}" title="Hapus pemeriksaan ${escapeHtml(row.package_name)}" aria-label="Hapus pemeriksaan ${escapeHtml(row.package_name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg></button></div></td>
+      <td>${badge(row.risk_level)}</td><td><div class="score-row-wrapper">${verdictPill(row.executive_summary?.eligibility || row.verdict)}<button type="button" class="row-delete-action" data-action="delete-audit" data-audit-id="${escapeHtml(row.audit_id)}" data-package-name="${escapeHtml(row.package_name)}" title="Hapus pemeriksaan ${escapeHtml(row.package_name)}" aria-label="Hapus pemeriksaan ${escapeHtml(row.package_name)}"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg></button></div></td>
     </tr>`).join("");
 }
 
@@ -58,16 +58,16 @@ function detailMarkup(row) {
   const findings = row.findings || [];
   const findingCount = findings.length || row.summary?.findings || row.summary?.total || 0;
   const preview = findings.slice(0, 4);
-  const levelClass = riskMeta[row.risk_level]?.css || "risk-medium";
+  const levelClass = riskMeta[row.risk_level]?.css || "risk-na";
   const sourceLabel = "Audit lokal";
   return `
     <section class="detail-card" aria-label="Rincian audit terpilih">
       <div class="detail-head"><div><p class="eyebrow">ANALISIS PAKET</p><h2>${escapeHtml(row.package_name)}</h2><p class="detail-subtitle">${escapeHtml(row.tender_id || row.audit_id)} · ${escapeHtml(row.agency || "Workspace lokal")}</p></div><button type="button" class="icon-button-danger" data-action="delete-audit" data-audit-id="${escapeHtml(row.audit_id)}" data-package-name="${escapeHtml(row.package_name)}" title="Hapus pemeriksaan ${escapeHtml(row.package_name)} dari riwayat" aria-label="Hapus riwayat"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:15px;height:15px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg></button></div>
-      <div class="score-panel"><div class="score-ring ${levelClass}" style="--score:${Math.max(0, Math.min(100, Number(row.risk_score || 0)))}"><div><strong>${number(row.risk_score)}</strong><small>/100</small></div></div><div><span class="eyebrow">INDEKS TRIAGE</span>${badge(row.risk_level)}<p>Indeks aturan untuk membantu prioritas review, bukan probabilitas fraud. Skor 0 berarti tidak ada pemicu berbobot yang terdeteksi; bukan bukti paket bebas risiko.</p></div></div>
+      <div class="score-panel risk-panel ${levelClass}"><div class="risk-panel-badges">${riskBadge(row.risk_level, { large: true })}${verdictPill(row.executive_summary?.eligibility || row.verdict)}</div><p>${escapeHtml(row.risk?.rationale || riskMeta[row.risk_level]?.hint || "")}</p><small>Ditentukan tabel keputusan deterministik (aturan ${escapeHtml(row.risk?.rule_applied || "—")}), bukan probabilitas fraud dan bukan skor 0–100.</small></div>
       <div class="detail-stats"><div><span>Temuan</span><strong>${number(findings.length || row.summary?.findings || 0)}</strong></div><div><span>Nilai kontrak</span><strong>${row.contract_value_idr ? rupiah(row.contract_value_idr) : "—"}</strong></div><div><span>Sumber</span><strong>${sourceLabel}</strong></div></div>
       <div class="finding-heading"><h3>Temuan untuk ditinjau</h3><span>${number(findingCount)} total</span></div>
       <div class="finding-list">${preview.length ? preview.map((finding) => `<article class="finding-item"><div class="finding-mark ${["CRITICAL", "HIGH"].includes(finding.severity) ? "mark-high" : "mark-low"}"></div><div><div class="finding-title-row"><strong>${escapeHtml(finding.clause || finding.category || "Temuan")}</strong>${statusPill(finding.status || finding.severity)}</div><p>${escapeHtml(finding.evidence || finding.review_note || "Periksa sumber dokumen.")}</p><small>${escapeHtml(finding.source || "Sumber belum ditentukan")}</small></div></article>`).join("") : findingCount ? '<div class="no-findings">Log menyimpan jumlah dan status temuan, bukan kutipan dokumen. Buka sumber asli untuk pemeriksaan bukti.</div>' : '<div class="no-findings">Belum ada temuan yang disimpan pada audit ini.</div>'}</div>
-      <div class="detail-actions"><button class="button button-secondary button-small" data-action="dispatch-selected">Siapkan tindak lanjut ${icon("arrow")}</button><button class="button button-quiet button-small" data-action="export-selected-review" aria-label="Ekspor Risk Review paket ini ke Excel">Ekspor Risk Review ${icon("download")}</button><button class="button button-quiet button-small text-danger detail-delete-btn" data-action="delete-audit" data-audit-id="${escapeHtml(row.audit_id)}" data-package-name="${escapeHtml(row.package_name)}" title="Hapus pemeriksaan ini dari riwayat"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;margin-right:4px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>Hapus riwayat</button></div>
+      <div class="detail-actions"><button class="button button-quiet button-small" data-action="export-selected-review" aria-label="Ekspor Risk Review paket ini ke Excel">Ekspor Risk Review ${icon("download")}</button><button class="button button-quiet button-small text-danger detail-delete-btn" data-action="delete-audit" data-audit-id="${escapeHtml(row.audit_id)}" data-package-name="${escapeHtml(row.package_name)}" title="Hapus pemeriksaan ini dari riwayat"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:13px;height:13px;margin-right:4px"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6"/></svg>Hapus riwayat</button></div>
       <p class="detail-caveat">Hasil tersimpan tanpa teks dokumen. Periksa kembali sumber asli sebelum mengambil keputusan.</p>
     </section>`;
 }
@@ -131,7 +131,7 @@ function renderProjectCrossSummary(project, state) {
   const penalty = project.penalty_simulation || {};
   const contextual = project.contextual_extraction || {};
   const exec = project.executive_summary || {};
-  const isPokja = (state.userPerspective || "pokja") === "pokja";
+  const isPokja = (state.session?.role || "pokja") === "pokja";
 
   const pkgName = project.package_name || "Audit Proyek Pengadaan";
   const tenderId = project.tender_id || "ID Belum Tercatat";
@@ -532,7 +532,7 @@ export function renderApp(state) {
       </aside>
 
       <main class="main-content">
-        <header class="topbar"><div class="breadcrumb"><span>Proyek</span><span>/</span><strong>${selected ? escapeHtml(selected.package_name) : "Semua Pemeriksaan"}</strong></div><div class="topbar-actions"><div class="perspective-toggle" role="radiogroup" aria-label="Mode Pengguna"><button type="button" class="perspective-btn ${state.userPerspective === 'pokja' ? 'is-active' : ''}" data-action="set-perspective" data-perspective="pokja" title="Mode Pokja / Auditor: Evaluasi Penawaran & Berita Acara">Pokja / Auditor</button><button type="button" class="perspective-btn ${state.userPerspective === 'vendor' ? 'is-active' : ''}" data-action="set-perspective" data-perspective="vendor" title="Mode Vendor: Pre-Flight Bid Readiness & Sanggahan">Vendor / Peserta</button></div><span class="live-indicator"><i></i>LOKAL</span><button class="button button-quiet button-small topbar-text-action" data-action="open-settings">Koneksi & Pengaturan</button><button class="icon-button" title="Ganti tema" aria-label="Ganti tema" data-action="theme-toggle">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button><button class="icon-button" title="Muat ulang data" aria-label="Muat ulang data" data-action="refresh">${icon("refresh")}</button></div></header>
+        <header class="topbar"><div class="breadcrumb"><span>Proyek</span><span>/</span><strong>${selected ? escapeHtml(selected.package_name) : "Semua Pemeriksaan"}</strong></div><div class="topbar-actions"><span class="role-chip role-${escapeHtml(state.session?.role || "none")}" title="Peran ditetapkan saat login dan diperiksa server">Masuk sebagai <b>${escapeHtml(ROLE_LABELS[state.session?.role] || "—")}</b></span><button type="button" class="button button-quiet button-small" data-action="logout" title="Keluar dan ganti peran">Ganti peran</button><button type="button" class="button button-quiet button-small ${state.presentation ? "is-active" : ""}" data-action="toggle-presentation" aria-pressed="${state.presentation}" title="Perbesar seluruh teks untuk demo / proyektor">A+ Mode presentasi</button><button class="button button-quiet button-small topbar-text-action" data-action="open-settings">Koneksi & Pengaturan</button><button class="icon-button" title="Ganti tema" aria-label="Ganti tema" data-action="theme-toggle">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button><button class="icon-button" title="Muat ulang data" aria-label="Muat ulang data" data-action="refresh">${icon("refresh")}</button></div></header>
         <div class="page-content">
           <section class="page-heading">
             <div>
@@ -549,7 +549,7 @@ export function renderApp(state) {
           <section class="metrics-grid" aria-label="Ringkasan metrik">
             <article class="metric-card"><div class="metric-top"><span>Audit tersimpan</span><span class="metric-icon icon-blue">${icon("audit")}</span></div><strong class="metric-value">${number(overview.total_audits || 0)}</strong><div class="metric-foot"><span class="metric-caption">Riwayat lokal</span><span class="metric-neutral">${number(overview.local_audits_shown || 0)} audit terbaru</span></div></article>
             <article class="metric-card"><div class="metric-top"><span>Temuan dinilai reviewer</span><span class="metric-icon icon-green">${icon("shield")}</span></div><strong class="metric-value">${number(feedback.reviewed_findings || 0)}</strong><div class="metric-foot"><span class="metric-caption">Catatan manusia</span><span class="metric-neutral">${feedback.eligible_findings ? `${number(feedback.reviewed_findings)} dari ${number(feedback.eligible_findings)} temuan` : "Belum ada data pilot"}</span></div></article>
-            <article class="metric-card"><div class="metric-top"><span>Risiko tinggi / kritis</span><span class="metric-icon icon-red">!</span></div><strong class="metric-value">${number(overview.review_required || 0)}</strong><div class="metric-foot"><span class="metric-caption">Prioritas review</span><span class="metric-neutral">Bukan verdict otomatis</span></div></article>
+            <article class="metric-card"><div class="metric-top"><span>Risiko tinggi / kritis</span><span class="metric-icon icon-red">!</span></div><strong class="metric-value">${number(overview.review_required || 0)}</strong><div class="metric-foot"><span class="metric-caption">Prioritas review</span><span class="metric-neutral">${number(distribution.CRITICAL || 0)} kritis · ${number(distribution.HIGH || 0)} tinggi</span></div></article>
             <article class="metric-card"><div class="metric-top"><span>Median durasi engine</span><span class="metric-icon icon-amber">ms</span></div><strong class="metric-value">${overview.local_engine_runtime?.median_ms == null ? "—" : number(overview.local_engine_runtime.median_ms)}<small>ms</small></strong><div class="metric-foot"><span class="metric-caption">Aturan lokal saja</span><span class="metric-neutral">${number(overview.local_engine_runtime?.sample_count || 0)} audit terbaru</span></div></article>
           </section>
 
@@ -576,13 +576,13 @@ export function renderApp(state) {
                   <span>Risiko</span>
                   <select id="risk-filter">
                     <option value="ALL" ${riskFilter === "ALL" ? "selected" : ""}>Semua</option>
-                    ${["LOW", "MEDIUM", "HIGH", "CRITICAL"].map((level) => `<option value="${level}" ${riskFilter === level ? "selected" : ""}>${({ LOW: "Rendah", MEDIUM: "Sedang", HIGH: "Tinggi", CRITICAL: "Kritis" })[level]}</option>`).join("")}
+                    ${["CRITICAL", "HIGH", "MEDIUM", "LOW", "NOT_ASSESSABLE"].map((level) => `<option value="${level}" ${riskFilter === level ? "selected" : ""}>${riskMeta[level].label}</option>`).join("")}
                   </select>
                 </label>
               </div>
               <div class="table-wrap">
                 <table>
-                  <thead><tr><th>PAKET / ID</th><th>PENYEDIA</th><th>NILAI KONTRAK</th><th>TINGKAT RISIKO</th><th>SKOR</th></tr></thead>
+                  <thead><tr><th>PAKET / ID</th><th>PENYEDIA</th><th>NILAI KONTRAK</th><th>TINGKAT RISIKO</th><th>VERDICT</th></tr></thead>
                   <tbody>${state.loading ? '<tr><td colspan="5" class="empty-row">Memuat daftar audit…</td></tr>' : rowsMarkup(pagedAudits, state.selectedAuditId)}</tbody>
                 </table>
               </div>
@@ -594,7 +594,7 @@ export function renderApp(state) {
                     <button class="button button-quiet button-small" data-action="next-page" ${page >= totalPages ? "disabled" : ""}>Berikutnya ›</button>
                   </div>
                 ` : ""}
-                <span><b class="legend-dot low"></b>Rendah <b class="legend-dot medium"></b>Sedang <b class="legend-dot high"></b>Tinggi <b class="legend-dot critical"></b>Kritis</span>
+                <span><b class="legend-dot low"></b>Rendah <b class="legend-dot medium"></b>Sedang <b class="legend-dot high"></b>Tinggi <b class="legend-dot critical"></b>Kritis <b class="legend-dot na"></b>Tidak dapat dinilai</span>
               </div>
             </div>
             ${detailMarkup(selected)}
@@ -616,10 +616,11 @@ export function renderApp(state) {
                   </div>
                 </summary>
                 <div class="integration-list" style="margin-top:12px">
-                  <div><span class="integration-symbol symbol-local">R</span><span><strong>Mesin aturan lokal (rules.yaml)</strong><small>Aktif · hasil deterministik</small></span><em class="connection-ready">SIAP</em></div>
+                  <div><span class="integration-symbol symbol-local">R</span><span><strong>Mesin aturan Python + tabel keputusan risiko</strong><small>Aktif · menentukan seluruh verdict dan tingkat risiko</small></span><em class="connection-ready">SIAP</em></div>
                   <div><span class="integration-symbol symbol-langflow">L</span><span><strong>Langflow</strong><small>${state.integrations?.langflow?.configured ? "Opt-in · flow sudah diatur" : "Belum dikonfigurasi"}</small></span><em class="connection-idle">${state.integrations?.langflow?.configured ? "DIATUR" : "OPSIONAL"}</em></div>
                   <div><span class="integration-symbol symbol-composio">C</span><span><strong>Composio</strong><small>${state.integrations?.composio?.configured ? "API key diatur; koneksi belum diverifikasi" : "Belum dikonfigurasi; tindakan belum tersedia"}</small></span><em class="connection-idle">${state.integrations?.composio?.configured ? "DIATUR" : "OPSIONAL"}</em></div>
-                  <div><span class="integration-symbol symbol-bob">B</span><span><strong>IBM watsonx.ai &amp; Governance</strong><small>${state.integrations?.ibm_bob?.mcp_config_present ? "Granite-3-8b · Preflight Guardrail" : "Terkonfigurasi (Local fallback &amp; MCP)"}</small></span><em class="connection-ready">SIAP</em></div>
+                  <div><span class="integration-symbol symbol-bob">G</span><span><strong>IBM watsonx.ai (Granite)</strong><small>${state.integrations?.watsonx?.configured ? `${escapeHtml(state.integrations.watsonx.model_id)} · kredensial diatur${state.integrations.watsonx.selected_for_extraction ? " · dipakai untuk ekstraksi" : ""}` : "Kredensial belum diatur · ekstraksi AI tidak berjalan"}</small></span><em class="${state.integrations?.watsonx?.configured ? "connection-ready" : "connection-idle"}">${state.integrations?.watsonx?.configured ? "DIATUR" : "BELUM"}</em></div>
+                  <div><span class="integration-symbol symbol-bob">B</span><span><strong>IBM Bob (MCP)</strong><small>${state.integrations?.ibm_bob?.mcp_config_present ? "File konfigurasi MCP ada · belum diverifikasi end-to-end" : "Konfigurasi MCP tidak ditemukan"}</small></span><em class="connection-idle">${state.integrations?.ibm_bob?.mcp_config_present ? "KONFIG" : "BELUM"}</em></div>
                 </div>
                 <div style="margin-top:10px;text-align:right">
                   <button type="button" class="button button-quiet button-small" data-action="open-settings">Buka konfigurasi koneksi ›</button>
@@ -629,11 +630,39 @@ export function renderApp(state) {
             </article>
           </section>
 
-          <footer class="page-footer"><span>BidSentry <b>·</b> Platform Intelijen Audit Pengadaan</span><span>Skor adalah indeks triase; periksa sumber aslinya</span></footer>
+          <footer class="page-footer"><span>BidSentry <b>·</b> Platform Intelijen Audit Pengadaan</span><span>Tingkat risiko dari tabel keputusan deterministik; periksa sumber aslinya</span></footer>
         </div>
       </main>
     </div>
   `;
+}
+
+
+export function renderLogin(state) {
+  const roles = state.session?.roles || [{ role: "pokja", label: "Pokja Pemilihan", pin_required: false }, { role: "vendor", label: "Penyedia / Vendor", pin_required: false }];
+  const copy = {
+    pokja: { title: "Pokja Pemilihan", text: "Evaluasi dokumen penawaran, catat keputusan reviewer, unduh draf Berita Acara, surat klarifikasi, dan BoQ Excel.", icon: "shield" },
+    vendor: { title: "Penyedia / Vendor", text: "Cek kesiapan berkas sebelum submit, temukan klausul bermasalah di dokumen tender, unduh draf sanggahan dan BoQ Excel.", icon: "audit" },
+  };
+  return `
+    <main class="login-screen">
+      <section class="login-card" aria-labelledby="login-title">
+        <p class="eyebrow">BIDSENTRY · INTELIJEN PENGADAAN</p>
+        <h1 id="login-title">Masuk sesuai peran Anda</h1>
+        <p class="login-lede">Ruang kerja Pokja dan Vendor terpisah. Peran diperiksa oleh server di setiap dokumen yang diunduh.</p>
+        <div class="login-roles">
+          ${roles.map((item) => `
+            <form class="login-role" data-login-role="${escapeHtml(item.role)}">
+              <span class="login-role-icon">${icon(copy[item.role]?.icon || "audit")}</span>
+              <h2>${escapeHtml(copy[item.role]?.title || item.label)}</h2>
+              <p>${escapeHtml(copy[item.role]?.text || "")}</p>
+              ${item.pin_required ? `<label class="form-label">PIN ${escapeHtml(item.label)}<input name="pin" type="password" inputmode="numeric" autocomplete="off" required /></label>` : '<p class="login-demo-note">Mode demo lokal: PIN tidak diwajibkan.</p>'}
+              <button type="submit" class="button button-primary">Masuk sebagai ${escapeHtml(copy[item.role]?.title || item.label)}</button>
+            </form>`).join("")}
+        </div>
+        <p class="login-foot">Demo login berbasis peran, bukan pengganti SSO instansi. Atur <code>BIDSENTRY_POKJA_PIN</code> dan <code>BIDSENTRY_VENDOR_PIN</code> untuk mewajibkan PIN.</p>
+      </section>
+    </main>`;
 }
 
 export function renderDialogs(state) {
@@ -696,31 +725,17 @@ export function renderDialogs(state) {
       <div class="utility-dialog-head">
         <div>
           <p class="eyebrow">DRAF UNTUK DITINJAU</p>
-          <h2>Draf sanggahan / klarifikasi resmi</h2>
-          <p>Format resmi surat sanggahan pengadaan LKPP dengan sitasi hukum Perpres 12/2021.</p>
+          <h2>Draf sanggahan (disusun server)</h2>
+          <p id="objection-meta">Hanya kesenjangan terkonfirmasi pada dokumen tender dengan kutipan persis di teks sumber yang dimasukkan. Rujukan pasal wajib diverifikasi ahli hukum.</p>
         </div>
         <button class="icon-button" data-action="close-utility" aria-label="Tutup">${icon("close")}</button>
       </div>
-      <div class="objection-filter-row" style="margin-bottom:12px">
-        <label class="form-label" style="margin:0">
-          Kategori Sanggahan:
-          <select id="objection-category-filter">
-            <option value="ALL">Semua Kategori Pelanggaran yang Terkonfirmasi</option>
-            <option value="spesifikasi">Spesifikasi Diskriminatif (Pasal 19)</option>
-            <option value="jadwal">Jadwal Mepet / Tidak Wajar (Pasal 54)</option>
-            <option value="integritas">Benturan Kepentingan (Pasal 7)</option>
-            <option value="keuangan">Keuangan / BoQ Melebihi Pagu (Pasal 26)</option>
-            <option value="kontrak">Klausul Denda Tanpa Batas (Pasal 56)</option>
-          </select>
-        </label>
-      </div>
-      <label class="form-label" for="objection-draft">Isi draf sanggahan<textarea id="objection-draft" rows="18"></textarea></label>
+      <label class="form-label" for="objection-draft">Pratinjau draf (Markdown, dapat disunting sebelum disalin)<textarea id="objection-draft" rows="18"></textarea></label>
       <div class="utility-actions">
         <button class="button button-quiet" data-action="close-utility">Tutup</button>
         <button class="button button-secondary" data-action="copy-objection">Salin teks</button>
-        <button class="button button-secondary" data-action="download-objection-txt">Unduh .TXT</button>
-        <button class="button button-secondary" data-action="download-objection">Unduh DOCX</button>
-        <button class="button button-primary" data-action="print-objection">Cetak / Print</button>
+        <button class="button button-secondary" data-action="download-objection-txt">Unduh .MD</button>
+        <button class="button button-primary" data-action="download-objection">Unduh DOCX</button>
       </div>
     </dialog>
 

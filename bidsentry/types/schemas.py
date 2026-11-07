@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import math
 import re
 from typing import Any
 
@@ -74,7 +73,7 @@ class DispatchRequest:
     def from_payload(cls, payload: Any) -> "DispatchRequest":
         if not isinstance(payload, dict):
             raise ValidationError("Request body must be a JSON object.", [{"field": "$", "issue": "expected_object"}])
-        allowed = {"nama_paket", "verdict", "risk_score", "alasan_utama", "catatan", "tender_id", "email_penerima", "allow_external_processing"}
+        allowed = {"nama_paket", "verdict", "risk_level", "alasan_utama", "catatan", "tender_id", "email_penerima", "allow_external_processing"}
         unknown = sorted(set(payload) - allowed)
         if unknown:
             raise ValidationError("Ada kolom tindak lanjut yang tidak dikenal.", [{"field": key, "issue": "unknown_field"} for key in unknown])
@@ -85,9 +84,9 @@ class DispatchRequest:
         verdict = payload.get("verdict", "REVIEW_REQUIRED")
         if not isinstance(verdict, str) or len(verdict) > 80:
             raise ValidationError("Status review tidak valid.", [{"field": "verdict", "issue": "invalid_value"}])
-        risk_score = payload.get("risk_score", 0)
-        if isinstance(risk_score, bool) or not isinstance(risk_score, (int, float)) or not math.isfinite(float(risk_score)) or not 0 <= risk_score <= 100:
-            raise ValidationError("Skor triase harus berupa angka 0–100.", [{"field": "risk_score", "issue": "out_of_range"}])
+        risk_level = payload.get("risk_level", "NOT_ASSESSABLE")
+        if risk_level not in {"NOT_ASSESSABLE", "LOW", "MEDIUM", "HIGH", "CRITICAL"}:
+            raise ValidationError("Tingkat risiko tidak valid.", [{"field": "risk_level", "issue": "invalid_value"}])
         reasons = payload.get("alasan_utama", payload.get("catatan", []))
         if isinstance(reasons, str):
             reasons = [reasons]
@@ -105,7 +104,7 @@ class DispatchRequest:
         normalized = {
             "nama_paket": package_name.strip(),
             "verdict": verdict.strip() or "REVIEW_REQUIRED",
-            "risk_score": risk_score,
+            "risk_level": risk_level,
             "alasan_utama": [item.strip() for item in reasons if item.strip()],
             "tender_id": tender_id.strip(),
             "email_penerima": recipient.strip(),

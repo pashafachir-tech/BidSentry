@@ -1,7 +1,7 @@
-import { api, setAuthToken } from "./api.js?v=2.2.0";
-import { getState, setState, subscribe } from "./state.js?v=2.2.0";
-import { renderApp, renderDialogs, escapeHtml } from "./render.js?v=2.2.0";
-import { getReviewSnapshot } from "./review.js?v=2.2.0";
+import { api, setAuthToken, downloadDocument, decodeText } from "./api.js?v=3.0.0";
+import { getState, setState, subscribe, resetWorkspaceState } from "./state.js?v=3.0.0";
+import { renderApp, renderDialogs, renderLogin, escapeHtml } from "./render.js?v=3.0.0";
+import { getReviewSnapshot } from "./review.js?v=3.0.0";
 
 const root = document.getElementById("app");
 const dialogLayer = document.getElementById("dialog-layer");
@@ -55,7 +55,13 @@ function render() {
     ? [...root.querySelectorAll("[data-action]")].filter((node) => node.dataset.action === action).indexOf(active)
     : -1;
 
-  root.innerHTML = renderApp(getState());
+  const current = getState();
+  document.documentElement.dataset.presentation = current.presentation ? "on" : "off";
+  if (!current.sessionChecked) {
+    root.innerHTML = '<main class="boot-screen"><div class="boot-brand">BidSentry</div><p>Memeriksa sesi…</p></main>';
+    return;
+  }
+  root.innerHTML = current.session?.authenticated ? renderApp(current) : renderLogin(current);
 
   const next = (id && document.getElementById(id)) || (action && [...root.querySelectorAll("[data-action]")].filter((node) => node.dataset.action === action)[actionIndex]);
   if (next && root.contains(next)) {
@@ -85,13 +91,15 @@ async function selectAudit(auditId) {
   const cachedRow = (state.audits || []).find((row) => row.audit_id === auditId);
   const payload = auditMemoryCache.get(auditId) || cachedRow || null;
 
-  setState({
+    setState({
     selectedAuditId: auditId,
     currentAudit: payload,
     customReview: payload,
     reviewFilter: "ALL",
     expandedFindingId: null,
+    proof: null,
   });
+  if (getState().reviewTab === "proof") loadProof(auditId);
 
   try {
     const full = await api.getAudit(auditId);
@@ -227,7 +235,15 @@ function loadSampleTender() {
 BAB IX. KETENTUAN JADWAL DAN PERSYARATAN
 1. Masa penyusunan dan pemasukan penawaran adalah 3 hari kerja sejak pengumuman lelang.
 2. Masa sanggah hasil lelang diberikan selama 2 hari kerja.
-3. Peserta wajib melampirkan Nomor Induk Berusaha (NIB) dan NPWP aktif.`,
+3. Peserta wajib melampirkan Nomor Induk Berusaha (NIB) dan NPWP aktif.
+
+BAB X. ANGGARAN DAN RINCIAN BILL OF QUANTITIES (BoQ)
+Pagu Anggaran DIPA tahun 2026 adalah sebesar Rp 4.500.000.000.
+Total HPS hasil rekapitulasi BoQ adalah Rp 4.795.000.000.
+Server HPC 2 soket | 4 unit | Rp 850.000.000 | Rp 3.400.000.000 | Rp 800.000.000
+Switch InfiniBand 400G | 2 unit | Rp 420.000.000 | Rp 840.000.000 | Rp 410.000.000
+Rak server 42U dan PDU | 3 set | Rp 95.000.000 | Rp 300.000.000 | Rp 95.000.000
+Instalasi dan pelatihan | 1 paket | Rp 255.000.000 | Rp 255.000.000 | Rp 250.000.000`,
     pustaka: `Kredensial Dokumen Legal:
 1. NPWP Perusahaan: 01.888.777.6-543.000 (status terdaftar)
 2. Nomor Induk Berusaha (NIB): 9120001234567 (terdaftar OSS, status aktif)`,
@@ -242,37 +258,64 @@ BAB IX. KETENTUAN JADWAL DAN PERSYARATAN
 }
 
 async function openSettingsDialog() {
+  const dialog = document.getElementById("settings-dialog");
+  if (!dialog) return;
+  if (!dialog.open) dialog.showModal();
+
+  const statusEl = document.getElementById("settings-file-status");
+  if (statusEl) statusEl.textContent = "Memuat status konfigurasi tersimpan dari server...";
+
   try {
     const settings = await api.integrationSettings();
     const form = document.getElementById("settings-form");
     if (!form) return;
-    const set = (name, value) => { form.elements.namedItem(name).value = value ?? ""; };
-    form.elements.namedItem("langflow_enabled").checked = Boolean(settings.langflow.enabled);
-    set("langflow_url", settings.langflow.url);
-    set("langflow_flow_id", settings.langflow.flow_id);
+    const set = (name, value) => {
+      const input = form.elements.namedItem(name);
+      if (input) input.value = value ?? "";
+    };
+    const langflowEnabledInput = form.elements.namedItem("langflow_enabled");
+    if (langflowEnabledInput) langflowEnabledInput.checked = Boolean(settings?.langflow?.enabled);
+
+    set("langflow_url", settings?.langflow?.url);
+    set("langflow_flow_id", settings?.langflow?.flow_id);
     set("langflow_api_key", "");
-    set("langflow_timeout_seconds", settings.langflow.timeout_seconds);
+    set("langflow_timeout_seconds", settings?.langflow?.timeout_seconds);
     set("watsonx_api_key", "");
-    set("watsonx_project_id", settings.watsonx?.project_id || "");
-    set("watsonx_url", settings.watsonx?.url || "https://us-south.ml.cloud.ibm.com");
-    set("watsonx_model_id", settings.watsonx?.model_id || "ibm/granite-3-8b-instruct");
+    set("watsonx_project_id", settings?.watsonx?.project_id || "");
+    set("watsonx_url", settings?.watsonx?.url || "https://us-south.ml.cloud.ibm.com");
+    set("watsonx_model_id", settings?.watsonx?.model_id || "ibm/granite-3-8b-instruct");
     set("composio_api_key", "");
-    set("composio_user_id", settings.composio.user_id);
-    set("composio_base_url", settings.composio.base_url);
-    set("composio_timeout_seconds", settings.composio.timeout_seconds);
-    form.elements.namedItem("clear_langflow_api_key").checked = false;
-    form.elements.namedItem("clear_watsonx_api_key").checked = false;
-    form.elements.namedItem("clear_composio_api_key").checked = false;
-    document.getElementById("langflow-key-status").textContent = settings.langflow.api_key_saved ? "API key tersimpan" : "API key belum diatur";
-    document.getElementById("watsonx-key-status").textContent = settings.watsonx?.api_key_saved
-      ? "API key tersimpan"
-      : "Belum diatur (Fallback Lokal Aktif)";
-    document.getElementById("composio-key-status").textContent = settings.composio.api_key_saved ? "API key tersimpan" : "Belum dikonfigurasi";
-    document.getElementById("settings-file-status").textContent = settings.config_file_exists
-      ? "Disimpan ke file .env lokal dan dibaca tanpa restart. API key tidak pernah ditampilkan kembali."
-      : "File .env akan dibuat saat disimpan. API key tidak pernah ditampilkan kembali.";
-    document.getElementById("settings-dialog")?.showModal();
+    set("composio_user_id", settings?.composio?.user_id);
+    set("composio_base_url", settings?.composio?.base_url);
+    set("composio_timeout_seconds", settings?.composio?.timeout_seconds);
+
+    const clearLangflow = form.elements.namedItem("clear_langflow_api_key");
+    if (clearLangflow) clearLangflow.checked = false;
+    const clearWatsonx = form.elements.namedItem("clear_watsonx_api_key");
+    if (clearWatsonx) clearWatsonx.checked = false;
+    const clearComposio = form.elements.namedItem("clear_composio_api_key");
+    if (clearComposio) clearComposio.checked = false;
+
+    const langflowStatus = document.getElementById("langflow-key-status");
+    if (langflowStatus) langflowStatus.textContent = settings?.langflow?.api_key_saved ? "API key tersimpan" : "API key belum diatur";
+    const watsonxStatus = document.getElementById("watsonx-key-status");
+    if (watsonxStatus) {
+      watsonxStatus.textContent = settings?.watsonx?.api_key_saved
+        ? "API key tersimpan"
+        : "Belum diatur (Fallback Lokal Aktif)";
+    }
+    const composioStatus = document.getElementById("composio-key-status");
+    if (composioStatus) composioStatus.textContent = settings?.composio?.api_key_saved ? "API key tersimpan" : "Belum dikonfigurasi";
+
+    if (statusEl) {
+      statusEl.textContent = settings?.config_file_exists
+        ? "Disimpan ke file .env lokal dan dibaca tanpa restart. API key tidak pernah ditampilkan kembali."
+        : "File .env akan dibuat saat disimpan. API key tidak pernah ditampilkan kembali.";
+    }
   } catch (error) {
+    if (statusEl) {
+      statusEl.textContent = `Gagal memuat status server (${error.message || "koneksi terputus"}). Pastikan server BidSentry berjalan di 127.0.0.1:8000.`;
+    }
     toast(error.message || "Pengaturan tidak dapat dimuat.", "error");
   }
 }
@@ -667,7 +710,7 @@ async function exportData() {
   try {
     const data = await api.audits({ q: state.query, risk: state.riskFilter });
     const workbook = await api.exportWorkbook({ kind: "register", audits: data.audits || [] });
-    downloadBlob(workbook, "register-audit-bidsentry.xlsx");
+    downloadDocument(workbook, "register-audit-bidsentry.xlsx");
     toast("Register audit Excel berhasil diunduh.");
   } catch (error) {
     toast(error.message, "error");
@@ -683,7 +726,7 @@ async function exportReview() {
   }
   try {
     const workbook = await api.exportWorkbook({ kind: "review", review });
-    downloadBlob(workbook, `review-${review.id || "audit"}.xlsx`);
+    downloadDocument(workbook, `review-${review.id || "audit"}.xlsx`);
     toast("Laporan Risk Review Excel berhasil diunduh.");
   } catch (error) {
     toast(error.message, "error");
@@ -699,7 +742,7 @@ async function exportSelectedReview() {
   }
   try {
     const workbook = await api.exportWorkbook({ kind: "review", review });
-    downloadBlob(workbook, `risk-review-${review.tender_id || review.id || "audit"}.xlsx`);
+    downloadDocument(workbook, `risk-review-${review.tender_id || review.id || "audit"}.xlsx`);
     toast(`Risk Review "${review.package_name}" berhasil diekspor.`);
   } catch (error) {
     toast(error.message || "Gagal mengekspor laporan.", "error");
@@ -726,183 +769,136 @@ function downloadBlob(blob, filename) {
   requestAnimationFrame(() => URL.revokeObjectURL(url));
 }
 
-// Sanggahan builder and filtering (Requirement 3.8)
-function filterObjectionFindings(findings, category = "ALL") {
-  const excludedStatuses = new Set(["NOT_SUPPORTED"]);
-  const excludedRuleIds = new Set(["ADM-NPWP", "ADM-NIB", "ADM-SBU", "ADM-KSWP"]);
+// Role-specific documents. Every document is generated and filtered by the server
+// (role-gated, quote-verified); the browser never composes legal text itself.
+function currentAuditId() {
+  const review = getReviewSnapshot(getState());
+  return review.isCustom ? (review.audit_id || "") : "";
+}
 
-  return (findings || []).filter((f) => {
-    // If reviewer marked finding as Ignored (False Positive), exclude from objection
-    if (f.reviewer_status === "IGNORED") return false;
-    if (excludedStatuses.has(String(f.status || "").toUpperCase())) return false;
-    if (excludedRuleIds.has(f.id)) return false;
-    const note = (f.review_note || "").toLowerCase();
-    if (note.includes("kutipan ditolak") || note.includes("rejected")) return false;
-
-    if (category !== "ALL") {
-      const cat = (f.category || "").toLowerCase();
-      const id = (f.id || "").toLowerCase();
-      if (category === "spesifikasi" && !cat.includes("spesifikasi") && !id.includes("spec")) return false;
-      if (category === "jadwal" && !cat.includes("jadwal") && !id.includes("proc")) return false;
-      if (category === "integritas" && !cat.includes("integritas") && !id.includes("gov")) return false;
-      if (category === "keuangan" && !cat.includes("keuangan") && !id.includes("fin")) return false;
-      if (category === "kontrak" && !cat.includes("kontrak") && !id.includes("con")) return false;
-    }
-    return true;
-  });
+async function withAudit(action) {
+  const auditId = currentAuditId();
+  if (!auditId) { toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error"); return; }
+  try {
+    await action(auditId);
+  } catch (error) {
+    toast(error.message || "Permintaan gagal.", "error");
+  }
 }
 
 async function openObjection() {
-  const state = getState();
-  const review = getReviewSnapshot(state);
-  if (!review.isCustom) {
-    toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error");
-    return;
-  }
-  const hasSource = Boolean(review.has_source_text || review.source_text || state.lastAuditDraft?.dok_pemilihan);
-  if (!hasSource && !review.audit_id && !review.id) {
-    toast("Teks sumber asli tidak tersedia untuk audit ini (sudah kedaluwarsa atau dihapus). Draf sanggahan memerlukan teks sumber asli untuk verifikasi kutipan.", "error");
-    return;
-  }
-  updateObjectionDraftText("ALL");
-  document.getElementById("objection-dialog")?.showModal();
-}
-
-function updateObjectionDraftText(category = "ALL") {
-  const state = getState();
-  const review = getReviewSnapshot(state);
-  const rawFindings = review.findings || [];
-  const eligible = filterObjectionFindings(rawFindings, category);
-
-  const dateStr = new Date().toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
-  const lines = [
-    "SURAT SANGGAHAN DOKUMEN PEMILIHAN PENGADAAN BARANG/JASA",
-    `Nomor: SANGGAH/${review.tender_id || "TDR"}/${new Date().getFullYear()}`,
-    "Lampiran: 1 (satu) Berkas Dokumen Pendukung",
-    `Perihal: Sanggahan atas Ketentuan Dokumen Pemilihan Paket "${review.package_name}"`,
-    "",
-    `Kepada Yth.`,
-    `Kelompok Kerja (Pokja) Pemilihan / Pejabat Pembuat Komitmen (PPK)`,
-    `${review.pokja_name || "Pokja Pemilihan Pengadaan"}`,
-    "Di Tempat",
-    "",
-    "Dengan hormat,",
-    `Sehubungan dengan pelaksanaan proses tender untuk paket pekerjaan "${review.package_name}" (Nomor Tender: ${review.tender_id || "—"}, Nomor Pengumuman: ${review.notice_number || "—"}), kami yang bertanda tangan di bawah ini:`,
-    "",
-    `Nama Perusahaan : ${review.company_name || "[Nama Badan Usaha Penyedia]"}`,
-    "Status Peserta  : Calon Penyedia Barang/Jasa Terdaftar",
-    "",
-    "Dengan ini mengajukan SANGGAHAN RESMI terhadap sejumlah ketentuan dalam Dokumen Pemilihan yang terindikasi membatasi persaingan usaha yang sehat dan bertentangan dengan peraturan pengadaan barang/jasa pemerintah.",
-    "",
-    "I. FAKTA DAN KETENTUAN YANG DISANGGAH",
-    "",
-  ];
-
-  if (!eligible.length) {
-    lines.push("Tidak ada temuan pelanggaran kritis yang terdeteksi pada kategori yang dipilih.");
-  } else {
-    eligible.forEach((f, idx) => {
-      lines.push(`${idx + 1}. Pokok Sanggahan: ${f.clause || f.category}`);
-      if (f.requirement_evidence) lines.push(`   Kutipan Dokumen : "${f.requirement_evidence}"`);
-      lines.push(`   Analisis Hukum  : ${f.review_note || "Klausul berpotensi melanggar ketentuan perundang-undangan."}`);
-      lines.push("");
-    });
-  }
-
-  lines.extend = function(arr) { arr.forEach((l) => this.push(l)); };
-  lines.extend([
-    "II. DASAR HUKUM SANGGAHAN",
-    "1. Perpres No. 16 Tahun 2018 jo. Perpres No. 12 Tahun 2021 Pasal 6 (Prinsip Pengadaan: Terbuka, Bersaing, Adil, dan Akuntabel).",
-    "2. Perpres No. 12 Tahun 2021 Pasal 19 ayat (1) (Larangan Penyebutan Merek/Spesifikasi Mengarah/Diskriminatif).",
-    "3. Perpres No. 12 Tahun 2021 Pasal 54 (Kecukupan Waktu Penyusunan Penawaran dan Masa Sanggah).",
-    "4. UU No. 5 Tahun 1999 tentang Larangan Praktek Monopoli dan Persaingan Usaha Tidak Sehat Pasal 22.",
-    "",
-    "III. PERMOHONAN PENYEDIA",
-    "Berdasarkan fakta dan dasar hukum di atas, kami memohon agar Pokja Pemilihan berkenan untuk:",
-    "1. Menerima dan mengabulkan sanggahan ini secara keseluruhan.",
-    "2. Melakukan perubahan/adendum dokumen pemilihan terhadap klausul-klausul yang diskriminatif.",
-    "3. Memberikan waktu perpanjangan penawaran yang memadai demi terciptanya kompetisi yang adil.",
-    "",
-    `Dibuat di Jakarta, ${dateStr}`,
-    `Hormat kami,`,
-    `${review.company_name || "[Nama Badan Usaha Penyedia]"}`,
-    "",
-    "",
-    "( Meterai Rp 10.000 & Tanda Tangan Direktur Utama )",
-  ]);
-
-  const textarea = document.getElementById("objection-draft");
-  if (textarea) textarea.value = lines.join("\n");
+  await withAudit(async (auditId) => {
+    const preview = await api.createSanggahan({ audit_id: auditId, format: "markdown" });
+    const textarea = document.getElementById("objection-draft");
+    if (textarea) textarea.value = decodeText(preview);
+    const meta = document.getElementById("objection-meta");
+    if (meta) meta.textContent = `Poin yang dimasukkan server: ${(preview.findings_included || []).join(", ") || "—"}. Rujukan pasal wajib diverifikasi ahli hukum sebelum diajukan.`;
+    document.getElementById("objection-dialog")?.showModal();
+  });
 }
 
 function downloadObjectionTxt() {
   const text = document.getElementById("objection-draft")?.value || "";
   if (!text) { toast("Tidak ada draf sanggahan.", "error"); return; }
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
-  downloadBlob(blob, "draf-sanggahan-resmi.txt");
-  toast("Draf sanggahan .TXT berhasil diunduh.");
+  downloadBlob(new Blob([text], { type: "text/markdown;charset=utf-8" }), "draf-sanggahan.md");
+  toast("Draf sanggahan .MD berhasil diunduh.");
 }
 
 async function downloadObjectionDocx() {
-  const state = getState();
-  const review = getReviewSnapshot(state);
-  if (!review.isCustom) { toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error"); return; }
-  const hasSource = Boolean(review.has_source_text || review.source_text || state.lastAuditDraft?.dok_pemilihan);
-  if (!hasSource && !review.audit_id && !review.id) {
-    toast("Teks sumber asli tidak tersedia untuk audit ini (sudah kedaluwarsa atau dihapus). Draf sanggahan memerlukan teks sumber asli untuk verifikasi kutipan.", "error");
-    return;
-  }
-  try {
-    const eligibleFindings = filterObjectionFindings(review.findings || []);
-    const payload = {
-      audit_id: review.audit_id || review.id || "",
-      tender_id: review.tender_id || "",
-      package_name: review.package_name || "",
-      company_name: review.company_name || "",
-      notice_number: review.notice_number || "",
-      pokja_name: review.pokja_name || "",
-      source_text: review.source_text || [state.lastAuditDraft?.dok_pemilihan, state.lastAuditDraft?.adendum, state.lastAuditDraft?.contract_draft].filter(Boolean).join("\n") || "",
-      findings: eligibleFindings,
-      format: "docx",
-    };
-    const result = await api.createSanggahan(payload);
-    const bytes = Uint8Array.from(atob(result.content_base64 || ""), (char) => char.charCodeAt(0));
-    const blob = new Blob([bytes], { type: result.content_type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-    downloadBlob(blob, result.filename || "draf-sanggahan.docx");
-    toast("Draf sanggahan DOCX berhasil diunduh.");
-  } catch (error) {
-    toast(error.message, "error");
-  }
+  await withAudit(async (auditId) => {
+    const result = await api.createSanggahan({ audit_id: auditId, format: "docx" });
+    downloadDocument(result, "draf-sanggahan.docx");
+    toast(`Draf sanggahan DOCX diunduh (${(result.findings_included || []).length} poin, SHA-256 dicatat di jejak audit).`);
+    refreshProofIfOpen(auditId);
+  });
 }
 
 async function exportMinutesDoc() {
-  const state = getState();
-  const review = getReviewSnapshot(state);
-  if (!review.isCustom) { toast("Pilih atau jalankan evaluasi terlebih dahulu.", "error"); return; }
+  await withAudit(async (auditId) => {
+    const result = await api.createMinutes({ audit_id: auditId, format: "docx" });
+    downloadDocument(result, "berita-acara-hasil-evaluasi-draft.docx");
+    toast("Draf Berita Acara Hasil Evaluasi (DOCX) diunduh dan dicatat di jejak audit.");
+    refreshProofIfOpen(auditId);
+  });
+}
+
+async function exportClarificationDoc() {
+  await withAudit(async (auditId) => {
+    const result = await api.createClarification({ audit_id: auditId, format: "docx" });
+    downloadDocument(result, "surat-permintaan-klarifikasi.docx");
+    toast("Draf surat klarifikasi (DOCX) diunduh.");
+    refreshProofIfOpen(auditId);
+  });
+}
+
+async function exportBoq() {
+  await withAudit(async (auditId) => {
+    const result = await api.exportBoq(auditId);
+    downloadDocument(result, "bidsentry-boq.xlsx");
+    toast(result.line_items
+      ? `BoQ Excel diunduh: ${result.line_items} baris, ${result.python_mismatches} selisih aritmetika menurut kalkulator Python.`
+      : "BoQ Excel diunduh. Tidak ada baris BoQ terstruktur di dokumen; lembar Jejak Hitungan tetap terisi.");
+  });
+}
+
+async function loadProof(auditId = currentAuditId()) {
+  if (!auditId) return;
+  setState({ proofLoading: true });
   try {
-    const payload = {
-      tender_id: review.tender_id || "TND-2026",
-      vendor_name: review.company_name || "Penyedia Peserta",
-      format: "docx",
-      findings: review.findings || [],
-      legal_mappings: [],
-    };
-    const res = await fetch("/api/v1/audit/minutes-eval-doc", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data?.error?.message || "Gagal membuat Berita Acara.");
-    const result = data.data;
-    const bytes = Uint8Array.from(atob(result.content_base64 || ""), (char) => char.charCodeAt(0));
-    const blob = new Blob([bytes], { type: result.content_type || "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
-    downloadBlob(blob, result.filename || "berita-acara-evaluasi.docx");
-    toast("Berita Acara Hasil Pemilihan (BAHP) DOCX berhasil diunduh.");
-  } catch (err) {
-    toast(err.message, "error");
+    setState({ proof: await api.proof(auditId), proofLoading: false });
+  } catch (error) {
+    setState({ proof: null, proofLoading: false });
+    toast(error.message || "Jejak audit tidak dapat dimuat.", "error");
   }
 }
+
+function refreshProofIfOpen(auditId) {
+  if (getState().reviewTab === "proof") loadProof(auditId);
+}
+
+async function logout() {
+  try { await api.logout(); } catch {}
+  auditMemoryCache.clear();
+  setState({ session: { ...(getState().session || {}), authenticated: false, role: null } });
+  resetWorkspaceState();
+}
+
+async function login(form) {
+  const role = form.dataset.loginRole;
+  const pin = form.elements.namedItem("pin")?.value || null;
+  const button = form.querySelector("button[type=submit]");
+  if (button) button.disabled = true;
+  try {
+    const session = await api.login(role, pin);
+    resetWorkspaceState();
+    setState({ session, sessionChecked: true });
+    toast(`Masuk sebagai ${session.label}.`);
+    await loadWorkspace({ preserveSelection: false });
+  } catch (error) {
+    toast(error.message || "Login gagal.", "error");
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
+async function bootstrap() {
+  try {
+    const session = await api.me();
+    setState({ session, sessionChecked: true });
+    if (session?.authenticated) await loadWorkspace();
+    else setState({ loading: false });
+  } catch (error) {
+    setState({ sessionChecked: true, loading: false });
+    toast(error.message || "Server tidak dapat dihubungi.", "error");
+  }
+}
+
+window.addEventListener("bidsentry:auth-required", (event) => {
+  if (event.detail?.code === "LOGIN_REQUIRED") {
+    setState({ session: { ...(getState().session || {}), authenticated: false, role: null } });
+    toast("Sesi berakhir. Silakan masuk kembali sesuai peran.", "error");
+  }
+});
 
 // Global click event listeners
 document.addEventListener("click", async (event) => {
@@ -949,10 +945,19 @@ document.addEventListener("click", async (event) => {
     try { localStorage.setItem("bidsentry-theme", theme); } catch {}
     render();
   }
-  if (action === "set-perspective") {
-    const perspective = target.dataset.perspective || "pokja";
-    setState({ userPerspective: perspective });
-    toast(`Beralih ke Perspektif ${perspective === "pokja" ? "Panitia / Pokja" : "Peserta / Vendor"}.`);
+  if (action === "logout") { await logout(); return; }
+  if (action === "toggle-presentation") {
+    const presentation = !getState().presentation;
+    try { localStorage.setItem("bidsentry-presentation", presentation ? "on" : "off"); } catch {}
+    setState({ presentation });
+  }
+  if (action === "export-boq") exportBoq();
+  if (action === "export-clarification") exportClarificationDoc();
+  if (action === "open-proof-step") {
+    setState({ reviewTab: "proof", proofFocus: target.dataset.stepId });
+    await loadProof();
+    requestAnimationFrame(() => document.getElementById(`proof-${target.dataset.stepId}`)?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    return;
   }
   if (action === "set-summary-tab") {
     const tab = target.dataset.tab || "project";
@@ -984,8 +989,9 @@ document.addEventListener("click", async (event) => {
   if (action === "next-page") setState({ historyPage: (getState().historyPage || 1) + 1 });
 
   if (action === "review-tab") {
-    const tab = target.dataset.tab === "insights" ? "insights" : "matrix";
-    setState({ reviewTab: tab, reviewInsightsVisited: getState().reviewInsightsVisited || tab === "insights" });
+    const tab = ["insights", "proof"].includes(target.dataset.tab) ? target.dataset.tab : "matrix";
+    setState({ reviewTab: tab, proofFocus: null, reviewInsightsVisited: getState().reviewInsightsVisited || tab === "insights" });
+    if (tab === "proof") loadProof();
   }
 
   if (action === "delete-audit") {
@@ -1016,7 +1022,9 @@ document.addEventListener("click", async (event) => {
         outcome: target.dataset.outcome,
       });
       setState({ reviewFeedback: feedback });
-      toast("Catatan reviewer tersimpan lokal.");
+      toast(feedback?.reviewed_assessment?.excluded_by_reviewer?.length
+        ? `Keputusan reviewer tersimpan. Risiko pasca-review: ${feedback.reviewed_assessment.label} (${feedback.reviewed_assessment.verdict}).`
+        : "Keputusan reviewer tersimpan di log audit.");
     } catch (error) {
       target.disabled = false;
       toast(error.message, "error");
@@ -1031,17 +1039,6 @@ document.addEventListener("change", (event) => {
   }
   if (event.target.id === "verdict-filter") {
     setState({ verdictFilter: event.target.value, historyPage: 1 });
-  }
-  if (event.target.id === "objection-category-filter") {
-    updateObjectionDraftText(event.target.value);
-  }
-  if (event.target.dataset.action === "set-reviewer-override" || event.target.classList.contains("reviewer-override-select")) {
-    const fid = event.target.dataset.findingId;
-    const val = event.target.value;
-    const current = getState().reviewerOverrides || {};
-    const updated = { ...current, [fid]: val };
-    setState({ reviewerOverrides: updated });
-    toast(`Penetapan reviewer diperbarui: ${val === "IGNORED" ? "Diabaikan (False Positive)" : val === "ACCEPTED" ? "Diterima" : val === "CLARIFY" ? "Klarifikasi" : "Otomatis"}.`);
   }
 });
 
@@ -1122,6 +1119,11 @@ document.addEventListener("drop", (event) => {
 
 // Audit form submission with input preservation and automatic tab switch (Requirements 3.1 & 3.2)
 document.addEventListener("submit", async (event) => {
+  if (event.target.dataset?.loginRole) {
+    event.preventDefault();
+    await login(event.target);
+    return;
+  }
   if (event.target.id === "settings-form") {
     event.preventDefault();
     await saveSettings(event.target);
@@ -1195,7 +1197,7 @@ document.addEventListener("submit", async (event) => {
       activeView: "review",
       reviewTab: "matrix",
       reviewInsightsVisited: true,
-      reviewerOverrides: {},
+      proof: null,
     });
 
     try {
@@ -1221,4 +1223,4 @@ document.addEventListener("submit", async (event) => {
   }
 });
 
-loadWorkspace();
+bootstrap();

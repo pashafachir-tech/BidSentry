@@ -5,7 +5,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
 [![IBM watsonx](https://img.shields.io/badge/IBM%20watsonx-Granite--3--8B-052FAD.svg)](https://www.ibm.com/watsonx)
-[![Tests Passing](https://img.shields.io/badge/tests-133%20passed-brightgreen.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-150%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -195,22 +195,16 @@ Sistem berjalan secara mandiri (*zero-build step*) tanpa perlu instalasi Node.js
 
 ---
 
-## 🧪 Rangkaian Pengujian Mandiri (133 Test Cases)
+## 🧪 Rangkaian Pengujian Mandiri (150 Test Cases)
 
 Seluruh komponen dapat diverifikasi secara independen oleh juri teknis melalui perintah berikut:
 
 ```bash
-# 1. Jalankan seluruh unit & integration test (133 passed tests, 0 warnings)
+# 1. Jalankan seluruh unit & integration test (150 passed tests, 0 warnings)
 pytest tests/ -v -W default
 
-# 2. Jalankan benchmark Development Set (24 dokumen)
-python tests/benchmark_heldout.py
-
-# 3. Jalankan benchmark Independent Blind Set (10 dokumen)
-python tests/benchmark_blind.py
-
-# 4. Jalankan benchmark Anggaran Prosa Bebas (5 dokumen narasi)
-python tests/benchmark_budget_narrative.py
+# 2. Jalankan seluruh benchmark berlabel (menulis docs/BENCHMARK_REPORT.md)
+python scripts/run_benchmarks.py
 
 # 5. Jalankan verifikasi status integrasi IBM watsonx (Exit 0 aman)
 python scripts/verify_watsonx.py

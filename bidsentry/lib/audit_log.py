@@ -187,31 +187,32 @@ class AuditLog:
                 risk = event.get("risk") if isinstance(event.get("risk"), dict) else {}
                 source_text = self.get_source_text(target) or event.get("source_text", "")
                 has_source = bool(source_text) or bool(event.get("has_source_text"))
-                return {
-                    "audit_id": event.get("audit_id"),
-                    "created_at": event.get("created_at"),
-                    "package_name": event.get("package_name"),
-                    "tender_id": event.get("tender_id"),
-                    "notice_number": event.get("notice_number"),
-                    "pokja_name": event.get("pokja_name"),
-                    "company_name": event.get("company_name"),
-                    "contract_value_idr": event.get("contract_value_idr"),
+                internal = {"event_type", "previous_hash", "hash", "schema_version", "source_text"}
+                record = {key: value for key, value in event.items() if key not in internal}
+                record.update({
                     "review_role": event.get("review_role", "procurement"),
-                    "verdict": event.get("verdict"),
-                    "risk_score": risk.get("score", 0),
-                    "risk_level": risk.get("level", "LOW"),
+                    "risk_level": risk.get("level", "NOT_ASSESSABLE"),
+                    "risk_label": risk.get("label"),
                     "risk": risk,
                     "summary": event.get("summary", {}),
                     "executive_summary": event.get("executive_summary", {}),
                     "findings": event.get("findings", []),
-                    "adendum_reconciliation": event.get("adendum_reconciliation", {}),
-                    "penalty_simulation": event.get("penalty_simulation", {}),
-                    "contextual_extraction": event.get("contextual_extraction", {}),
-                    "ai_governance_metadata": event.get("ai_governance_metadata", {}),
+                    "proof_log": event.get("proof_log", []),
+                    "proof_summary": event.get("proof_summary", {}),
+                    "documents": self.documents_for(target),
                     "source_text": source_text,
                     "has_source_text": has_source,
-                }
+                })
+                return record
         return None
+
+    def documents_for(self, audit_id: str) -> list[dict[str, Any]]:
+        """Generated documents (filename, SHA-256, role) recorded for an audit."""
+        return [
+            {key: event.get(key) for key in ("created_at", "document_kind", "filename", "sha256", "role", "findings_included")}
+            for event in self._iter_events()
+            if event.get("event_type") == "document.generated" and event.get("audit_id") == audit_id
+        ]
 
     def _write_atomic(self, lines: list[str]) -> None:
         content = "\n".join(lines) + ("\n" if lines else "")

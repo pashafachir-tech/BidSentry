@@ -117,7 +117,9 @@ def test_brand_lockin_detection_flags_exclusive_hardware_specifications() -> Non
     cpu_finding = next(f for f in result["findings"] if f["id"] == "SPEC-LOCKIN-CPU")
     assert cpu_finding["status"] == "GAP"
     assert cpu_finding["severity"] == "HIGH"
-    assert "Pasal 19 ayat (1) Perpres 12/2021" in cpu_finding["review_note"]
+    assert "Pasal 19" in cpu_finding["legal_reference"]
+    assert cpu_finding["legal_verification"] == "PERLU_VERIFIKASI_HUKUM"
+    assert cpu_finding["objectionable"] is True
 
 
 def test_compressed_procurement_timeline_flags_short_bidding_and_objection_periods() -> None:
@@ -126,7 +128,8 @@ def test_compressed_procurement_timeline_flags_short_bidding_and_objection_perio
     finding = next(f for f in result["findings"] if f["id"] == "PROC-TIMELINE-COMPRESSED")
     assert finding["status"] == "GAP"
     assert finding["severity"] == "HIGH"
-    assert "Pasal 54 Perpres 12/2021" in finding["review_note"]
+    assert "LKPP" in finding["legal_reference"]
+    assert finding["calculation_ref"]
     assert "7 hari kerja" in finding["review_note"]
     assert "5 hari kerja" in finding["review_note"]
     assert result["verdict"] == "NO-GO"
@@ -173,7 +176,8 @@ def test_deepseek_erp_financial_fatal_flaws_detection() -> None:
 
     assert result["verdict"] == "NO-GO"
     assert result["risk_level"] == "CRITICAL"
-    assert result["risk_score"] >= 70
+    assert result["risk"]["rule_applied"] == "R1"
+    assert "risk_score" not in result
 
 
 def test_modular_data_center_regional_and_incumbent_lockin() -> None:
@@ -191,12 +195,13 @@ def test_modular_data_center_regional_and_incumbent_lockin() -> None:
     reg = next(f for f in result["findings"] if f["id"] == "SPEC-REGIONAL-LOCKIN")
     assert reg["status"] == "GAP"
     assert reg["severity"] == "HIGH"
-    assert "ADCR-Jabar" in reg["review_note"]
+    assert "ADCR-Jabar" in (reg["requirement_evidence"] or "")
+    assert "diskriminatif" in reg["review_note"]
 
     inc = next(f for f in result["findings"] if f["id"] == "SPEC-INCUMBENT-LOCKIN")
     assert inc["status"] == "GAP"
     assert inc["severity"] == "HIGH"
-    assert "Pasal 19" in inc["review_note"]
+    assert "Pasal 19" in inc["legal_reference"]
 
     assert result["verdict"] == "NO-GO"
 
@@ -222,7 +227,8 @@ def test_managed_soc_conflict_of_interest_and_unrealistic_timeline() -> None:
     unr = next(f for f in result["findings"] if f["id"] == "PROC-UNREALISTIC-TIMELINE")
     assert unr["status"] == "GAP"
     assert unr["severity"] == "HIGH"
-    assert "Zero-Trust" in unr["review_note"]
+    assert "zero-trust" in (unr["requirement_evidence"] or "").casefold()
+    assert "7 hari kalender" in unr["review_note"]
 
     assert result["verdict"] == "NO-GO"
 
