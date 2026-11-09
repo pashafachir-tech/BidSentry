@@ -7,20 +7,16 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock
 
-import warnings
 import pytest
 
-warnings.filterwarnings("ignore", message=r".*httpx.*")
 from starlette.testclient import TestClient
 
 from bidsentry.asgi import create_asgi_app
 from bidsentry.config import Settings
 from bidsentry.evaluators.engine import EvaluationEngine, EvaluationRequest
 from bidsentry.lib.audit_log import AuditLog
-from bidsentry.lib.pii import mask_text, mask_value, recover_unmasked_quote
-from bidsentry.services.audit_service import AuditService
+from bidsentry.lib.pii import mask_text
 from bidsentry.services.langflow_service import LangflowService
-from bidsentry.types.schemas import AuditRequest
 
 
 @pytest.fixture

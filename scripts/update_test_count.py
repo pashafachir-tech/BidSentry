@@ -44,7 +44,7 @@ def update_docs(test_count: int) -> None:
         readme_path.write_text(content, encoding="utf-8")
         print(f"Updated {readme_path.name} to {test_count} tests.")
 
-    changelog_path = ROOT / "docs" / "CHANGELOG_ITERASI.md"
+    changelog_path = ROOT / "docs" / "CHANGELOG.md"
     if changelog_path.exists():
         content = changelog_path.read_text(encoding="utf-8")
         content = re.sub(r"\b\d+\s+unit tests\b", f"{test_count} unit tests", content)

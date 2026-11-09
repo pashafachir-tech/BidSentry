@@ -1,7 +1,7 @@
-import { api, setAuthToken, downloadDocument, decodeText } from "./api.js?v=3.0.0";
-import { getState, setState, subscribe, resetWorkspaceState } from "./state.js?v=3.0.0";
-import { renderApp, renderDialogs, renderLogin, escapeHtml } from "./render.js?v=3.0.0";
-import { getReviewSnapshot } from "./review.js?v=3.0.0";
+import { api, setAuthToken, downloadDocument, decodeText } from "./api.js?v=4.2.0";
+import { getState, setState, subscribe, resetWorkspaceState } from "./state.js?v=4.2.0";
+import { renderApp, renderDialogs, renderLogin, escapeHtml } from "./render.js?v=4.2.0";
+import { getReviewSnapshot } from "./review.js?v=4.2.0";
 
 const root = document.getElementById("app");
 const dialogLayer = document.getElementById("dialog-layer");
@@ -100,6 +100,7 @@ async function selectAudit(auditId) {
     proof: null,
   });
   if (getState().reviewTab === "proof") loadProof(auditId);
+  loadEconomics(auditId);
 
   try {
     const full = await api.getAudit(auditId);
@@ -133,6 +134,7 @@ async function loadWorkspace({ preserveSelection = true, includeOverview = true,
   setState({ loading: true });
   const state = getState();
   try {
+    if (!getState().benchmark) api.benchmarkSummary().then((benchmark) => setState({ benchmark })).catch(() => setState({ benchmark: { status: "unavailable", message: "Ringkasan benchmark tidak dapat dimuat." } }));
     const [overview, audits, health, reviewFeedback] = await Promise.all([
       includeOverview ? api.overview() : Promise.resolve(state.overview),
       api.audits({ q: state.query, risk: state.riskFilter }),
@@ -152,6 +154,7 @@ async function loadWorkspace({ preserveSelection = true, includeOverview = true,
       ...(includeFeedback ? { reviewFeedback } : {}),
       loading: false,
     });
+    if (selected && getState().economics?.audit_id !== selected) loadEconomics(selected);
   } catch (error) {
     if (requestSequence !== workspaceRequestSequence) return;
     setState({ loading: false });
@@ -283,7 +286,7 @@ async function openSettingsDialog() {
     set("watsonx_api_key", "");
     set("watsonx_project_id", settings?.watsonx?.project_id || "");
     set("watsonx_url", settings?.watsonx?.url || "https://us-south.ml.cloud.ibm.com");
-    set("watsonx_model_id", settings?.watsonx?.model_id || "ibm/granite-3-8b-instruct");
+    set("watsonx_model_id", settings?.watsonx?.model_id || "mistralai/mistral-small-3-1-24b-instruct-2503");
     set("composio_api_key", "");
     set("composio_user_id", settings?.composio?.user_id);
     set("composio_base_url", settings?.composio?.base_url);
@@ -665,8 +668,19 @@ async function ingestFiles(fileList, field) {
     }
 
     let addedCount = 0;
+    const warningsShown = [];
     for (const item of results) {
+      if (item.ok && item.data.scanned_pdf && !(item.data.text || "").trim()) {
+        // A scan without a text layer adds nothing to audit; explain instead of inserting placeholder text.
+        currentErrors.push({
+          id: `err-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          name: item.file?.name || "",
+          message: (item.data.warnings || [])[0] || "Dokumen pindaian tanpa lapisan teks; OCR belum tersedia.",
+        });
+        continue;
+      }
       if (item.ok) {
+        for (const warning of item.data.warnings || []) warningsShown.push(`${item.file.name}: ${warning}`);
         addedCount += 1;
         const text = item.data.text || "";
         const preview = text.split("\n").filter((l) => l.trim()).slice(0, 3).join(" ");
@@ -692,7 +706,9 @@ async function ingestFiles(fileList, field) {
     textarea.value = currentFiles.map((f) => `--- ${f.name} ---\n${f.text}`).join("\n\n");
     renderFileNames(field);
 
-    if (addedCount > 0) {
+    if (warningsShown.length) {
+      toast(warningsShown.slice(0, 2).join(" · "), "error");
+    } else if (addedCount > 0) {
       toast(`${addedCount} dokumen berhasil diekstrak ke dalam slot.`);
     }
   } finally {
@@ -786,29 +802,40 @@ async function withAudit(action) {
   }
 }
 
+function objectionStage() {
+  return document.getElementById("objection-stage")?.value || "pre_bid";
+}
+
+function objectionFilename() {
+  return objectionStage() === "post_award" ? "draf-sanggahan" : "draf-permohonan-penjelasan";
+}
+
 async function openObjection() {
+  const stageSelect = document.getElementById("objection-stage");
+  if (stageSelect) stageSelect.onchange = openObjection;
   await withAudit(async (auditId) => {
-    const preview = await api.createSanggahan({ audit_id: auditId, format: "markdown" });
+    const preview = await api.createSanggahan({ audit_id: auditId, format: "markdown", stage: objectionStage() });
     const textarea = document.getElementById("objection-draft");
     if (textarea) textarea.value = decodeText(preview);
     const meta = document.getElementById("objection-meta");
     if (meta) meta.textContent = `Poin yang dimasukkan server: ${(preview.findings_included || []).join(", ") || "—"}. Rujukan pasal wajib diverifikasi ahli hukum sebelum diajukan.`;
-    document.getElementById("objection-dialog")?.showModal();
+    const dialog = document.getElementById("objection-dialog");
+    if (dialog && !dialog.open) dialog.showModal();
   });
 }
 
 function downloadObjectionTxt() {
   const text = document.getElementById("objection-draft")?.value || "";
-  if (!text) { toast("Tidak ada draf sanggahan.", "error"); return; }
-  downloadBlob(new Blob([text], { type: "text/markdown;charset=utf-8" }), "draf-sanggahan.md");
-  toast("Draf sanggahan .MD berhasil diunduh.");
+  if (!text) { toast("Tidak ada draf surat.", "error"); return; }
+  downloadBlob(new Blob([text], { type: "text/markdown;charset=utf-8" }), `${objectionFilename()}.md`);
+  toast("Draf surat .MD berhasil diunduh.");
 }
 
 async function downloadObjectionDocx() {
   await withAudit(async (auditId) => {
-    const result = await api.createSanggahan({ audit_id: auditId, format: "docx" });
-    downloadDocument(result, "draf-sanggahan.docx");
-    toast(`Draf sanggahan DOCX diunduh (${(result.findings_included || []).length} poin, SHA-256 dicatat di jejak audit).`);
+    const result = await api.createSanggahan({ audit_id: auditId, format: "docx", stage: objectionStage() });
+    downloadDocument(result, `${objectionFilename()}.docx`);
+    toast(`Draf surat DOCX diunduh (${(result.findings_included || []).length} poin, SHA-256 dicatat di jejak audit).`);
     refreshProofIfOpen(auditId);
   });
 }
@@ -845,7 +872,8 @@ async function loadProof(auditId = currentAuditId()) {
   if (!auditId) return;
   setState({ proofLoading: true });
   try {
-    setState({ proof: await api.proof(auditId), proofLoading: false });
+    const [proof, integrity] = await Promise.all([api.proof(auditId), api.verifyAuditLog().catch(() => null)]);
+    setState({ proof, proofIntegrity: integrity, proofLoading: false });
   } catch (error) {
     setState({ proof: null, proofLoading: false });
     toast(error.message || "Jejak audit tidak dapat dimuat.", "error");
@@ -859,6 +887,7 @@ function refreshProofIfOpen(auditId) {
 async function logout() {
   try { await api.logout(); } catch {}
   auditMemoryCache.clear();
+  clearDraftInputs();
   setState({ session: { ...(getState().session || {}), authenticated: false, role: null } });
   resetWorkspaceState();
 }
@@ -870,8 +899,11 @@ async function login(form) {
   if (button) button.disabled = true;
   try {
     const session = await api.login(role, pin);
+    auditMemoryCache.clear();
+    clearDraftInputs();
     resetWorkspaceState();
-    setState({ session, sessionChecked: true });
+    setState({ session, sessionChecked: true, roleTransition: session.role });
+    setTimeout(() => setState({ roleTransition: null }), 1100);
     toast(`Masuk sebagai ${session.label}.`);
     await loadWorkspace({ preserveSelection: false });
   } catch (error) {
@@ -880,6 +912,113 @@ async function login(form) {
     if (button) button.disabled = false;
   }
 }
+
+let economicsTimer = null;
+async function loadEconomics(auditId = currentAuditId()) {
+  if (!auditId) return;
+  try {
+    const economics = await api.economics(auditId, getState().economicsInputs || {});
+    if (currentAuditId() === auditId) setState({ economics });
+  } catch {
+    setState({ economics: null });
+  }
+}
+
+function clearDraftInputs() {
+  document.getElementById("audit-form")?.reset();
+  for (const field of Object.keys(uploadedFiles)) { uploadedFiles[field] = []; uploadErrors[field] = []; }
+  clearUploadedFileLabels();
+}
+
+// ---------------------------------------------------------------------------
+// Presenter hotkeys (stage runner)
+//   [P] presentation mode   [1] Pokja + Paket A   [2] Vendor + Paket B
+//   [Esc] close dialogs/overlays   [?] show/hide the hint bar
+// Keys are ignored while typing in a form field or when Ctrl/Alt/Cmd is held.
+// ---------------------------------------------------------------------------
+let demoPackagesCache = null;
+let demoInFlight = false;
+
+async function demoPackages() {
+  if (!demoPackagesCache) demoPackagesCache = (await api.demoPackages()).packages || [];
+  return demoPackagesCache;
+}
+
+async function ensureRole(role) {
+  const session = getState().session;
+  if (session?.authenticated && session.role === role) return true;
+  const roleInfo = (session?.roles || []).find((item) => item.role === role);
+  if (roleInfo?.pin_required) {
+    toast("Peran ini memerlukan PIN. Masuk lewat layar login terlebih dahulu.", "error");
+    return false;
+  }
+  if (session?.authenticated) {
+    try { await api.logout(); } catch {}
+  }
+  const next = await api.login(role, null);
+  auditMemoryCache.clear();
+  clearDraftInputs();
+  resetWorkspaceState();
+  setState({ session: next, sessionChecked: true, roleTransition: role });
+  setTimeout(() => setState({ roleTransition: null }), 1100);
+  return true;
+}
+
+async function runDemo(key) {
+  if (demoInFlight) return;
+  demoInFlight = true;
+  try {
+    const pkg = (await demoPackages()).find((item) => item.key === key);
+    if (!pkg) { toast(`Paket demo ${key} tidak ditemukan. Jalankan: python scripts/seed_demo.py`, "error"); return; }
+    if (!(await ensureRole(pkg.role))) return;
+    await loadWorkspace({ preserveSelection: false });
+    let row = (getState().audits || []).find((audit) => audit.package_name === pkg.request.package_name);
+    if (!row) {
+      toast(`Menjalankan ${pkg.title}…`);
+      const result = await api.evaluateAudit(pkg.request);
+      await loadWorkspace({ preserveSelection: false });
+      row = { audit_id: result.audit_id };
+    }
+    setState({ reviewTab: "matrix", activeView: "review" });
+    await selectAudit(row.audit_id);
+    setTimeout(() => document.getElementById("risk-review")?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+    toast(`${pkg.title} siap. ${pkg.story}`);
+  } catch (error) {
+    toast(error.message || "Demo tidak dapat dimuat.", "error");
+  } finally {
+    demoInFlight = false;
+  }
+}
+
+function isTypingTarget(target) {
+  if (!target) return false;
+  const tag = target.tagName;
+  return target.isContentEditable || tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT";
+}
+
+document.addEventListener("keydown", (event) => {
+  if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey) return;
+  if (event.key === "Escape") {
+    document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
+    setState({ roleTransition: null, expandedFindingId: null });
+    return;
+  }
+  if (isTypingTarget(event.target) || document.querySelector("dialog[open]")) return;
+  const key = event.key.toLowerCase();
+  if (key === "p") {
+    event.preventDefault();
+    const presentation = !getState().presentation;
+    try { localStorage.setItem("bidsentry-presentation", presentation ? "on" : "off"); } catch {}
+    setState({ presentation });
+    toast(presentation ? "Mode presentasi aktif." : "Mode presentasi nonaktif.");
+  } else if (key === "1" || key === "2") {
+    event.preventDefault();
+    runDemo(key === "1" ? "A" : "B");
+  } else if (key === "?") {
+    event.preventDefault();
+    setState({ hideHints: !getState().hideHints });
+  }
+});
 
 async function bootstrap() {
   try {
@@ -972,7 +1111,7 @@ document.addEventListener("click", async (event) => {
   if (action === "download-objection-txt") downloadObjectionTxt();
   if (action === "copy-objection") {
     navigator.clipboard.writeText(document.getElementById("objection-draft")?.value || "").then(
-      () => toast("Draf sanggahan disalin ke clipboard."),
+      () => toast("Draf surat disalin ke clipboard."),
       () => toast("Clipboard tidak dapat diakses browser.", "error")
     );
   }
@@ -1044,6 +1183,14 @@ document.addEventListener("change", (event) => {
 
 // Search input with 300ms debounce (Requirement 3.5)
 document.addEventListener("input", (event) => {
+  const economicsForm = event.target.closest?.("[data-economics-form]");
+  if (economicsForm) {
+    const values = Object.fromEntries(new FormData(economicsForm).entries());
+    setState({ economicsInputs: values }, { notify: false });
+    if (economicsTimer) clearTimeout(economicsTimer);
+    economicsTimer = setTimeout(() => loadEconomics(), 400);
+    return;
+  }
   if (event.target.id === "audit-search") {
     const spinner = document.getElementById("search-spinner");
     if (spinner) spinner.hidden = false;
@@ -1198,7 +1345,9 @@ document.addEventListener("submit", async (event) => {
       reviewTab: "matrix",
       reviewInsightsVisited: true,
       proof: null,
+      economics: null,
     });
+    loadEconomics(result.audit_id);
 
     try {
       setState({ reviewFeedback: await api.reviewFeedback(result.audit_id) });

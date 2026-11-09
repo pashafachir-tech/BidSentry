@@ -30,14 +30,13 @@ from bidsentry.schemas.evaluation import (
     ContextualExtractionResponse,
 )
 from bidsentry.types.responses import failure, success
-from bidsentry.types.schemas import AuditRequest, DispatchRequest, ValidationError
+from bidsentry.types.schemas import DispatchRequest, ValidationError
 
 __all__ = [
     "ArtifactSignal",
     "AuditJobCreated",
     "AuditJobError",
     "AuditJobStatus",
-    "AuditRequest",
     "BoQLineItem",
     "CandidateEvaluation",
     "ClarificationDocumentRequest",

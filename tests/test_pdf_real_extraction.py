@@ -77,16 +77,17 @@ class RealPdfExtractionTests(unittest.TestCase):
         # Create a synthetic 1-page PDF containing minimal or zero text layer
         import pymupdf
         doc = pymupdf.open()
-        page = doc.new_page(width=595, height=842)
+        doc.new_page(width=595, height=842)
         # Empty text on page, simulating a scanned document
         pdf_bytes = doc.tobytes()
         doc.close()
 
         result = self.extractor.extract("dokumen_scan_lpse.pdf", pdf_bytes)
         self.assertTrue(result["scanned_pdf"])
-        self.assertEqual(result["extraction_mode"], "ocr_vision_fallback")
-        self.assertIn("[DOKUMEN PINDAIAN / SCANNED PDF DETECTED", result["text"])
-        self.assertIn("bidsentry/vision/verifier.py", result["text"])
+        self.assertEqual(result["extraction_mode"], "scanned_no_text_layer")
+        # No placeholder text may be injected into the audited document.
+        self.assertEqual(result["text"], "")
+        self.assertTrue(any("OCR" in warning for warning in result["warnings"]))
 
 
 if __name__ == "__main__":

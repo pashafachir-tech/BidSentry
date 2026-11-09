@@ -145,7 +145,7 @@ def _build_docs_params(audit_data: dict) -> dict:
     now_str        = datetime.now(tz=timezone(timedelta(hours=7))).strftime("%d %B %Y %H:%M WIB")
 
     body = "\n\n".join([
-        f"BIDSENTRY AUDIT DOSSIER",
+        "BIDSENTRY AUDIT DOSSIER",
         f"Paket   : {package_name}",
         f"ID      : {audit_data.get('tender_id') or '—'}",
         f"Dibuat  : {now_str}",
@@ -175,7 +175,6 @@ def _build_calendar_params(audit_data: dict) -> dict:
     now = datetime.now(tz=wib)
     event_date = now + timedelta(days=7)
     start = event_date.replace(hour=9, minute=0, second=0, microsecond=0)
-    end = event_date.replace(hour=9, minute=30, second=0, microsecond=0)
     reasons = audit_data.get("alasan_utama", [])
     reason_summary = "; ".join(reasons[:2]) if reasons else "Belum ada ringkasan sinyal; periksa review di BidSentry."
 

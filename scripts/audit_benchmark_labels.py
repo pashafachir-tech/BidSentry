@@ -16,44 +16,17 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-import yaml
 
 
 def get_engine_rule_ids() -> set[str]:
-    """Collect all valid rule IDs defined in config/rules.yaml and engine.py."""
-    rules_file = ROOT / "config" / "rules.yaml"
-    yaml_ids: set[str] = set()
-    if rules_file.exists():
-        data = yaml.safe_load(rules_file.read_text(encoding="utf-8"))
-        if isinstance(data, list):
-            for item in data:
-                if isinstance(item, dict) and "id" in item:
-                    yaml_ids.add(str(item["id"]))
+    """Every finding code the engine can emit, plus the label aliases the catalog maps."""
+    from bidsentry.evaluators.rule_catalog import all_rules
 
-    hardcoded_engine_ids = {
-        "ADM-NPWP",
-        "ADM-NIB",
-        "ADM-SBU",
-        "ADM-KSWP",
-        "CON-PENALTY",
-        "SPEC-LOCKIN-CPU",
-        "SPEC-LOCKIN-GPU",
-        "SPEC-LOCKIN-OS",
-        "SPEC-LOCKIN-DB",
-        "SPEC-LOCKIN-CLOUD",
-        "SPEC-LOCKIN-NET",
-        "SPEC-BRAND-LOCKIN",
-        "DISC-GEO-DOMICILE",
-        "DISC-GEO-BRANCH",
-        "DISC-ASSOC-RESTRICTION",
-        "PROC-TIMELINE-COMPRESSED",
-        "PROC-TIMELINE-EXPEDITED",
-        "FIN-OVER-BUDGET",
-        "FIN-MARKUP-RATE",
-        "FIN-RATE-OVER-INKINDO",
-    }
-    return yaml_ids | hardcoded_engine_ids
-
+    ids: set[str] = set()
+    for rule in all_rules():
+        ids.add(rule.code)
+        ids.update(rule.aliases)
+    return ids
 
 def audit_directory(dir_path: Path, engine_ids: set[str]) -> list[dict[str, Any]]:
     rows = []

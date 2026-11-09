@@ -5,7 +5,8 @@
   "input": {
     "package_name": "Pembangunan Gedung Arsip Digital",
     "dok_pemilihan": "Syarat Kualifikasi:\nPeserta wajib memiliki SBU bidang konstruksi yang masih berlaku.",
-    "pustaka": "Sertifikat Badan Usaha (SBU) diterbitkan tanggal 10 Maret 2019, berlaku sampai 10 Maret 2022."
+    "pustaka": "Sertifikat Badan Usaha (SBU) diterbitkan tanggal 10 Maret 2019, berlaku sampai 10 Maret 2022.",
+    "bid_deadline": "1 Juni 2026"
   },
   "expected_findings": [
     {

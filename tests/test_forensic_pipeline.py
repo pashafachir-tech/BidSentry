@@ -12,7 +12,7 @@ from pathlib import Path
 import pymupdf as fitz
 
 from bidsentry.audits.default_predictor import predict_default_risk
-from bidsentry.audits.financial_engine import run_financial_audit
+from bidsentry.audits.financial import run_financial_audit
 from bidsentry.api.routes import ApiRouter
 from bidsentry.app import create_application
 from bidsentry.config import Settings

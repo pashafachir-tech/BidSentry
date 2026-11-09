@@ -1,4 +1,4 @@
-import { renderReview, riskBadge, RISK_META } from "./review.js?v=3.0.0";
+import { renderReview, riskBadge, RISK_META } from "./review.js?v=4.2.0";
 
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 const number = (value) => new Intl.NumberFormat("id-ID").format(Number(value || 0));
@@ -201,7 +201,7 @@ function renderProjectCrossSummary(project, state) {
             <div class="cross-bullet-item ${lockinItem ? 'is-warning' : 'is-ok'}">
               <span class="cross-bullet-icon">${lockinItem ? '⚠️' : '✓'}</span>
               <div>
-                <strong>Penguncian Spesifikasi &amp; Merek (Pasal 19 Perpres 12/2021)</strong>
+                <strong>Penguncian Spesifikasi &amp; Merek (Pasal 19 ayat (2) Perpres 16/2018 s.t.d.t.d. 46/2025)</strong>
                 <p>${lockinItem ? escapeHtml(lockinItem.review_note || "Terindikasi penguncian merek eksklusif tanpa klausul produk setara.") : "Tidak terdeteksi pembatasan merek secara restriktif pada dokumen awal."}</p>
               </div>
             </div>
@@ -261,7 +261,7 @@ function renderProjectCrossSummary(project, state) {
               <span class="cross-bullet-icon">${timelineItem ? '⏰' : '✓'}</span>
               <div>
                 <strong>Benturan Jadwal &amp; Batas Waktu (Timeline LKPP)</strong>
-                <p>${timelineItem ? escapeHtml(timelineItem.review_note || "Jadwal penyiapan penawaran atau masa sanggah dipangkas di bawah batas wajar LKPP (Pasal 54 Perpres 12/2021).") : "Jadwal pengadaan dan masa sanggah berada dalam koridor waktu wajar."}</p>
+                <p>${timelineItem ? escapeHtml(timelineItem.review_note || "Jadwal penawaran atau masa sanggah lebih pendek dari pembanding sistem; cocokkan dengan jadwal SPSE dan Peraturan LKPP 12/2021.") : "Jadwal pengadaan dan masa sanggah berada dalam koridor waktu wajar."}</p>
               </div>
             </div>
 
@@ -269,7 +269,7 @@ function renderProjectCrossSummary(project, state) {
               <span class="cross-bullet-icon">🔒</span>
               <div>
                 <strong>Integritas Kriptografis SHA-256</strong>
-                <p>100% kutipan bukti terikat ke substring teks asli dokumen (Verbatim Substring Grounding). Rantai hash SHA-256 tersimpan untuk audit trail.</p>
+                <p>Kutipan pada surat dan Berita Acara dicocokkan dengan teks sumber audit yang tersimpan. Audit log dirantai SHA-256 dan bersegel HMAC; statusnya tampil di tab jejak audit.</p>
               </div>
             </div>
 
@@ -277,7 +277,7 @@ function renderProjectCrossSummary(project, state) {
               <span class="cross-bullet-icon">🤖</span>
               <div>
                 <strong>IBM watsonx.ai &amp; Governance Telemetry</strong>
-                <p>Model: <code>${escapeHtml(aiGov.model_id || "ibm/granite-3-8b-instruct")}</code> · Guardrail: <em>Substring Grounded (Drift monitoring: roadmap)</em> · Sanitasi PII: <strong>${escapeHtml(aiGov.pii_governance?.status === "RULE_BASED_REDACTION" ? "Redaksi Berbasis Aturan" : "UU 27/2022 PDP Terlindungi")}</strong> (${aiGov.pii_governance?.redacted_token_count || 0} entitas disensor: NIK/NPWP/Rek/Kontak).</p>
+                <p>Model: <code>${escapeHtml(aiGov.model_id || "-")}</code> · Guardrail: <em>Substring Grounded (Drift monitoring: roadmap)</em> · Sanitasi PII: <strong>${escapeHtml(aiGov.pii_governance?.status === "RULE_BASED_REDACTION" ? "Redaksi Berbasis Aturan" : "UU 27/2022 PDP Terlindungi")}</strong> (${aiGov.pii_governance?.redacted_token_count || 0} entitas disensor: NIK/NPWP/Rek/Kontak).</p>
               </div>
             </div>
           </div>
@@ -341,12 +341,12 @@ function renderProjectCrossSummary(project, state) {
       <div class="cross-actions-card">
         <div class="cross-actions-info">
           <strong>Tindak Lanjut Berdasarkan Hasil Sintesis (${isPokja ? "Mode Pokja / Auditor" : "Mode Vendor / Rekanan"}):</strong>
-          <p>${isPokja ? "Gunakan hasil sintesis ini untuk menyusun Berita Acara Hasil Pemilihan (BAHP) atau meminta klarifikasi resmi kepada penyedia." : "Gunakan hasil sintesis ini untuk memperbaiki berkas penawaran sebelum batas akhir atau menyusun sanggahan atas red flag KAK."}</p>
+          <p>${isPokja ? "Gunakan hasil sintesis ini untuk menyusun Berita Acara Hasil Evaluasi atau meminta klarifikasi resmi kepada penyedia." : "Gunakan hasil sintesis ini untuk memperbaiki berkas penawaran sebelum batas akhir atau menyusun sanggahan atas red flag KAK."}</p>
         </div>
         <div class="cross-actions-buttons">
           ${isPokja ? `
             <button type="button" class="button button-primary button-small" data-action="export-minutes">
-              ${icon("file")} Draf Berita Acara BAHP (DOCX)
+              ${icon("file")} Draf Berita Acara (DOCX)
             </button>
             <button type="button" class="button button-secondary button-small" data-action="export-review">
               ${icon("download")} Ekspor Matriks (Excel)
@@ -356,7 +356,7 @@ function renderProjectCrossSummary(project, state) {
             </button>
           ` : `
             <button type="button" class="button button-primary button-small" data-action="open-objection">
-              ${icon("shield")} Buat Draf Sanggahan
+              ${icon("shield")} Buat Draf Surat ke Pokja
             </button>
             <button type="button" class="button button-secondary button-small" data-action="export-review">
               ${icon("download")} Ekspor Hasil Uji
@@ -468,6 +468,94 @@ function renderPortfolioSummary(allAudits, state) {
   `;
 }
 
+
+const ROLE_CENTER = {
+  pokja: {
+    eyebrow: "POKJA PEMILIHAN · UKPBJ",
+    title: "Compliance & Integrity Command Center",
+    lede: "Cegah sanggahan sebelum terjadi: verifikasi kualifikasi, uji kewajaran HPS terhadap pagu, dan terbitkan draf Berita Acara dengan jejak bukti yang dapat diaudit.",
+    focus: ["Pencegahan sanggahan", "Verifikasi kualifikasi", "HPS vs pagu", "Draf Berita Acara 1 klik"],
+    primary: "Periksa dokumen penawaran",
+  },
+  vendor: {
+    eyebrow: "PENYEDIA / VENDOR",
+    title: "Tender Protection & Sanggahan Suite",
+    lede: "Temukan jebakan di dokumen tender sebelum submit: penguncian merek terselubung, persyaratan diskriminatif, denda tanpa batas, dan selisih BoQ. Lalu susun draf surat ke Pokja berbasis kutipan persis.",
+    focus: ["Jebakan dokumen", "Brand lock-in", "Denda tanpa batas", "Selisih BoQ", "Draf surat ke Pokja 1 klik"],
+    primary: "Periksa dokumen tender",
+  },
+};
+
+function renderCommandCenter(state) {
+  const role = state.session?.role === "vendor" ? "vendor" : "pokja";
+  const center = ROLE_CENTER[role];
+  return `
+    <section class="command-center command-${role}" aria-label="${escapeHtml(center.title)}">
+      <div class="command-copy">
+        <p class="command-eyebrow">${escapeHtml(center.eyebrow)}</p>
+        <h1>${escapeHtml(center.title)}</h1>
+        <p class="command-lede">${escapeHtml(center.lede)}</p>
+        <ul class="command-focus">${center.focus.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
+      </div>
+      <div class="command-actions">
+        <button class="button button-primary button-hero" data-action="new-audit">${icon("plus")} ${escapeHtml(center.primary)}</button>
+        <button class="button button-ghost-light" data-action="load-sample-tender" title="Muat paket tender contoh untuk demo 1 klik">${icon("file")} Muat paket contoh</button>
+      </div>
+    </section>`;
+}
+
+function pct(value) {
+  return value == null ? "—" : `${(value * 100).toFixed(1).replace(".", ",")}%`;
+}
+
+function ci(range) {
+  return range ? `${Math.round(range[0] * 100)}–${Math.round(range[1] * 100)}%` : "—";
+}
+
+function renderTrustStrip(state) {
+  const bench = state.benchmark;
+  const pooled = bench?.pooled;
+  const benchBody = bench?.status === "ok" && pooled ? `
+      <div class="trust-metrics">
+        <div><span>Precision</span><strong>${pct(pooled.precision)}</strong><small>CI 95% ${ci(pooled.precision_ci95)}</small></div>
+        <div><span>Recall</span><strong>${pct(pooled.recall)}</strong><small>CI 95% ${ci(pooled.recall_ci95)}</small></div>
+        <div><span>False positive</span><strong>${number(pooled.fp)}</strong><small>dari ${number(pooled.documents)} dokumen uji</small></div>
+        <div><span>False negative</span><strong>${number(pooled.fn)}</strong><small>red flag terlewat</small></div>
+      </div>
+      <p class="trust-caveat">${escapeHtml(bench.claim_guidance || "")} Dokumen nyata independen: <b>${number(bench.independent_real_world_documents || 0)}</b>.</p>
+      ${(bench.errors || []).length ? `<details class="trust-errors"><summary>Lihat ${number(bench.errors.length)} kesalahan yang tersisa</summary><ul>${bench.errors.map((item) => `<li><b>${escapeHtml(item.case_id)}</b> (${escapeHtml(item.suite)}) ${item.false_positive?.length ? `FP: ${escapeHtml(item.false_positive.join(", "))}` : ""} ${item.false_negative?.length ? `FN: ${escapeHtml(item.false_negative.join(", "))}` : ""}</li>`).join("")}</ul></details>` : ""}`
+    : `<p class="trust-caveat">${escapeHtml(bench?.message || "Memuat ringkasan benchmark…")}</p>`;
+  return `
+    <section class="trust-strip" aria-label="Bukti akurasi dan kendali manusia">
+      <article class="trust-card trust-benchmark">
+        <div class="trust-head"><p class="eyebrow">VALIDASI EMPIRIS · UJI REGRESI BERLABEL</p><span class="trust-stamp">${escapeHtml(bench?.generated_at ? `Diperbarui ${bench.generated_at.slice(0, 10)}` : "")}</span></div>
+        ${benchBody}
+      </article>
+      <article class="trust-card trust-hitl">
+        <p class="eyebrow">POSISI PRODUK</p>
+        <h3>AI sebagai copilot, keputusan tetap di tangan manusia</h3>
+        <ul>
+          <li><b>Model hanya mengekstrak kutipan.</b> Verdict dan tingkat risiko dihitung aturan Python yang dapat ditelusuri.</li>
+          <li><b>Setiap kutipan dicocokkan persis</b> dengan dokumen asli; yang tidak cocok ditolak.</li>
+          <li><b>Reviewer dapat menolak temuan</b>; risiko, Berita Acara, dan sanggahan menyesuaikan dan tercatat di log.</li>
+          <li><b>Semua dokumen keluaran berstatus DRAF</b> dan wajib disahkan pejabat atau penanggung jawab.</li>
+        </ul>
+      </article>
+    </section>`;
+}
+
+function renderRoleTransition(state) {
+  if (!state.roleTransition) return "";
+  const center = ROLE_CENTER[state.roleTransition] || ROLE_CENTER.pokja;
+  return `<div class="role-transition command-${escapeHtml(state.roleTransition)}" role="status" aria-live="polite"><div><p>${escapeHtml(center.eyebrow)}</p><strong>${escapeHtml(center.title)}</strong><span>Menyiapkan ruang kerja terpisah…</span></div></div>`;
+}
+
+
+function presenterHint(state) {
+  if (state.hideHints) return "";
+  return `<div class="presenter-hint" aria-hidden="true"><kbd>P</kbd> Presentasi <span>·</span> <kbd>1</kbd> Pokja · Paket A <span>·</span> <kbd>2</kbd> Vendor · Paket B <span>·</span> <kbd>Esc</kbd> Tutup <span>·</span> <kbd>?</kbd> Sembunyikan</div>`;
+}
+
 export function renderApp(state) {
   const overview = state.overview || {};
   const distribution = overview.risk_distribution || {};
@@ -494,7 +582,9 @@ export function renderApp(state) {
   const pagedAudits = filteredAudits.slice((page - 1) * pageSize, page * pageSize);
 
   return `
-    <div class="app-shell">
+    ${renderRoleTransition(state)}
+    ${presenterHint(state)}
+    <div class="app-shell" data-role="${escapeHtml(state.session?.role || "")}">
       <aside class="sidebar">
         <a class="brand" href="/" aria-label="BidSentry beranda"><span class="brand-name"><strong>BidSentry</strong><small>INTELIJEN PENGADAAN</small></span></a>
         
@@ -534,17 +624,9 @@ export function renderApp(state) {
       <main class="main-content">
         <header class="topbar"><div class="breadcrumb"><span>Proyek</span><span>/</span><strong>${selected ? escapeHtml(selected.package_name) : "Semua Pemeriksaan"}</strong></div><div class="topbar-actions"><span class="role-chip role-${escapeHtml(state.session?.role || "none")}" title="Peran ditetapkan saat login dan diperiksa server">Masuk sebagai <b>${escapeHtml(ROLE_LABELS[state.session?.role] || "—")}</b></span><button type="button" class="button button-quiet button-small" data-action="logout" title="Keluar dan ganti peran">Ganti peran</button><button type="button" class="button button-quiet button-small ${state.presentation ? "is-active" : ""}" data-action="toggle-presentation" aria-pressed="${state.presentation}" title="Perbesar seluruh teks untuk demo / proyektor">A+ Mode presentasi</button><button class="button button-quiet button-small topbar-text-action" data-action="open-settings">Koneksi & Pengaturan</button><button class="icon-button" title="Ganti tema" aria-label="Ganti tema" data-action="theme-toggle">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button><button class="icon-button" title="Muat ulang data" aria-label="Muat ulang data" data-action="refresh">${icon("refresh")}</button></div></header>
         <div class="page-content">
-          <section class="page-heading">
-            <div>
-              <p class="eyebrow">INTELIJEN PENGADAAN <span>·</span> AUDIT PROYEK</p>
-              <h1>Pemeriksaan pengadaan</h1>
-              <p class="page-intro">Bandingkan persyaratan, bukti penyedia, adendum, dan klausul kontrak secara otomatis dan jujur.</p>
-            </div>
-            <div class="heading-actions">
-              <button class="button button-secondary" data-action="load-sample-tender" title="Muat dokumen tender contoh untuk evaluasi 1-klik">${icon("file")} Coba dengan contoh</button>
-              <button class="button button-primary" data-action="new-audit">${icon("plus")} Periksa dokumen</button>
-            </div>
-          </section>
+          ${renderCommandCenter(state)}
+
+          ${renderTrustStrip(state)}
 
           <section class="metrics-grid" aria-label="Ringkasan metrik">
             <article class="metric-card"><div class="metric-top"><span>Audit tersimpan</span><span class="metric-icon icon-blue">${icon("audit")}</span></div><strong class="metric-value">${number(overview.total_audits || 0)}</strong><div class="metric-foot"><span class="metric-caption">Riwayat lokal</span><span class="metric-neutral">${number(overview.local_audits_shown || 0)} audit terbaru</span></div></article>
@@ -619,7 +701,7 @@ export function renderApp(state) {
                   <div><span class="integration-symbol symbol-local">R</span><span><strong>Mesin aturan Python + tabel keputusan risiko</strong><small>Aktif · menentukan seluruh verdict dan tingkat risiko</small></span><em class="connection-ready">SIAP</em></div>
                   <div><span class="integration-symbol symbol-langflow">L</span><span><strong>Langflow</strong><small>${state.integrations?.langflow?.configured ? "Opt-in · flow sudah diatur" : "Belum dikonfigurasi"}</small></span><em class="connection-idle">${state.integrations?.langflow?.configured ? "DIATUR" : "OPSIONAL"}</em></div>
                   <div><span class="integration-symbol symbol-composio">C</span><span><strong>Composio</strong><small>${state.integrations?.composio?.configured ? "API key diatur; koneksi belum diverifikasi" : "Belum dikonfigurasi; tindakan belum tersedia"}</small></span><em class="connection-idle">${state.integrations?.composio?.configured ? "DIATUR" : "OPSIONAL"}</em></div>
-                  <div><span class="integration-symbol symbol-bob">G</span><span><strong>IBM watsonx.ai (Granite)</strong><small>${state.integrations?.watsonx?.configured ? `${escapeHtml(state.integrations.watsonx.model_id)} · kredensial diatur${state.integrations.watsonx.selected_for_extraction ? " · dipakai untuk ekstraksi" : ""}` : "Kredensial belum diatur · ekstraksi AI tidak berjalan"}</small></span><em class="${state.integrations?.watsonx?.configured ? "connection-ready" : "connection-idle"}">${state.integrations?.watsonx?.configured ? "DIATUR" : "BELUM"}</em></div>
+                  <div><span class="integration-symbol symbol-bob">W</span><span><strong>IBM watsonx.ai</strong><small>${state.integrations?.watsonx?.configured ? `${escapeHtml(state.integrations.watsonx.model_id)} · region ${escapeHtml(state.integrations.watsonx.region || "-")}${state.integrations.watsonx.selected_for_extraction ? " · dipakai untuk ekstraksi" : ""}` : "Kredensial belum diatur · ekstraksi AI tidak berjalan"}${state.integrations?.watsonx?.advice ? `<br><b class="text-warn">${escapeHtml(state.integrations.watsonx.advice)}</b>` : ""}</small></span><em class="${state.integrations?.watsonx?.configured ? "connection-ready" : "connection-idle"}">${state.integrations?.watsonx?.configured ? "DIATUR" : "BELUM"}</em></div>
                   <div><span class="integration-symbol symbol-bob">B</span><span><strong>IBM Bob (MCP)</strong><small>${state.integrations?.ibm_bob?.mcp_config_present ? "File konfigurasi MCP ada · belum diverifikasi end-to-end" : "Konfigurasi MCP tidak ditemukan"}</small></span><em class="connection-idle">${state.integrations?.ibm_bob?.mcp_config_present ? "KONFIG" : "BELUM"}</em></div>
                 </div>
                 <div style="margin-top:10px;text-align:right">
@@ -642,9 +724,10 @@ export function renderLogin(state) {
   const roles = state.session?.roles || [{ role: "pokja", label: "Pokja Pemilihan", pin_required: false }, { role: "vendor", label: "Penyedia / Vendor", pin_required: false }];
   const copy = {
     pokja: { title: "Pokja Pemilihan", text: "Evaluasi dokumen penawaran, catat keputusan reviewer, unduh draf Berita Acara, surat klarifikasi, dan BoQ Excel.", icon: "shield" },
-    vendor: { title: "Penyedia / Vendor", text: "Cek kesiapan berkas sebelum submit, temukan klausul bermasalah di dokumen tender, unduh draf sanggahan dan BoQ Excel.", icon: "audit" },
+    vendor: { title: "Penyedia / Vendor", text: "Cek kesiapan berkas sebelum submit, temukan klausul bermasalah di dokumen tender, unduh draf surat ke Pokja dan BoQ Excel.", icon: "audit" },
   };
   return `
+    ${presenterHint(state)}
     <main class="login-screen">
       <section class="login-card" aria-labelledby="login-title">
         <p class="eyebrow">BIDSENTRY · INTELIJEN PENGADAAN</p>
@@ -676,7 +759,7 @@ export function renderDialogs(state) {
           <label class="form-label">Nomor pengumuman<input name="notice_number" maxlength="120" placeholder="Nomor pengumuman LPSE" /></label>
           <label class="form-label">Pokja / instansi<input name="pokja_name" maxlength="240" placeholder="Nama Pokja Pemilihan" /></label>
           <label class="form-label">Nama perusahaan<input name="company_name" maxlength="240" placeholder="Nama penyedia" /></label>
-          <label class="form-label">Batas akhir penawaran (opsional)<input name="bid_deadline" type="text" placeholder="Contoh: 15-08-2026 atau 15 Agustus 2026" /></label>
+          <label class="form-label">Batas akhir penawaran (wajib untuk menilai masa berlaku SBU)<input name="bid_deadline" type="text" placeholder="Contoh: 15-08-2026 atau 15 Agustus 2026" /></label>
           <label class="form-label">Nilai kontrak / penawaran (IDR)<input name="contract_value_idr" type="number" min="0" step="1" placeholder="Opsional, untuk simulasi denda" /></label>
         </div>
         <label class="form-label">Peran reviewer<select name="review_role" class="role-select"><option value="procurement">Tim pengadaan — syarat paket, bukti, dan adendum</option><option value="legal">Tim hukum — klausul, perubahan, dan pertanyaan legal</option></select><small class="role-help">Peran ini mengarahkan fokus saran Langflow. Hasil aturan lokal dan keputusan akhir tetap pada reviewer.</small></label>
@@ -702,12 +785,12 @@ export function renderDialogs(state) {
           <div class="form-grid"><label class="form-label">URL server<input name="langflow_url" type="url" maxlength="2048" required placeholder="http://localhost:7860"></label><label class="form-label">Flow ID<input name="langflow_flow_id" maxlength="240" placeholder="ID flow Langflow"></label><label class="form-label">API key<input name="langflow_api_key" type="password" autocomplete="new-password" maxlength="4096" placeholder="Tempel key baru atau biarkan kosong"></label><label class="form-label">Timeout (detik)<input name="langflow_timeout_seconds" type="number" min="1" max="120" step="1" required></label></div>
           <label class="settings-clear"><input name="clear_langflow_api_key" type="checkbox"><span>Hapus API key Langflow yang tersimpan</span></label>
         </section>
-        <section class="settings-section"><div class="settings-section-heading"><div><h3>IBM watsonx.ai (Granite-3-8B)</h3><p>Model fondasi IBM Granite untuk penalaran semantik KAK, deteksi lock-in, dan ekstraksi entitas pengadaan.</p></div><span class="settings-state" id="watsonx-key-status">Memeriksa…</span></div>
+        <section class="settings-section"><div class="settings-section-heading"><div><h3>IBM watsonx.ai</h3><p>Model fondasi di IBM watsonx.ai untuk mengekstrak kutipan KAK dan klausul kontrak; keputusan tetap dihitung Python.</p></div><span class="settings-state" id="watsonx-key-status">Memeriksa…</span></div>
           <div class="form-grid">
             <label class="form-label">API key IBM Cloud<input name="watsonx_api_key" type="password" autocomplete="new-password" maxlength="4096" placeholder="Tempel key baru atau biarkan kosong"></label>
             <label class="form-label">Project ID watsonx<input name="watsonx_project_id" maxlength="240" placeholder="ID Project watsonx.ai"></label>
             <label class="form-label form-field-wide">URL Layanan watsonx<input name="watsonx_url" type="text" inputmode="url" spellcheck="false" maxlength="2048" placeholder="https://us-south.ml.cloud.ibm.com"></label>
-            <label class="form-label">Model ID<input name="watsonx_model_id" maxlength="200" placeholder="ibm/granite-3-8b-instruct"></label>
+            <label class="form-label">Model ID<input name="watsonx_model_id" maxlength="200" placeholder="mistralai/mistral-small-3-1-24b-instruct-2503"></label>
           </div>
           <label class="settings-clear"><input name="clear_watsonx_api_key" type="checkbox"><span>Hapus API key IBM watsonx yang tersimpan</span></label>
         </section>
@@ -725,11 +808,17 @@ export function renderDialogs(state) {
       <div class="utility-dialog-head">
         <div>
           <p class="eyebrow">DRAF UNTUK DITINJAU</p>
-          <h2>Draf sanggahan (disusun server)</h2>
+          <h2>Draf surat ke Pokja (disusun server)</h2>
           <p id="objection-meta">Hanya kesenjangan terkonfirmasi pada dokumen tender dengan kutipan persis di teks sumber yang dimasukkan. Rujukan pasal wajib diverifikasi ahli hukum.</p>
         </div>
         <button class="icon-button" data-action="close-utility" aria-label="Tutup">${icon("close")}</button>
       </div>
+      <label class="form-label" for="objection-stage">Tahap tender saat ini
+        <select id="objection-stage">
+          <option value="pre_bid">Sebelum penawaran: permohonan penjelasan</option>
+          <option value="post_award">Setelah pengumuman pemenang: sanggah (5 hari kalender, peserta yang menawar)</option>
+        </select>
+      </label>
       <label class="form-label" for="objection-draft">Pratinjau draf (Markdown, dapat disunting sebelum disalin)<textarea id="objection-draft" rows="18"></textarea></label>
       <div class="utility-actions">
         <button class="button button-quiet" data-action="close-utility">Tutup</button>

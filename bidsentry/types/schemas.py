@@ -14,57 +14,6 @@ class ValidationError(ValueError):
         self.details = details or []
 
 
-def _string(payload: dict[str, Any], key: str, *, aliases: tuple[str, ...] = (), maximum: int = 1_000_000) -> str:
-    value: Any = payload.get(key)
-    if value is None:
-        for alias in aliases:
-            if payload.get(alias) is not None:
-                value = payload[alias]
-                break
-    if value is None:
-        return ""
-    if not isinstance(value, str):
-        raise ValidationError(f"'{key}' must be a string.", [{"field": key, "issue": "expected_string"}])
-    value = value.strip()
-    if len(value) > maximum:
-        raise ValidationError(f"'{key}' exceeds the {maximum:,} character limit.", [{"field": key, "issue": "too_long"}])
-    return value
-
-
-@dataclass(frozen=True)
-class AuditRequest:
-    package_name: str
-    dok_pemilihan: str
-    adendum: str
-    pustaka: str
-    allow_external_processing: bool = False
-    review_role: str = "procurement"
-
-    @classmethod
-    def from_payload(cls, payload: Any) -> "AuditRequest":
-        if not isinstance(payload, dict):
-            raise ValidationError("Request body must be a JSON object.", [{"field": "$", "issue": "expected_object"}])
-        package_name = _string(payload, "package_name", aliases=("nama_paket",), maximum=240) or "Audit dokumen baru"
-        dok = _string(payload, "dok_pemilihan", aliases=("document_text",))
-        addendum = _string(payload, "adendum", aliases=("addendum_text",))
-        credentials = _string(payload, "pustaka", aliases=("credentials_text",))
-        if not any((dok, addendum, credentials)):
-            raise ValidationError(
-                "Provide at least one document field: dok_pemilihan, adendum, or pustaka.",
-                [{"field": "dok_pemilihan", "issue": "at_least_one_document_required"}],
-            )
-        consent = payload.get("allow_external_processing", False)
-        if not isinstance(consent, bool):
-            raise ValidationError("'allow_external_processing' must be a boolean.", [{"field": "allow_external_processing", "issue": "expected_boolean"}])
-        review_role = payload.get("review_role", "procurement")
-        if not isinstance(review_role, str) or review_role not in {"procurement", "legal"}:
-            raise ValidationError("Pilih peran pengadaan atau hukum.", [{"field": "review_role", "issue": "invalid_value"}])
-        return cls(package_name, dok, addendum, credentials, consent, review_role)
-
-    def documents(self) -> dict[str, str]:
-        return {"dok_pemilihan": self.dok_pemilihan, "adendum": self.adendum, "pustaka": self.pustaka}
-
-
 @dataclass(frozen=True)
 class DispatchRequest:
     payload: dict[str, Any]

@@ -3,11 +3,16 @@
 
 Checks credentials, connectivity, and reports real live status to docs/INTEGRATION_STATUS.md.
 Exits cleanly (0) even when credentials are unconfigured to allow graceful evaluation by judges.
+
+With ``--generate`` it also sends one short synthetic document through the real
+extraction prompt and records the tokens IBM reports, which proves more than
+authentication. It spends a very small amount of quota.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -38,12 +43,10 @@ def verify_watsonx() -> dict[str, str]:
 
     settings = Settings.from_environment()
     watsonx_svc = WatsonxService(settings)
-    svc_status = watsonx_svc.status()
 
     file_env = read_env_file()
     api_key = os.environ.get("WATSONX_API_KEY") or os.environ.get("LLM_API_KEY") or file_env.get("WATSONX_API_KEY") or file_env.get("LLM_API_KEY") or ""
     project_id = os.environ.get("WATSONX_PROJECT_ID") or file_env.get("WATSONX_PROJECT_ID") or ""
-    url = os.environ.get("WATSONX_URL") or file_env.get("WATSONX_URL") or settings.watsonx_url or "https://us-south.ml.cloud.ibm.com"
     model_id = os.environ.get("LLM_MODEL_NAME") or file_env.get("LLM_MODEL_NAME") or watsonx_svc.default_model_id
 
     result = {
@@ -52,26 +55,33 @@ def verify_watsonx() -> dict[str, str]:
         "latency_ms": "—",
         "model_id": model_id,
         "service_backend": f"WatsonxService initialized (configured={watsonx_svc.is_configured})",
-        "instructions": "Setel WATSONX_API_KEY dan WATSONX_PROJECT_ID pada environment atau file .env lokal untuk mengaktifkan ekstraksi semantik via IBM Granite.",
+        "instructions": "Setel WATSONX_API_KEY dan WATSONX_PROJECT_ID pada environment atau file .env lokal untuk mengaktifkan ekstraksi semantik via IBM watsonx.ai.",
     }
 
     if not api_key or not project_id:
         return result
 
     try:
-        from ibm_watsonx_ai import Credentials
-        from ibm_watsonx_ai.foundation_models import ModelInference
+        import ibm_watsonx_ai  # noqa: F401  (dependency check only)
 
+        # Same check the app uses: fetch the model specification (no tokens generated).
+        # It distinguishes invalid credentials from a model that is not offered in the
+        # configured region/project, which a generation probe cannot.
         t0 = time.perf_counter()
-        credentials = Credentials(url=url, api_key=api_key)
-        model = ModelInference(model_id=model_id, credentials=credentials, project_id=project_id)
-        test_prompt = "Instruksi: Jawab 'OK' jika sistem online."
-        response = model.generate_text(prompt=test_prompt)
+        connection = watsonx_svc.test_connection()
         elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
-
-        result["status"] = "VERIFIED_ONLINE"
-        result["message"] = f"Berhasil terkoneksi ke IBM watsonx ({model_id}). Respon: {str(response).strip()[:50]}"
         result["latency_ms"] = f"{elapsed_ms} ms"
+        result["message"] = connection.get("message", "")[:400]
+        if connection.get("status") == "connected":
+            result["status"] = "VERIFIED_ONLINE"
+        elif connection.get("status") == "model_unavailable":
+            result["status"] = "MODEL_UNAVAILABLE_IN_REGION"
+            result["instructions"] = (
+                "Kredensial valid. Atur WATSONX_MODEL_ID ke salah satu model chat yang tersedia di region proyek."
+            )
+        else:
+            result["status"] = "CONNECTION_FAILED"
+            result["instructions"] = "Pastikan API key, Project ID, region, dan kuota watsonx Cloud aktif."
     except ImportError:
         result["status"] = "MISSING_DEPENDENCY"
         result["message"] = "SKIPPED - Package 'ibm-watsonx-ai' belum terpasang di Python virtual environment."
@@ -82,6 +92,39 @@ def verify_watsonx() -> dict[str, str]:
         result["instructions"] = "Pastikan API key, Project ID, dan kuota watsonx Cloud aktif."
 
     return result
+
+GENERATION_PLACEHOLDER = "Belum dijalankan; gunakan `python scripts/verify_watsonx.py --generate`."
+
+
+def verify_generation() -> str:
+    """One real extraction call on a synthetic sentence; returns a one-line result."""
+    from bidsentry.config import Settings
+    from bidsentry.evaluators.engine import EvaluationEngine, EvaluationRequest
+
+    settings = Settings.from_environment()
+    document = (
+        "BAB II. Spesifikasi Teknis\n"
+        "Pompa utama menggunakan merek Grundfos CR 10 sebanyak 2 unit.\n"
+        "Masa pemasukan penawaran selama 3 hari kerja."
+    )
+    result = EvaluationEngine(settings).evaluate(EvaluationRequest(package_name="Probe sintetis", dok_pemilihan=document, allow_external_processing=True))
+    contextual = result["contextual_extraction"]
+    call = next((step for step in result["proof_log"] if step["kind"] == "ai_call"), {})
+    outputs = call.get("outputs", {})
+    stamp = time.strftime("%Y-%m-%d %H:%M UTC", time.gmtime())
+    return (
+        f"{contextual.get('status')} pada {stamp}: {outputs.get('input_tokens')} token masuk, {outputs.get('output_tokens')} token keluar, "
+        f"{call.get('duration_ms')} ms, {len(contextual.get('items', []))} kutipan terverifikasi, {contextual.get('rejected_quotes_count', 0)} ditolak (dokumen sintetis)."
+    )
+
+
+def previous_generation_result() -> str:
+    if STATUS_DOC_PATH.is_file():
+        match = re.search(r"\*\*Uji Generasi\*\* \| — \| (.+?) \|$", STATUS_DOC_PATH.read_text(encoding="utf-8"), re.M)
+        if match:
+            return match.group(1)
+    return GENERATION_PLACEHOLDER
+
 
 def verify_bob_mcp() -> dict[str, str]:
     if not MCP_CONFIG_PATH.is_file():
@@ -97,7 +140,10 @@ def verify_bob_mcp() -> dict[str, str]:
         "instructions": "Jalankan Langflow lokal di port 7860 untuk menghubungkan agentic MCP server.",
     }
 
-def update_status_document(watsonx_res: dict[str, str], bob_res: dict[str, str]):
+def update_status_document(watsonx_res: dict[str, str], bob_res: dict[str, str], generation: str):
+    from bidsentry.evaluators.rule_catalog import all_rules
+
+    rule_count = len(all_rules())
     content = f"""# Status Integrasi Teknologi IBM & Layanan Eksternal
 
 > **Dokumen Transparansi Teknis**: Dihasilkan oleh `scripts/verify_watsonx.py`.
@@ -107,18 +153,19 @@ Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated
 
 ---
 
-## 1. IBM watsonx.ai (Model Foundation: IBM Granite)
+## 1. IBM watsonx.ai
 
 | Komponen | Status Saat Ini | Keterangan |
 | :--- | :--- | :--- |
 | **Kredensial** | `{watsonx_res['status']}` | `{watsonx_res['message']}` |
-| **Model ID** | `{watsonx_res['model_id']}` | Standar: `ibm/granite-3-8b-instruct` |
+| **Model ID** | `{watsonx_res['model_id']}` | Model chat yang dipanggil lewat watsonx Chat API (dapat diganti via `WATSONX_MODEL_ID`) |
 | **Latensi Uji** | `{watsonx_res['latency_ms']}` | Nilai aktual saat probe dijalankan |
+| **Uji Generasi** | — | {generation} |
 | **Panduan Aktivasi** | — | {watsonx_res['instructions']} |
 
 ### Peran IBM watsonx dalam Arsitektur BidSentry:
-- **Tingkat 1 (Local Engine)**: Menjalankan aturan deterministik Perpres 12/2021 secara 100% lokal, offline, dan tanpa LLM untuk kepatuhan regulasi mutlak.
-- **Tingkat 2 (watsonx Granite Advisory)**: Bila diaktifkan oleh pengguna, model IBM Granite digunakan untuk *semantic document extraction* sekunder (misal: merangkum kualifikasi tenaga ahli dan SLA). Seluruh data disanitasi oleh modul PII masking sebelum dikirim.
+- **Tingkat 1 (Local Engine)**: Menjalankan aturan deterministik di server BidSentry tanpa LLM dan tanpa koneksi keluar.
+- **Tingkat 2 (watsonx.ai)**: Bila disetujui pengguna per audit, model di IBM watsonx.ai mengekstrak kutipan (merek, jadwal, adendum, personel, SLA) dari cuplikan maksimal 48.000 karakter yang sudah disensor. Kutipan dicocokkan persis dengan dokumen. Kandidat yang lolos aturan Python menjadi temuan; kandidat merek di luar pola aturan ditampilkan untuk dicek manusia dan tidak memengaruhi verdict.
 
 ---
 
@@ -126,7 +173,7 @@ Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated
 
 | Komponen | Status Saat Ini | Keterangan |
 | :--- | :--- | :--- |
-| **Konfigurasi MCP** | `{bob_res['status']}` | `{bob_res['message']}` |
+| **Konfigurasi MCP** | `{bob_res['status']}` | `{bob_res['message']}` Hanya berkas konfigurasi; koneksi end-to-end belum diuji. |
 | **Transport** | `stdio` | Standar MCP specification |
 | **Target Eksekusi** | `langflow run --mcp-server` | Port 7860 |
 | **Panduan Aktivasi** | — | {bob_res['instructions']} |
@@ -139,7 +186,7 @@ Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated
 
 ## 3. Komponen Pendukung Lainnya
 
-- **Mesin Aturan Lokal**: `READY` (14 aturan deklaratif Perpres 12/2021 aktif secara deterministik dan offline).
+- **Mesin Aturan Lokal**: `READY` ({rule_count} aturan deklaratif aktif secara deterministik dan offline).
 - **Langflow Advisory**: Terintegrasi via HTTP REST client (`bidsentry/services/langflow_service.py`), mode opt-in dengan konfirmasi manual pengguna.
 - **Composio Automation**: Integrasi kalender dan dokumen tender, mode human-in-the-loop (memerlukan persetujuan eksplisit sebelum menyiapkan aksi).
 """
@@ -157,11 +204,16 @@ def main():
     if watsonx_status['latency_ms'] != "—":
         print(f"Latensi            : {watsonx_status['latency_ms']}")
 
+    generation = previous_generation_result()
+    if "--generate" in sys.argv[1:]:
+        generation = verify_generation()
+        print(f"Uji generasi       : {generation}")
+
     bob_status = verify_bob_mcp()
     print(f"\nBob MCP Status     : {bob_status['status']}")
     print(f"Pesan              : {bob_status['message']}")
 
-    update_status_document(watsonx_status, bob_status)
+    update_status_document(watsonx_status, bob_status, generation)
     print("=" * 60)
     print("Verifikasi selesai secara aman (Exit code: 0).")
     return 0

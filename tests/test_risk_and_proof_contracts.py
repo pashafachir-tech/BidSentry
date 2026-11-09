@@ -69,7 +69,8 @@ def test_engine_emits_catalog_backed_findings_and_proof_log(settings: Settings) 
     assert "risk_score" not in result
     for finding in result["findings"]:
         assert finding["rule_family"] == family_of(finding["id"])
-        assert finding["legal_verification"] == "PERLU_VERIFIKASI_HUKUM"
+        assert finding["legal_verification"] in {"DIPERIKSA_NASKAH", "DIPERIKSA_SEKUNDER", "PERLU_VERIFIKASI_HUKUM"}
+        assert all(citation["status"] for citation in finding["legal_basis"])
     kinds = [step["kind"] for step in result["proof_log"]]
     assert kinds[0] == "input" and "decision" in kinds and "calculation" in kinds
     over = next(step for step in result["proof_log"] if step["inputs"].get("rule") == "FIN-OVER-BUDGET")
@@ -94,9 +95,12 @@ def test_ai_candidates_are_revalidated_before_affecting_verdict(settings: Settin
         dok_pemilihan="Kendaraan operasional minimal 7 penumpang.\nMasa sanggah 5 hari kerja.",
         allow_external_processing=True,
     ))
-    # Neither candidate passes the deterministic rules, so the AI cannot create a red flag.
-    assert all(item["validation"]["status"] == "not_confirmed" for item in result["contextual_extraction"]["items"])
+    # Neither candidate passes the deterministic rules, so the AI cannot create a red flag;
+    # the brand candidate only asks a human to look and stays out of the decision table.
+    statuses = {item["category"]: item["validation"]["status"] for item in result["contextual_extraction"]["items"]}
+    assert statuses == {"brand_lockin_signals": "needs_human_review", "timeline_anomalies": "not_confirmed"}
     assert not any(finding["origin"] == "ai_extraction_python_validated" for finding in result["findings"])
+    assert result["risk"]["counts"]["REVIEW"] == 0
     call = next(step for step in result["proof_log"] if step["kind"] == "ai_call")
     assert call["outputs"]["provider"] == "watsonx" and call["outputs"]["input_tokens"] == 900 and call["duration_ms"] == 812.0
     assert any(step["kind"] == "pii_redaction" for step in result["proof_log"])
@@ -150,3 +154,38 @@ def test_pin_required_when_configured_or_non_local(settings: Settings) -> None:
     with pytest.raises(AuthError) as disabled:
         login("vendor", None, replace(settings, host="0.0.0.0"))
     assert disabled.value.code == "ROLE_DISABLED"
+
+
+# ------------------------------------------------------------- resilience
+def test_slow_provider_falls_back_to_local_rules(settings: Settings) -> None:
+    import time as _time
+    langflow = LangflowService(replace(settings, langflow_timeout_seconds=0.1))
+
+    def _hang(prompt: str, consent: bool) -> dict:
+        _time.sleep(12)
+        return {"status": "success", "text": "{}"}
+
+    langflow.run_structured_prompt = _hang  # type: ignore[assignment]
+    engine = EvaluationEngine(replace(settings, langflow_timeout_seconds=0.1), langflow)
+    started = _time.perf_counter()
+    result = engine.evaluate(EvaluationRequest(contract_draft="Denda 1/1000 per hari tanpa batas maksimal.", allow_external_processing=True))
+    assert _time.perf_counter() - started < 10  # budget is ~5 s; the provider would take 12 s
+    assert result["engine_mode"]["mode"] == "local_fallback"
+    assert result["engine_mode"]["label"] == "Mode Deterministik Lokal (Fallback Aktif)"
+    assert result["verdict"] == "NO-GO"  # local rules still produce the full audit
+
+
+def test_provider_exception_never_breaks_the_audit(settings: Settings) -> None:
+    langflow = LangflowService(settings)
+    langflow.run_structured_prompt = MagicMock(side_effect=RuntimeError("boom"))
+    result = EvaluationEngine(settings, langflow).evaluate(EvaluationRequest(dok_pemilihan="Masa sanggah 2 hari kerja.", allow_external_processing=True))
+    assert result["engine_mode"]["mode"] == "local_fallback"
+    assert result["contextual_extraction"]["status"] == "provider_error"
+
+
+def test_session_secret_survives_restart(settings: Settings) -> None:
+    from bidsentry.core import auth
+    token = login("pokja", None, settings)
+    auth._SECRET_CACHE.clear()  # simulate a fresh process
+    assert role_from_token(token, settings) is Role.POKJA
+    assert (settings.audit_log_path.parent / auth.SECRET_FILENAME).is_file()

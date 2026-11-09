@@ -7,18 +7,33 @@ Rows come from :func:`normalize_finding`, so engine findings (``clause`` /
 
 from __future__ import annotations
 
-import io
 from collections.abc import Sequence
 from html import escape
 from typing import Any
 
-from bidsentry.generators._document_support import DocumentGenerationError, clean_cell, normalize_finding, render_pdf, require_docx
+from bidsentry.generators._document_support import clean_cell, normalize_finding, render_pdf
+from bidsentry.generators.naskah_dinas import REGULATION_BASIS, OfficialDocument
+from bidsentry.generators.sanggahan_builder import STATUS_PHRASE, citations_for
 
 _DISCLAIMER = (
     "Draf ini menyajikan catatan pemeriksaan berbasis bukti untuk verifikasi dan pengesahan manusia. "
     "Sinyal otomatis bukan keputusan lulus/gugur, kesimpulan pelanggaran, atau penetapan persekongkolan."
 )
 _HEADERS = ("No.", "Kode / temuan", "Status", "Bukti / lokasi", "Catatan pemeriksaan", "Keputusan Pokja")
+
+
+def _contextual_citations(findings: Sequence[dict[str, Any]]) -> list[dict[str, str]]:
+    """Unique citations for findings that still need Pokja attention, in first-seen order."""
+    seen: set[str] = set()
+    output: list[dict[str, str]] = []
+    for item in findings:
+        if not isinstance(item, dict) or item.get("status") not in {"GAP", "EXPIRING", "REVIEW"}:
+            continue
+        for citation in citations_for(item):
+            if citation.get("formal") and citation["formal"] not in seen and citation.get("status") != "PERLU_VERIFIKASI_HUKUM":
+                seen.add(citation["formal"])
+                output.append(citation)
+    return output
 
 
 def _rows(findings: Sequence[dict[str, Any]]) -> list[dict[str, str]]:
@@ -131,45 +146,58 @@ def build_minutes_docx(
     risk: dict[str, Any] | None = None,
     meta: dict[str, Any] | None = None,
 ) -> bytes:
-    Document = require_docx()
-    document = Document()
-    document.add_heading("BERITA ACARA HASIL EVALUASI (DRAF)", 0)
-    for line in _meta_lines(tender_id, vendor_name, meta):
-        document.add_paragraph(line)
-    document.add_paragraph(_DISCLAIMER)
+    """Berita Acara Hasil Evaluasi in official-letter layout, ready for Pokja signatures."""
+    meta = meta or {}
+    rows = _rows(findings)
+    doc = OfficialDocument()
+    doc.letterhead(
+        ["[KEMENTERIAN / LEMBAGA / PEMERINTAH DAERAH]", "UNIT KERJA PENGADAAN BARANG/JASA", f"KELOMPOK KERJA PEMILIHAN {clean_cell(meta.get('pokja_name') or '', 120).upper()}".strip()],
+        ["[Alamat kantor] · Telp. [nomor] · Laman [alamat LPSE]"],
+    )
+    doc.title("Berita Acara Hasil Evaluasi", "Nomor: [nomor BA]")
+    package = clean_cell(meta.get("package_name") or tender_id, 240)
+    doc.body(
+        "Pada hari ini [hari], tanggal [tanggal] bulan [bulan] tahun [tahun], bertempat di [tempat], Kelompok Kerja Pemilihan "
+        f"telah melaksanakan evaluasi dokumen untuk paket {package} (kode tender {clean_cell(tender_id, 120)}) dengan peserta {clean_cell(vendor_name, 240)}."
+    )
+    doc.heading("A. DASAR")
+    doc.numbered("1.", REGULATION_BASIS + ".")
+    doc.numbered("2.", "Peraturan Lembaga Kebijakan Pengadaan Barang/Jasa Pemerintah tentang pedoman pelaksanaan pengadaan melalui penyedia yang berlaku, serta Dokumen Pemilihan paket beserta adendumnya.")
+    contextual = _contextual_citations(findings)
+    for number, citation in enumerate(contextual, start=3):
+        doc.numbered(f"{number}.", f"{citation['formal']}, yang pada pokoknya mengatur bahwa {citation['substance']} [{STATUS_PHRASE.get(citation['status'], 'wajib diverifikasi ahli hukum')}].")
+    doc.heading("B. HASIL PEMERIKSAAN BERBANTU SISTEM")
     if (risk_text := _risk_line(risk)):
-        document.add_paragraph().add_run(risk_text).bold = True
-    table = document.add_table(rows=1, cols=len(_HEADERS))
-    table.style = "Table Grid"
-    for cell, label in zip(table.rows[0].cells, _HEADERS):
-        cell.text = label
-    for index, row in enumerate(_rows(findings), 1):
-        cells = table.add_row().cells
-        cells[0].text = str(index)
-        cells[1].text = f"{row['code']}\n{row['title']}"
-        cells[2].text = row["status_label"]
-        cells[3].text = f"{row['locator']}\n{row['quote']}"
-        cells[4].text = row["note"]
-        cells[5].text = row["reviewer"]
-    references = [row for row in _rows(findings) if row["legal_reference"]]
+        doc.body(risk_text, indent_first=False, bold=True)
+    counts: dict[str, int] = {}
+    for row in rows:
+        counts[row["status_label"]] = counts.get(row["status_label"], 0) + 1
+    if counts:
+        doc.body("Ringkasan status: " + "; ".join(f"{label} {count}" for label, count in counts.items()) + ".", indent_first=False)
+    doc.grid(
+        ("No.", "Kode / ketentuan", "Status", "Bukti dan lokasi", "Keputusan Pokja"),
+        [(str(i), f"{r['code']}\n{r['title']}", r["status_label"], f"{r['quote']}\n({r['locator']})", r["reviewer"] if r["reviewer"] != "[Keputusan reviewer]" else "") for i, r in enumerate(rows, 1)]
+        or [("—", "Tidak ada temuan", "—", "—", "")],
+        (1.0, 4.0, 2.2, 6.0, 2.3),
+    )
+    references = [item for item in findings if isinstance(item, dict) and item.get("status") in {"GAP", "EXPIRING", "REVIEW"} and citations_for(item)]
     if references or legal_mappings:
-        document.add_heading("Rujukan hukum kandidat (perlu verifikasi hukum)", level=1)
-        for row in references:
-            document.add_paragraph(f"{row['code']}: {row['legal_reference']}", style="List Bullet")
+        doc.heading("C. DASAR HUKUM PER TEMUAN (STATUS VERIFIKASI DICANTUMKAN)")
+        for index, item in enumerate(references, 1):
+            formal = "; ".join(f"{c.get('formal', '')} [{STATUS_PHRASE.get(c.get('status', ''), 'wajib diverifikasi ahli hukum')}]" for c in citations_for(item))
+            doc.numbered(f"{index}.", f"{clean_cell(item.get('id'), 80)}: {formal}")
         for item in legal_mappings:
             refs = item.get("candidate_references") or []
-            ref_names = "; ".join(clean_cell(ref.get("title"), 220) for ref in refs) or "Belum dipetakan"
-            document.add_paragraph(f"{clean_cell(item.get('signal'), 120)}: {ref_names}")
-            for question in item.get("review_questions", [])[:4]:
-                document.add_paragraph(clean_cell(question, 500), style="List Bullet")
-    document.add_heading("Catatan dan kesimpulan Pokja", level=1)
-    document.add_paragraph("[Diisi setelah verifikasi]")
-    document.add_heading("Anggota Pokja Pemilihan", level=1)
-    for number in range(1, 4):
-        document.add_paragraph(f"{number}. [Nama / tanda tangan]")
-    stream = io.BytesIO()
-    document.save(stream)
-    return stream.getvalue()
+            names = "; ".join(clean_cell(ref.get("title"), 220) for ref in refs) or "Belum dipetakan"
+            doc.numbered("•", f"{clean_cell(item.get('signal'), 120)}: {names}")
+    doc.heading("D. KESIMPULAN")
+    doc.body("[Diisi Pokja Pemilihan setelah memverifikasi setiap kutipan terhadap dokumen asli. Hasil sistem bukan keputusan lulus/gugur dan tidak menggantikan pertimbangan Pokja.]")
+    doc.body("Demikian Berita Acara ini dibuat dengan sebenarnya untuk dipergunakan sebagaimana mestinya.")
+    doc.heading("KELOMPOK KERJA PEMILIHAN")
+    doc.committee_signatures([("[Nama, NIP]", "Ketua"), ("[Nama, NIP]", "Sekretaris"), ("[Nama, NIP]", "Anggota")])
+    if meta.get("audit_id"):
+        doc.note(f"Referensi jejak audit BidSentry: {meta['audit_id']}. Rincian ekstraksi, kalkulasi, dan aturan keputusan dapat ditelusuri pada aplikasi.")
+    return doc.to_bytes()
 
 
 def build_minutes_pdf(
@@ -193,16 +221,6 @@ def build_minutes_pdf(
         "Anggota Pokja Pemilihan: [Nama / tanda tangan]",
     ]
     return render_pdf("BERITA ACARA HASIL EVALUASI (DRAF)", paragraphs, [rows])
-
-
-def write_minutes_docx(path: str, tender_id: str, vendor_name: str, findings: Sequence[dict[str, Any]], legal_mappings: Sequence[dict[str, Any]] = ()) -> str:
-    content = build_minutes_docx(tender_id, vendor_name, findings, legal_mappings)
-    try:
-        with open(path, "wb") as stream:
-            stream.write(content)
-    except OSError as exc:
-        raise DocumentGenerationError("BAHE draft could not be saved to the requested path.") from exc
-    return path
 
 
 def _markdown_cell(value: Any) -> str:

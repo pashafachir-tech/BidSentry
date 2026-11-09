@@ -56,11 +56,15 @@ export const api = {
   audits: ({ q = "", risk = "ALL" } = {}) => request(`/audits?${new URLSearchParams({ q, risk })}`),
   getAudit: (auditId) => request(`/audits/${encodeURIComponent(auditId)}`),
   proof: (auditId) => request(`/audits/${encodeURIComponent(auditId)}/proof`),
+  economics: (auditId, params = {}) => request(`/audits/${encodeURIComponent(auditId)}/economics?${new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([, value]) => value !== "" && value != null)))}`),
+  benchmarkSummary: () => request("/benchmark/summary"),
+  demoPackages: () => request("/demo/packages"),
   deleteAudit: (auditId) => request(`/audits?${new URLSearchParams({ audit_id: auditId })}`, { method: "DELETE" }),
   evaluateAudit: (input) => post("/v1/audit/evaluate", input),
 
   // Role-specific documents (enforced server-side)
   createSanggahan: (input) => post("/v1/audit/sanggahan-doc", input),        // Vendor
+  verifyAuditLog: () => request("/audit-log/verify"),
   createMinutes: (input) => post("/v1/audit/minutes-eval-doc", input),       // Pokja
   createClarification: (input) => post("/v1/audit/clarification-doc", input), // Pokja
   exportBoq: (auditId) => post("/export/boq", { audit_id: auditId }),

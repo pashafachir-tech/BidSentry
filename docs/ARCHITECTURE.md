@@ -1,6 +1,6 @@
 # Arsitektur Sistem BidSentry
 
-Dokumen ini mendokumentasikan arsitektur teknis sistem BidSentry v2.1, mencakup topologi modul, diagram alir data, urutan proses (sequence diagram), dan titik integrasi eksternal termasuk IBM watsonx / Bob MCP.
+Dokumen ini mendokumentasikan arsitektur teknis sistem BidSentry v4.2, mencakup topologi modul, diagram alir data, urutan proses (sequence diagram), dan titik integrasi eksternal termasuk IBM watsonx / Bob MCP.
 
 ---
 
@@ -25,7 +25,7 @@ flowchart TD
     end
 
     subgraph IBM_EXT["Integrasi Layanan Eksternal & IBM"]
-        L["IBM watsonx.ai Foundation Models\n(IBM Granite-3-8b-instruct)"]
+        L["IBM watsonx.ai Foundation Models\n(Chat API)"]
         M["Bob MCP Server\n(bob/mcp.json - Transport: stdio)"]
         N["Langflow Orchestrator\n(Local Port 7860)"]
         O["Composio Automation\n(Google Docs / Calendar)"]
@@ -68,13 +68,13 @@ sequenceDiagram
     API->>DocSvc: Ekstraksi teks dari berkas lokal
     DocSvc-->>API: Teks dokumen terstruktur (BoQ parsed)
 
-    API->>Engine: Evaluasi Kepatuhan Regulasi (Perpres 12/2021)
-    Note over Engine: Evaluasi 14 Aturan Deklaratif (Brand lock-in, Jadwal, Denda, Pagu)
+    API->>Engine: Evaluasi Kepatuhan Regulasi (Perpres 16/2018 s.t.d.t.d. 46/2025)
+    Note over Engine: Evaluasi 30 Aturan Deklaratif (Brand lock-in, Jadwal, Denda, Pagu)
     Engine-->>API: Temuan Matriks Kepatuhan & Verdict (GO/NO-GO)
 
     alt Persetujuan Analisis Eksternal Aktif (allow_external_processing = true)
         API->>API: Masking PII (Sensor NIK, NPWP, Kontak)
-        API->>watsonx: Request Semantic Extraction (IBM Granite)
+        API->>watsonx: Request Semantic Extraction (watsonx Chat API)
         watsonx-->>API: Konteks Ekstraksi Sekunder
         API->>API: Verifikasi Substring Kutipan & Pemulihan PII Asli
     else Analisis Eksternal Non-Aktif (Default)
@@ -93,7 +93,7 @@ sequenceDiagram
 
 1. **IBM watsonx.ai Foundation Models**:
    - Terintegrasi pada modul `bidsentry/services/langflow_service.py` (`_run_watsonx_json`).
-   - Menggunakan model `ibm/granite-3-8b-instruct` untuk penelaahan semantik dokumen kompleks (seperti sertifikasi personel TI dan komitmen SLA).
+   - Menggunakan model chat watsonx (default `mistralai/mistral-small-3-1-24b-instruct-2503`) untuk penelaahan semantik dokumen kompleks (seperti sertifikasi personel TI dan komitmen SLA).
    - Seluruh pemanggilan model dipagari oleh modul sensor PII (`bidsentry/lib/pii.py`) guna menjamin data identitas sensitif tidak ditransmisikan.
 
 2. **IBM Bob / Model Context Protocol (MCP)**:
@@ -107,3 +107,27 @@ sequenceDiagram
 - **Host Header & DNS Rebinding Guard**: Permintaan API dibatasi secara ketat hanya untuk host lokal terpercaya (`localhost`, `127.0.0.1`, atau host yang terdaftar dalam `BIDSENTRY_ALLOWED_HOSTS`).
 - **Autentikasi Token**: Operasi administratif dan konfigurasi sensitif dilindungi dengan bearer token internal (`BIDSENTRY_ACCESS_TOKEN`).
 - **Penyimpanan Bebas Teks Asli di Frontend**: Frontend tidak menyimpan teks dokumen mentah atau kredensial pengguna di `localStorage` peramban. State disimpan aman di dalam memori runtime sesi aktif.
+
+---
+
+## 5. Titik Masuk Server
+
+| Berkas | Peran |
+| :--- | :--- |
+| `server.py` | Peluncur CLI (`python server.py`); menolak start di host non-loopback tanpa `BIDSENTRY_ACCESS_TOKEN`. |
+| `bidsentry/asgi.py` | Aplikasi FastAPI: middleware keamanan (host guard, token, rute sensitif, header CSP), file statis, dan dispatcher API. |
+| `bidsentry/app.py` | Kontainer dependensi (`create_application`) yang merangkai seluruh layanan. |
+| `bidsentry/api/routes.py` | Dispatcher `ApiRouter` dengan kontrak respons Pydantic (`bidsentry/schemas/api.py`) dan pembatasan peran Pokja/Vendor. |
+| `bidsentry/api/jobs_router.py` | **Opsional.** Antrean audit asinkron (ARQ + Redis + SQLAlchemy) dan stream SSE. Hanya aktif bila `BIDSENTRY_JOB_ENGINE=redis` dan paket `requirements-jobs.txt` terpasang; antarmuka web tidak membutuhkannya. |
+
+## 6. Modul Kanonikal (Sumber Kebenaran Tunggal)
+
+| Kategori | Modul | Keterangan |
+| :--- | :--- | :--- |
+| **Mesin aturan** | `bidsentry.evaluators.engine` | Evaluasi deterministik 30 aturan dari `rule_catalog.py`; ambang angka di `config/rules.yaml`. |
+| **Keputusan risiko** | `bidsentry.services.risk_engine` | Tabel keputusan R0–R6 → Rendah / Sedang / Tinggi / Kritis dan verdict GO / NO-GO / BELUM CUKUP BUKTI. |
+| **Audit finansial** | `bidsentry.audits.financial`, `penalty_calculator`, `excel_parser` | Aritmetika BoQ, batas denda, dan parser Excel. |
+| **Layanan audit** | `bidsentry.services.audit_service` | Fasad `.audit()` (aturan) dan `.audit_comprehensive()` (modul forensik). |
+| **Jejak audit** | `bidsentry.lib.audit_log` | Log hash-chained; ProofLog per audit menampilkan langkah input → PII → AI → validasi → hitungan → keputusan → dokumen. |
+| **Integrasi AI** | `bidsentry.services.watsonx_service`, `langflow_service` | Chat API IBM watsonx.ai (model via `WATSONX_MODEL_ID`) dengan sensor PII sebelum transmisi; hasil AI hanya kandidat kutipan yang divalidasi ulang Python. |
+| **Dokumen keluaran** | `bidsentry.generators.*`, `services.boq_export_service` | Naskah dinas DOCX (BA, klarifikasi, sanggahan) dan BoQ XLSX. |

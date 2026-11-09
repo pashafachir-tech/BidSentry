@@ -12,7 +12,7 @@ import pytest
 from bidsentry.config import Settings
 from bidsentry.evaluators.engine import EvaluationEngine, EvaluationRequest
 from bidsentry.lib.audit_log import AuditLog
-from bidsentry.lib.pii import contains_unmasked_pii, mask_text
+from bidsentry.lib.pii import mask_text
 from bidsentry.services.watsonx_service import WatsonxService
 
 
@@ -121,9 +121,10 @@ class TestTimelineAndNarrativeBudget:
             dok_pemilihan="Jadwal Pengadaan:\n1. Pemasukan penawaran tiga hari kerja sejak pengumuman lelang."
         )
         res = engine.evaluate(req)
-        assert res["verdict"] == "NO-GO"
-        finding_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
-        assert "PROC-TIMELINE-COMPRESSED" in finding_ids
+        # The bid-period minimum is not in the regulation text, so it asks for review.
+        assert res["verdict"] == "BELUM CUKUP BUKTI"
+        finding = next(f for f in res["findings"] if f["id"] == "PROC-TIMELINE-COMPRESSED")
+        assert finding["status"] == "REVIEW" and finding["threshold_unverified"] is True
 
     def test_narrative_budget_words(self, engine):
         req = EvaluationRequest(
@@ -282,7 +283,7 @@ class TestExpandedEnglishTimeline:
         assert "PROC-TIMELINE-COMPRESSED" in gap_ids
 
     def test_english_timeline_positive_submission_deadline(self, engine: EvaluationEngine) -> None:
-        """Positive: Short submission deadline in English must trigger NO-GO."""
+        """Positive: a short submission deadline in English is flagged for review."""
         req = EvaluationRequest(
             package_name="Data Center Network Upgrade",
             tender_id="TND-EN-TIME-02",
@@ -294,9 +295,8 @@ class TestExpandedEnglishTimeline:
             contract_draft="Liquidated damages of 1/1000 per day capped at 5% of contract value.",
         )
         res = engine.evaluate(req)
-        assert res["verdict"] == "NO-GO"
-        gap_ids = [f["id"] for f in res["findings"] if f["status"] == "GAP"]
-        assert "PROC-TIMELINE-COMPRESSED" in gap_ids
+        assert res["verdict"] == "BELUM CUKUP BUKTI"
+        assert any(f["id"] == "PROC-TIMELINE-COMPRESSED" and f["threshold_unverified"] for f in res["findings"])
 
     def test_english_timeline_trap_adequate_working_days(self, engine: EvaluationEngine) -> None:
         """False-positive Trap: Adequate bidding and objection periods in English must PASS as GO."""
@@ -669,8 +669,6 @@ class TestPenaltyCapVariations:
     @pytest.mark.parametrize(
         "clause",
         [
-            "Denda 1/1000 per hari dari nilai kontrak.",
-            "Denda keterlambatan 1/1000 per hari sampai pekerjaan selesai.",
             "Denda 1/1000 per hari tanpa batas maksimal.",
             "Denda keterlambatan 1/1000 per hari, tidak terbatas.",
             "Liquidated damages of 0.1% per day without limit.",

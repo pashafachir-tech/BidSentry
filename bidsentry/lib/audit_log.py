@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import hmac
 import json
 import os
 import threading
@@ -14,10 +16,46 @@ from typing import Any
 from bidsentry.core.audit_trail import HashChainedAuditTrail, ImmutableAuditDigest
 
 
+TOMBSTONE = "tombstone"
+
+
 class AuditLog:
-    def __init__(self, path: Path):
+    """Hash-chained JSONL log.
+
+    With ``seal_key`` every record also carries an HMAC, so someone who edits the
+    file and recomputes the plain hashes is still caught unless they hold the key.
+    Deleting an audit replaces its records with tombstones that keep the chain
+    intact and leave a visible trace; the content itself is gone.
+    """
+
+    def __init__(self, path: Path, seal_key: bytes | None = None):
         self.path = path
+        self.seal_key = seal_key
         self._lock = threading.Lock()
+
+    @property
+    def sealed(self) -> bool:
+        return self.seal_key is not None
+
+    def _mac(self, entry_hash: str) -> str:
+        return hmac.new(self.seal_key or b"", entry_hash.encode("ascii"), hashlib.sha256).hexdigest()
+
+    def _source_path(self, audit_id: str) -> Path | None:
+        safe_name = "".join(c for c in str(audit_id) if c.isalnum() or c in ("-", "_"))
+        return self.sources_dir / f"{safe_name}.txt" if safe_name else None
+
+    def delete_source_text(self, audit_id: str) -> None:
+        path = self._source_path(audit_id)
+        if path is not None:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+    @staticmethod
+    def _tombstone(item: dict[str, Any]) -> dict[str, Any]:
+        kept = ("schema_version", "created_at", "previous_hash", "hash", "mac", "audit_id")
+        return {**{key: item[key] for key in kept if key in item}, "event_type": TOMBSTONE}
 
     @property
     def sources_dir(self) -> Path:
@@ -86,9 +124,8 @@ class AuditLog:
         return last_hash
 
     def append(self, event: dict[str, Any]) -> dict[str, Any]:
-        import hashlib
         # Document text is deliberately excluded from audit_log.jsonl for privacy compliance
-        cleaned_event = {k: v for k, v in event.items() if k not in ("source_text", "hash", "previous_hash")}
+        cleaned_event = {k: v for k, v in event.items() if k not in ("source_text", "hash", "previous_hash", "mac")}
         created_at = datetime.now(timezone.utc).isoformat()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self._lock:
@@ -102,6 +139,8 @@ class AuditLog:
             canonical_payload = json.dumps(base_record, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
             entry_hash = hashlib.sha256(f"{prev_hash}|{canonical_payload}".encode("utf-8")).hexdigest()
             record = {**base_record, "hash": entry_hash}
+            if self.seal_key is not None:
+                record["mac"] = self._mac(entry_hash)
             line = json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n"
             with self.path.open("a", encoding="utf-8") as stream:
                 stream.write(line)
@@ -112,7 +151,6 @@ class AuditLog:
         
         Returns (is_valid, record_count, status_message).
         """
-        import hashlib
         if not self.path.is_file():
             return True, 0, "No audit log file present."
         expected_prev = "0" * 64
@@ -134,11 +172,17 @@ class AuditLog:
                         if item["previous_hash"] != expected_prev:
                             return False, count, f"Broken chain on line {idx}: expected prev {expected_prev}, got {item['previous_hash']}"
                         actual_hash = item["hash"]
-                        base = {k: v for k, v in item.items() if k != "hash"}
-                        canonical_payload = json.dumps(base, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
-                        recomputed = hashlib.sha256(f"{expected_prev}|{canonical_payload}".encode("utf-8")).hexdigest()
-                        if recomputed != actual_hash:
-                            return False, count, f"Tampered record on line {idx}: hash mismatch"
+                        if item.get("event_type") != TOMBSTONE:
+                            base = {k: v for k, v in item.items() if k not in ("hash", "mac")}
+                            canonical_payload = json.dumps(base, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
+                            recomputed = hashlib.sha256(f"{expected_prev}|{canonical_payload}".encode("utf-8")).hexdigest()
+                            if recomputed != actual_hash:
+                                return False, count, f"Tampered record on line {idx}: hash mismatch"
+                        if self.seal_key is not None:
+                            if not item.get("mac"):
+                                return False, count, f"Unsealed record on line {idx}: no HMAC seal"
+                            if not hmac.compare_digest(str(item["mac"]), self._mac(str(actual_hash))):
+                                return False, count, f"Forged record on line {idx}: HMAC seal mismatch"
                         expected_prev = actual_hash
                 return True, count, "Hash chain verified successfully."
             except OSError as exc:
@@ -232,7 +276,8 @@ class AuditLog:
                     pass
             raise
 
-    def delete_audit(self, audit_id: str) -> bool:
+    def delete_audit(self, audit_id: str, actor_role: str | None = None) -> bool:
+        """Remove an audit's content and source text; tombstones keep the chain verifiable."""
         if not self.path.is_file() or not audit_id:
             return False
         with self._lock:
@@ -245,15 +290,19 @@ class AuditLog:
             for line in lines:
                 try:
                     item = json.loads(line)
-                    if isinstance(item, dict) and item.get("audit_id") == audit_id:
+                    if isinstance(item, dict) and item.get("audit_id") == audit_id and item.get("event_type") not in (TOMBSTONE, "audit.deleted"):
                         found = True
+                        kept_lines.append(json.dumps(self._tombstone(item), ensure_ascii=False, separators=(",", ":")))
                         continue
                 except (json.JSONDecodeError, TypeError):
                     pass
                 kept_lines.append(line)
             if found:
                 self._write_atomic(kept_lines)
-            return found
+        if found:
+            self.delete_source_text(audit_id)
+            self.append({"event_type": "audit.deleted", "audit_id": audit_id, "actor_role": actor_role})
+        return found
 
     def purge_older_than(self, days: int) -> int:
         if days <= 0 or not self.path.is_file():
@@ -266,22 +315,29 @@ class AuditLog:
                 return 0
             kept_lines = []
             purged = 0
+            expired_audits: set[str] = set()
             for line in lines:
                 try:
                     item = json.loads(line)
-                    if isinstance(item, dict) and "created_at" in item:
+                    if isinstance(item, dict) and "created_at" in item and item.get("event_type") != TOMBSTONE:
                         created = datetime.fromisoformat(str(item["created_at"]))
                         if created.tzinfo is None:
                             created = created.replace(tzinfo=timezone.utc)
                         if created < cutoff:
                             purged += 1
+                            if item.get("audit_id"):
+                                expired_audits.add(str(item["audit_id"]))
+                            if "hash" in item and "previous_hash" in item:
+                                kept_lines.append(json.dumps(self._tombstone(item), ensure_ascii=False, separators=(",", ":")))
                             continue
                 except Exception:
                     pass
                 kept_lines.append(line)
             if purged > 0:
                 self._write_atomic(kept_lines)
-            return purged
+        for audit_id in expired_audits:
+            self.delete_source_text(audit_id)
+        return purged
 
     def finding_exists(self, audit_id: str, finding_id: str) -> bool:
         return any(
@@ -340,4 +396,4 @@ class AuditLog:
         }
 
 
-__all__ = ["AuditLog", "HashChainedAuditTrail", "ImmutableAuditDigest"]
+__all__ = ["AuditLog", "HashChainedAuditTrail", "ImmutableAuditDigest", "TOMBSTONE"]

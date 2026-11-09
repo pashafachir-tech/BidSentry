@@ -1,4 +1,17 @@
-"""Extract text from user supplied procurement documents without storing files."""
+"""Extract text from user supplied procurement documents without storing files.
+
+Hardening rules (each one has a chaos test in ``tests/test_chaos_inputs.py``):
+
+* Empty, corrupted, password-protected or binary-disguised files are rejected
+  with a user-facing Indonesian message, never a stack trace.
+* Very large documents are *truncated*, not rejected: at most ``MAX_PDF_PAGES``
+  pages and ``MAX_EXTRACTED_CHARACTERS`` characters are read, and the response
+  carries ``truncated=True`` plus a warning the UI shows to the user.
+* Office files (DOCX/XLSX) are ZIP containers; their declared uncompressed size
+  is checked before parsing to stop decompression bombs.
+* A scanned PDF without a text layer returns no text and a warning. It never
+  injects placeholder text into the audit.
+"""
 
 from __future__ import annotations
 
@@ -12,12 +25,42 @@ from xml.etree import ElementTree
 
 from bidsentry.types.schemas import ValidationError
 
-
 MAX_DOCUMENT_BYTES = 8 * 1024 * 1024
 MAX_EXPANDED_FILE_BYTES = 8 * 1024 * 1024
+MAX_ZIP_UNCOMPRESSED_BYTES = 64 * 1024 * 1024
 MAX_EXTRACTED_CHARACTERS = 1_000_000
 MAX_PDF_PAGES = 500
+SCANNED_CHARS_PER_PAGE = 25
 SUPPORTED_EXTENSIONS = {".txt", ".md", ".csv", ".json", ".docx", ".pdf", ".xlsx"}
+
+
+def _reject(message: str, issue: str) -> ValidationError:
+    return ValidationError(message, [{"field": "file", "issue": issue}])
+
+
+class _Budget:
+    """Collects text up to the character cap and records why reading stopped."""
+
+    def __init__(self) -> None:
+        self.parts: list[str] = []
+        self.size = 0
+        self.truncated = False
+
+    def add(self, text: str) -> bool:
+        if self.truncated:
+            return False
+        room = MAX_EXTRACTED_CHARACTERS - self.size
+        if len(text) > room:
+            self.parts.append(text[:room])
+            self.size = MAX_EXTRACTED_CHARACTERS
+            self.truncated = True
+            return False
+        self.parts.append(text)
+        self.size += len(text)
+        return True
+
+    def text(self, separator: str = "\n") -> str:
+        return separator.join(self.parts)
 
 
 class DocumentExtractionService:
@@ -26,59 +69,84 @@ class DocumentExtractionService:
         extension = PurePath(safe_name).suffix.casefold()
         if extension not in SUPPORTED_EXTENSIONS:
             allowed = ", ".join(sorted(SUPPORTED_EXTENSIONS))
-            raise ValidationError(f"Format file belum didukung. Gunakan: {allowed}.", [{"field": "file", "issue": "unsupported_format"}])
-        if not isinstance(content, bytes) or not content:
-            raise ValidationError("File kosong atau tidak dapat dibaca.", [{"field": "file", "issue": "empty_file"}])
+            raise _reject(f"Format file belum didukung. Gunakan: {allowed}.", "unsupported_format")
+        if not isinstance(content, (bytes, bytearray)) or not content:
+            raise _reject("File kosong (0 byte). Unggah ulang dokumen yang berisi teks.", "empty_file")
+        content = bytes(content)
         if len(content) > MAX_DOCUMENT_BYTES:
-            raise ValidationError("Ukuran file maksimum 8 MB.", [{"field": "file", "issue": "file_too_large"}])
+            raise _reject("Ukuran file maksimum 8 MB. Pecah dokumen menjadi beberapa bagian.", "file_too_large")
 
-        extraction_mode = "plain_text"
-        excel_items_count = None
+        warnings: list[str] = []
+        truncated = False
         scanned_pdf = False
-
+        pages: int | None = None
+        excel_items_count: int | None = None
         try:
             if extension == ".docx":
-                text = self._docx(content)
+                self._guard_zip(content, "DOCX")
+                text, truncated = self._docx(content)
                 extraction_mode = "docx_xml_parser"
             elif extension == ".xlsx":
+                self._guard_zip(content, "Excel")
                 from bidsentry.audits.excel_parser import parse_boq_excel
-                excel_res = parse_boq_excel(content)
-                text = excel_res.get("text", "")
-                excel_items_count = len(excel_res.get("items", []))
+                excel = parse_boq_excel(content)
+                text = excel["text"]
+                excel_items_count = len(excel["items"])
+                warnings.extend(excel.get("warnings", []))
+                truncated = bool(excel.get("truncated"))
                 extraction_mode = "excel_table_parser"
             elif extension == ".pdf":
-                text, page_count, extraction_mode, scanned_pdf = self._pdf_analyzed(content)
+                text, pages, extraction_mode, scanned_pdf, truncated, pdf_warnings = self._pdf_analyzed(content)
+                warnings.extend(pdf_warnings)
             else:
-                text = self._plain_text(content, extension)
+                text, truncated = self._plain_text(content, extension)
                 extraction_mode = "plain_text"
         except ValidationError:
             raise
         except Exception as exc:
-            raise ValidationError("Isi file tidak dapat diekstrak. Pastikan file tidak rusak dan tidak diproteksi.", [{"field": "file", "issue": "extraction_failed"}]) from exc
+            raise _reject("Isi file tidak dapat diekstrak. File mungkin rusak, terpotong saat diunduh, atau diproteksi.", "extraction_failed") from exc
 
         text = "\n".join(line.rstrip() for line in text.replace("\x00", "").splitlines()).strip()
         if not text and not scanned_pdf:
-            raise ValidationError(
-                "Tidak ada teks yang dapat dibaca. Dokumen terindikasi berupa pindaian gambar tanpa layer teks. "
-                "OCR belum terpasang, instal Tesseract untuk membaca dokumen pindaian.",
-                [{"field": "file", "issue": "no_extractable_text"}]
+            raise _reject("Tidak ada teks yang dapat dibaca dari file ini. Pastikan file berisi teks digital, bukan gambar.", "no_extractable_text")
+        if truncated:
+            warnings.append(
+                f"Dokumen sangat besar: hanya {MAX_EXTRACTED_CHARACTERS:,} karakter pertama".replace(",", ".")
+                + (f" (maksimal {MAX_PDF_PAGES} halaman)" if extension == ".pdf" else "")
+                + " yang diperiksa. Unggah bagian lain secara terpisah agar seluruh isi diaudit."
             )
-        if len(text) > MAX_EXTRACTED_CHARACTERS:
-            raise ValidationError("Hasil ekstraksi melebihi 1.000.000 karakter per bagian. Pecah dokumen menjadi beberapa bagian sebelum mengunggah.", [{"field": "file", "issue": "text_too_long"}])
-        
+
         result: dict[str, Any] = {
             "filename": safe_name,
             "text": text,
             "characters": len(text),
             "extraction_mode": extraction_mode,
             "scanned_pdf": scanned_pdf,
+            "truncated": truncated,
+            "warnings": warnings,
         }
+        if pages is not None:
+            result["pages"] = pages
         if excel_items_count is not None:
             result["excel_items_count"] = excel_items_count
         return result
 
+    # ------------------------------------------------------------- formats
     @staticmethod
-    def _plain_text(content: bytes, extension: str) -> str:
+    def _guard_zip(content: bytes, label: str) -> None:
+        try:
+            with zipfile.ZipFile(io.BytesIO(content)) as archive:
+                total = sum(info.file_size for info in archive.infolist())
+                if len(archive.infolist()) > 10_000 or total > MAX_ZIP_UNCOMPRESSED_BYTES:
+                    raise _reject(f"Isi file {label} setelah dibuka melebihi batas aman. File ditolak untuk mencegah 'zip bomb'.", "expanded_file_too_large")
+        except zipfile.BadZipFile as exc:
+            raise _reject(f"File {label} rusak atau bukan file {label} yang valid.", "corrupted_file") from exc
+
+    @staticmethod
+    def _plain_text(content: bytes, extension: str) -> tuple[str, bool]:
+        sample = content[:8192]
+        if b"\x00" in sample or sum(1 for byte in sample if byte < 9 or 13 < byte < 32) > len(sample) * 0.05:
+            raise _reject("File ini berisi data biner, bukan teks. Periksa ekstensi file atau ekspor ulang sebagai teks.", "binary_content")
         try:
             text = content.decode("utf-8-sig")
         except UnicodeDecodeError:
@@ -89,27 +157,31 @@ class DocumentExtractionService:
         if extension == ".json":
             import json
             try:
-                value = json.loads(text)
-                return json.dumps(value, ensure_ascii=False, indent=2)
-            except json.JSONDecodeError:
-                return text
-        return text
+                text = json.dumps(json.loads(text), ensure_ascii=False, indent=2)
+            except (json.JSONDecodeError, RecursionError):
+                pass
+        if len(text) > MAX_EXTRACTED_CHARACTERS:
+            return text[:MAX_EXTRACTED_CHARACTERS], True
+        return text, False
 
     @staticmethod
-    def _docx(content: bytes) -> str:
+    def _docx(content: bytes) -> tuple[str, bool]:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
-            info = archive.getinfo("word/document.xml")
+            try:
+                info = archive.getinfo("word/document.xml")
+            except KeyError as exc:
+                raise _reject("File DOCX tidak memiliki isi dokumen (word/document.xml). File mungkin rusak.", "corrupted_file") from exc
             if info.file_size > MAX_EXPANDED_FILE_BYTES:
-                raise ValidationError("Isi dokumen DOCX setelah dibuka melebihi batas aman 8 MB.", [{"field": "file", "issue": "expanded_file_too_large"}])
+                raise _reject("Isi dokumen DOCX setelah dibuka melebihi batas aman 8 MB.", "expanded_file_too_large")
             with archive.open(info) as stream:
                 document = stream.read(MAX_EXPANDED_FILE_BYTES + 1)
             if len(document) > MAX_EXPANDED_FILE_BYTES:
-                raise ValidationError("Isi dokumen DOCX setelah dibuka melebihi batas aman 8 MB.", [{"field": "file", "issue": "expanded_file_too_large"}])
+                raise _reject("Isi dokumen DOCX setelah dibuka melebihi batas aman 8 MB.", "expanded_file_too_large")
         if b"<!DOCTYPE" in document.upper() or b"<!ENTITY" in document.upper():
-            raise ValidationError("Deklarasi XML khusus tidak diizinkan pada DOCX.", [{"field": "file", "issue": "unsafe_xml_declaration"}])
+            raise _reject("Deklarasi XML khusus tidak diizinkan pada DOCX.", "unsafe_xml_declaration")
         root = ElementTree.fromstring(document)
         ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
-        paragraphs: list[str] = []
+        budget = _Budget()
         for paragraph in root.iter(f"{ns}p"):
             parts: list[str] = []
             for node in paragraph.iter():
@@ -120,113 +192,72 @@ class DocumentExtractionService:
                 elif node.tag in {f"{ns}br", f"{ns}cr"}:
                     parts.append("\n")
             value = "".join(parts).strip()
-            if value:
-                paragraphs.append(value)
-        return "\n".join(paragraphs)
+            if value and not budget.add(value + "\n"):
+                break
+        return budget.text(""), budget.truncated
 
     @staticmethod
-    def _pdf(content: bytes) -> str:
-        return DocumentExtractionService._pdf_analyzed(content)[0]
+    def _pdf_analyzed(content: bytes) -> tuple[str, int, str, bool, bool, list[str]]:
+        """Read at most MAX_PDF_PAGES pages / MAX_EXTRACTED_CHARACTERS characters."""
+        warnings: list[str] = []
+        page_count = 0
+        budget = _Budget()
+        pages_truncated = False
 
-    @staticmethod
-    def _pdf_analyzed(content: bytes) -> tuple[str, int, str, bool]:
-        """Extract text from PDF with character density analysis for scanned PDF detection."""
-        page_count = 1
-        text = ""
-
-        # 1. Prioritize PyMuPDF (fast, robust C-based parser)
         try:
             import pymupdf
-            doc = pymupdf.open(stream=content, filetype="pdf")
-            page_count = max(1, len(doc))
-            if page_count > MAX_PDF_PAGES:
-                raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
-            parts: list[str] = []
-            character_count = 0
-            for page in doc:
-                page_text = page.get_text() or ""
-                character_count += len(page_text)
-                if character_count > MAX_EXTRACTED_CHARACTERS:
-                    raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
-                parts.append(page_text)
-            text = "\n".join(parts).strip()
+            with pymupdf.open(stream=content, filetype="pdf") as doc:
+                if doc.needs_pass or doc.is_encrypted:
+                    raise _reject("PDF dilindungi kata sandi atau terenkripsi. Buka proteksinya lalu unggah ulang.", "encrypted_pdf")
+                page_count = len(doc)
+                for index, page in enumerate(doc):
+                    if index >= MAX_PDF_PAGES:
+                        pages_truncated = True
+                        break
+                    if not budget.add((page.get_text() or "") + "\n"):
+                        break
         except ValidationError:
             raise
         except Exception:
-            text = ""
+            budget = _Budget()
 
-        # 2. Try pypdf fallback if empty
-        if not text:
+        if not budget.size:
             try:
                 from pypdf import PdfReader
                 reader = PdfReader(io.BytesIO(content), strict=False)
-                pages = reader.pages
-                page_count = max(1, len(pages))
-                if page_count > MAX_PDF_PAGES:
-                    raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
-                parts = []
-                character_count = 0
-                for page in pages:
-                    page_text = page.extract_text() or ""
-                    character_count += len(page_text)
-                    if character_count > MAX_EXTRACTED_CHARACTERS:
-                        raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
-                    parts.append(page_text)
-                text = "\n".join(parts).strip()
+                if reader.is_encrypted:
+                    raise _reject("PDF dilindungi kata sandi atau terenkripsi. Buka proteksinya lalu unggah ulang.", "encrypted_pdf")
+                page_count = page_count or len(reader.pages)
+                for index, page in enumerate(reader.pages):
+                    if index >= MAX_PDF_PAGES:
+                        pages_truncated = True
+                        break
+                    if not budget.add((page.extract_text() or "") + "\n"):
+                        break
             except ValidationError:
                 raise
             except Exception:
-                text = ""
+                budget = _Budget()
 
-        # 3. Try pdfplumber fallback if empty
-        if not text:
-            try:
-                import pdfplumber
-                with pdfplumber.open(io.BytesIO(content)) as pdf:
-                    page_count = max(1, len(pdf.pages))
-                    if page_count > MAX_PDF_PAGES:
-                        raise ValidationError("PDF melebihi batas 500 halaman. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "too_many_pages"}])
-                    parts = []
-                    character_count = 0
-                    for page in pdf.pages:
-                        page_text = page.extract_text() or ""
-                        character_count += len(page_text)
-                        if character_count > MAX_EXTRACTED_CHARACTERS:
-                            raise ValidationError("Hasil ekstraksi PDF melebihi 1.000.000 karakter. Pecah dokumen menjadi beberapa bagian.", [{"field": "file", "issue": "text_too_long"}])
-                        parts.append(page_text)
-                    text = "\n".join(parts).strip()
-            except ValidationError:
-                raise
-            except Exception:
-                text = ""
+        if not budget.size and not page_count:
+            # No parser could open the file at all: not a usable PDF.
+            fallback = DocumentExtractionService._pdf_basic(content)
+            if not fallback.strip():
+                raise _reject("File PDF rusak atau tidak valid sehingga tidak dapat dibuka.", "corrupted_file")
+            budget.add(fallback)
+            warnings.append("PDF tidak dapat dibuka parser standar; teks dibaca dengan pembaca cadangan dan mungkin tidak lengkap.")
 
-        # 4. Fallback basic stream reader
-        if not text:
-            text = DocumentExtractionService._pdf_basic(content)
-
-        avg_chars_per_page = len(text) / max(1, page_count)
-        if avg_chars_per_page < 25 or not text:
-            is_scanned = True
-            extraction_mode = "ocr_vision_fallback"
-            if not text:
-                fallback_msg = (
-                    "=== [DOKUMEN PINDAIAN / SCANNED PDF DETECTED · MODE OCR VISION FALLBACK] ===\n"
-                    f"Dokumen terdeteksi sebagai berkas pindaian gambar/raster tanpa layer teks digital (kepadatan teks < 25 karakter/halaman).\n"
-                    f"Jumlah halaman: {page_count}. Lapisan visual diteruskan ke modul verifikasi visual (bidsentry/vision/verifier.py) "
-                    "untuk pemeriksaan keabsahan tanda tangan basah, cap stempel instansi, dan e-Meterai."
-                )
-                text = fallback_msg
-            else:
-                text = (
-                    f"=== [DOKUMEN PINDAIAN / SCANNED PDF DETECTED · MODE OCR VISION FALLBACK] ===\n"
-                    f"Kepadatan teks rendah ({round(avg_chars_per_page, 1)} karakter/halaman dari total {page_count} halaman). Lapisan visual diverifikasi.\n\n"
-                    f"{text}"
-                )
-        else:
-            is_scanned = False
-            extraction_mode = "digital_pdf_text"
-
-        return text, page_count, extraction_mode, is_scanned
+        text = budget.text().strip()
+        page_count = max(page_count, 1)
+        if pages_truncated:
+            warnings.append(f"PDF memiliki {page_count} halaman; hanya {MAX_PDF_PAGES} halaman pertama yang diperiksa.")
+        if len(text) / page_count < SCANNED_CHARS_PER_PAGE:
+            warnings.append(
+                "Dokumen terdeteksi sebagai pindaian (hampir tanpa lapisan teks). OCR belum tersedia pada versi ini; "
+                "unggah PDF digital atau salin teks dokumen agar dapat diaudit. Audit tanpa teks akan berstatus Tidak Dapat Dinilai."
+            )
+            return text, page_count, "scanned_no_text_layer", True, budget.truncated or pages_truncated, warnings
+        return text, page_count, "digital_pdf_text", False, budget.truncated or pages_truncated, warnings
 
     @staticmethod
     def _pdf_basic(content: bytes) -> str:
@@ -242,7 +273,7 @@ class DocumentExtractionService:
                     inflater = zlib.decompressobj(window)
                     candidate = inflater.decompress(raw, MAX_EXPANDED_FILE_BYTES - expanded_bytes + 1)
                     if len(candidate) > MAX_EXPANDED_FILE_BYTES - expanded_bytes or inflater.unconsumed_tail:
-                        raise ValidationError("PDF memuat data terkompresi yang melebihi batas aman 8 MB.", [{"field": "file", "issue": "expanded_file_too_large"}])
+                        raise _reject("PDF memuat data terkompresi yang melebihi batas aman 8 MB.", "expanded_file_too_large")
                     if inflater.eof:
                         decoded = candidate
                         break
@@ -250,11 +281,11 @@ class DocumentExtractionService:
                     continue
             expanded_bytes += len(decoded)
             if expanded_bytes > MAX_EXPANDED_FILE_BYTES:
-                raise ValidationError("PDF memuat data terkompresi yang melebihi batas aman 8 MB.", [{"field": "file", "issue": "expanded_file_too_large"}])
+                raise _reject("PDF memuat data terkompresi yang melebihi batas aman 8 MB.", "expanded_file_too_large")
             streams.append(decoded.decode("latin-1", errors="ignore"))
             if len(streams) > 200:
                 break
-        text_source = "\n".join(streams) or source
+        text_source = "\n".join(streams)
         found: list[str] = []
         token = re.compile(r"\(((?:\\.|[^\\)])*)\)\s*Tj|\[([^\]]*?)\]\s*TJ")
         for item in token.finditer(text_source):
@@ -274,3 +305,6 @@ class DocumentExtractionService:
             if decoded_pieces:
                 found.append("".join(decoded_pieces))
         return "\n".join(found)
+
+
+__all__ = ["DocumentExtractionService", "MAX_DOCUMENT_BYTES", "MAX_EXTRACTED_CHARACTERS", "MAX_PDF_PAGES"]

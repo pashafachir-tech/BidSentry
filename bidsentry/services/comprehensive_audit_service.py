@@ -10,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from bidsentry.audits.default_predictor import predict_default_risk
-from bidsentry.audits.financial_engine import parse_boq_tables, parse_boq_text, run_financial_audit
+from bidsentry.audits.financial import parse_boq_tables, parse_boq_text, run_financial_audit
 from bidsentry.config import Settings
 from bidsentry.core.audit_trail import HashChainedAuditTrail
 from bidsentry.core.sandbox_defense import inspect_pdf, inspect_text_chunks
@@ -40,6 +40,18 @@ class ComprehensiveAuditService:
         self.trail = HashChainedAuditTrail(trail_path)
         self.langflow = langflow
         self.checker = GroundedChecker()
+
+    def _model_label(self) -> str | None:
+        if not self.langflow:
+            return None
+        settings = self.langflow.settings
+        provider = self.langflow.active_provider()
+        if provider == "watsonx":
+            from bidsentry.services.watsonx_service import WatsonxService
+            return WatsonxService(settings).default_model_id
+        if provider == "langflow":
+            return f"flow:{settings.langflow_flow_id}"
+        return settings.llm_model_name or settings.gemini_model or None
 
     def audit(self, request: ComprehensiveAuditRequest, *, audit_run_id: str | None = None) -> dict[str, Any]:
         audit_run_id = audit_run_id or str(uuid.uuid4())
@@ -162,8 +174,9 @@ class ComprehensiveAuditService:
             "module_9_execution_risk_forecast": execution_risk,
             "module_10_statutory_mapping": legal_mapping,
             "ai_governance_metadata": {
-                "foundation_model": "ibm/granite-3-8b-instruct",
-                "provider": "ibm_watsonx_ai",
+                # Report the provider/model that actually answered, never a hard-coded claim.
+                "foundation_model": self._model_label() if grounded.get("llm_status") == "success" else None,
+                "provider": self.langflow.active_provider() if (self.langflow and grounded.get("llm_status") == "success") else None,
                 "status": "CONFIGURED_ACTIVE" if (grounded.get("llm_status") == "success") else "LOCAL_GUARDRAIL_ACTIVE",
                 "pii_governance": {
                     "policy": "UU_27_2022_PDP",

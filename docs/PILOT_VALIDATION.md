@@ -37,18 +37,18 @@ Laporkan ukuran sampel, rentang atau median yang sesuai, kasus gagal, batas sist
 Sebagai acuan perbandingan baseline terukur dalam protokol pengujian:
 
 ### A. Dekomposisi Waktu Review: Manual vs Berbantuan BidSentry
-- **Baseline Manual (Rata-rata 4.5 Jam / 270 Menit)**:
+- **Hipotesis Baseline Manual (4,5 jam / 270 menit, belum diukur; ini nilai bawaan kartu biaya di aplikasi)**:
   - Pembacaan teliti Kerangka Acuan Kerja (KAK) & Spesifikasi Teknis: 120 – 180 menit.
   - Verifikasi silang Bill of Quantities (BoQ) terhadap Pagu Anggaran/HPS: 30 – 60 menit.
   - Pengecekan riwayat adendum & konsistensi klausul: 30 – 45 menit.
   - Penyusunan draf Berita Acara Evaluasi (Pokja) atau Surat Sanggahan (Vendor): 60 – 120 menit.
-- **Pipeline Eksekusi Mesin BidSentry (Total Rata-rata ~42 Detik)**:
+- **Perkiraan Pipeline Mesin (dokumen sekitar 100 halaman, belum diukur di dokumen nyata)**:
   - Ekstraksi teks & tabel dari PDF multi-halaman (`DocumentExtractionService`): **1.2 – 3.5 detik**.
-  - Evaluasi matriks kepatuhan 15 aturan deterministik (`bidsentry.evaluators.engine`): **< 0.5 detik**.
+  - Evaluasi matriks kepatuhan 30 aturan deterministik (`bidsentry.evaluators.engine`): **< 0.5 detik**.
   - Pemeriksaan ketimpangan harga satuan BoQ & denda kontrak: **< 0.2 detik**.
-  - Penalaran semantik terpandu IBM Granite (`watsonx.ai` / fallback): **15 – 30 detik**.
-  - Pembentukan draf Berita Acara BAHP / Surat Sanggahan DOCX: **< 1 detik**.
-  - *Catatan: Waktu 42 detik adalah throughput pemrosesan mesin. Auditor manusia (HITL) tetap mengalokasikan 5–15 menit untuk memvalidasi temuan sebelum menerbitkan dokumen.*
+  - Ekstraksi kutipan via IBM watsonx.ai (atau fallback lokal): **15 – 30 detik**.
+  - Pembentukan draf Berita Acara / surat DOCX: **< 1 detik**.
+  - *Catatan: angka ini hanya waktu mesin. Waktu verifikasi manusia belum diukur dan harus dicatat saat pilot.*
 
 ### B. Presisi Deteksi Ketimpangan Harga (Pricing Imbalance Precision)
 - **Metodologi**: Modul `bidsentry.audits.pricing_imbalance` membandingkan tarif man-month dan harga satuan material terhadap indeks standar (seperti pedoman INKINDO atau Standar Satuan Harga / SSH).
@@ -58,18 +58,18 @@ Sebagai acuan perbandingan baseline terukur dalam protokol pengujian:
   - Duplikasi pos lisensi dengan pemeliharaan tahun pertama dideteksi via pemeriksaan irisan klausul hak pakai (*double counting*).
 
 ### C. Transparansi Konsumsi Token & Biaya Komputasi (Token Cost Transparency)
-- **Model Fondasi**: IBM Granite 3-8b-instruct (`ibm/granite-3-8b-instruct`) via watsonx.ai.
+- **Model Fondasi**: model chat via IBM watsonx.ai (default `mistralai/mistral-small-3-1-24b-instruct-2503`).
 - **Efisiensi Pra-Inferensi**: Redaksi PII lokal membuang entitas sensitif sebelum payload dikirim, menghemat token context window.
 - **Metrik Konsumsi**:
-  - Prompt tokens per audit: 1.500 – 3.500 tokens (bergantung panjang temuan dan KAK).
-  - Completion tokens per audit: 250 – 600 tokens (penalaran ringkas berdasar kutipan terverifikasi).
-  - Biaya operasional AI: Estimasi **< $0.008** (di bawah Rp 130) per tender yang diaudit.
-  - Margin kotor SaaS: Pada harga paket Starter Rp 150.000 / audit, efisiensi unit economics mencapai margin kotor > 95%.
+  - Teks yang dikirim dibatasi 48.000 karakter (sekitar 13.000 token masuk termasuk instruksi).
+  - Token keluar diperkirakan sekitar 600.
+  - Biaya AI: sekitar Rp 7 untuk dokumen pendek dan paling tinggi sekitar Rp 26 per audit, memakai harga Mistral Small 3.1 di watsonx dan kurs Rp 16.500.
+  - Margin: lihat `MONETIZATION_STRATEGY.md`; hosting dan dukungan belum dihitung.
 
 ## Privasi, keselamatan, dan tata kelola
 
 - Dapatkan persetujuan untuk ikut pilot dan otorisasi pemrosesan setiap dokumen. Gunakan data sintetis atau disamarkan bila izin belum tersedia.
-- Jelaskan bahwa teks diproses lokal untuk aturan. Teks sumber tidak disimpan dalam audit log; metadata audit dan label review disimpan lokal.
+- Jelaskan bahwa teks diproses di server BidSentry untuk aturan. Teks sumber utuh disimpan terpisah di `audit_sources/` (tanpa sensor, agar kutipan dapat diverifikasi), dihapus saat audit dihapus dan paling lama 90 hari; audit log hanya memuat metadata dan kutipan temuan.
 - Langflow bersifat opsional dan memerlukan persetujuan pada setiap audit. Jangan mengirim dokumen sensitif ke integrasi eksternal tanpa persetujuan serta pemeriksaan kebijakan organisasi.
 - Batasi akses ke folder kerja, tetapkan masa simpan pilot, lalu hapus salinan dokumen sesuai persetujuan. Catat siapa yang bertanggung jawab atas penghapusan.
 - Setiap temuan dan skor perlu keputusan reviewer. Jangan gunakan demo atau pilot ini sebagai keputusan kelayakan tender otomatis.
@@ -78,14 +78,14 @@ Sebagai acuan perbandingan baseline terukur dalam protokol pengujian:
 
 | Kriteria | Bukti produk yang dapat didemonstrasikan | Bukti nyata yang masih perlu dikumpulkan |
 |---|---|---|
-| Problem clarity & relevance (20%) | Alur drag-and-drop, temuan, sumber file/baris, dan tindak lanjut | Wawancara terarah, observasi alur saat ini, pernyataan masalah yang tervalidasi |
-| Innovation, feasibility & monetization (25%) | Pemrosesan local-first, rules engine, persetujuan integrasi, fallback, dan protokol pilot | Perbandingan terhadap alur kerja yang ada, biaya pilot, wawancara pembeli dan kesediaan membayar |
+| Problem clarity & relevance (15%) | Alur drag-and-drop, temuan, sumber file/baris, dan tindak lanjut | Wawancara terarah, observasi alur saat ini, pernyataan masalah yang tervalidasi |
+| Innovation, creativity, feasibility & monetization (20%) | Mesin aturan deterministik, rules engine, persetujuan integrasi, fallback, dan protokol pilot | Perbandingan terhadap alur kerja yang ada, biaya pilot, wawancara pembeli dan kesediaan membayar |
 | User impact & benefits (15%) | Alur reviewer dan pencatatan disposisi yang benar-benar dimasukkan | Baseline dan hasil tugas berpasangan, keterlacakan sumber, kasus terlewat, feedback pengguna |
-| Technical execution (20%) | Demo file yang didukung, hasil audit, pencarian/filter, ekspor, dan status koneksi | Catatan run end-to-end di mesin presentasi, format berhasil/gagal, runtime terukur, bukti integrasi live bila diklaim |
+| Technical execution & prototype (20%) | Demo file yang didukung, hasil audit, pencarian/filter, ekspor, dan status koneksi | Catatan run end-to-end di mesin presentasi, format berhasil/gagal, runtime terukur, bukti integrasi live bila diklaim |
 | Responsible AI (10%) | Skor triase tidak terkalibrasi, batas aturan, consent, pemrosesan lokal, dan log metadata | Persetujuan pilot, pemeriksaan privasi, adjudikasi, proses eskalasi dan penghapusan data |
-| Hackathon participation (5%) | Bukan kemampuan yang dibuktikan oleh aplikasi | Bukti kehadiran, checkpoint, pembagian peran, kontribusi anggota, dan demo |
+| Pitching presentation & QnA (20%) | Stage runner demo, mode presentasi, jejak audit | Deck, naskah, pembagian peran bicara, latihan Q&A, dan kepatuhan waktu |
 
-**Status saat ini:** protokol dan alur demonstrasi tersedia; hasil pilot, validasi masalah, dampak, kesediaan membayar, serta bukti partisipasi belum tersedia dalam workspace ini.
+**Status saat ini:** protokol dan alur demonstrasi tersedia; hasil pilot, validasi masalah, dampak, kesediaan membayar, serta deck pitching belum tersedia dalam workspace ini.
 
 ## Gate sebelum demo/rilis
 
@@ -93,5 +93,4 @@ Sebagai acuan perbandingan baseline terukur dalam protokol pengujian:
 2. Tunjukkan satu bukti sumber dan satu contoh batas sistem; sebutkan bahwa PDF hasil scan memerlukan OCR.
 3. Periksa status koneksi dari aplikasi. Tampilkan konektor sebagai opsional bila belum berhasil diuji end-to-end.
 4. Pastikan tampilan runtime menyebut bahwa ukurannya hanya untuk rules engine lokal. Angka baru bermakna setelah audit nyata dijalankan; jumlah sampel harus ikut ditampilkan.
-5. Tanyakan kepada penyelenggara cara memperlakukan sisa bobot 5% karena lembar kriteria yang diberikan hanya berjumlah 95%.
-6. Simpan bukti pilot dan partisipasi secara terpisah dari demo sintetis. Jangan mengisi angka contoh seolah hasil nyata.
+5. Simpan bukti pilot dan partisipasi secara terpisah dari demo sintetis. Jangan mengisi angka contoh seolah hasil nyata.

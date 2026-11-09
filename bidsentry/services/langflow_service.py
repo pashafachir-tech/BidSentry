@@ -31,10 +31,73 @@ _LANGFLOW_NON_OUTPUT_KEYS = {"session_id", "inputs", "input_value", "session", "
 _CODE_FENCE = re.compile(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", re.S | re.I)
 
 
+# User-facing explanations for every non-success provider status; the engine shows
+# these next to "Mode Deterministik Lokal (Fallback Aktif)".
+PROVIDER_STATUS_MESSAGES = {
+    "timeout": "Provider AI tidak merespons dalam batas waktu; audit dilanjutkan dengan aturan lokal.",
+    "rate_limited": "Provider AI membatasi laju permintaan (HTTP 429); audit dilanjutkan dengan aturan lokal. Coba lagi beberapa saat lagi.",
+    "auth_failed": "Kredensial provider AI ditolak (HTTP 401/403); periksa API key di Koneksi & Pengaturan.",
+    "provider_error": "Provider AI tidak dapat dihubungi; audit dilanjutkan dengan aturan lokal.",
+    "invalid_response": "Respons provider AI tidak sesuai skema JSON; kutipan AI diabaikan.",
+    "not_configured": "Provider AI belum dikonfigurasi; audit memakai aturan lokal.",
+    "empty_response": "Provider AI mengembalikan respons kosong; audit memakai aturan lokal.",
+    "unconfigured": "Kredensial IBM watsonx.ai belum dikonfigurasi; audit memakai aturan lokal.",
+    "model_unavailable": "Model yang dikonfigurasi tidak tersedia di region/proyek watsonx ini; ganti WATSONX_MODEL_ID atau region. Audit memakai aturan lokal.",
+}
+
+
+def classify_exception(exc: BaseException) -> str:
+    """Map SDK exceptions (watsonx, Gemini, OpenAI) to a provider status."""
+    text = f"{type(exc).__name__} {exc}".casefold()
+    if "not supported for this environment" in text or "model_not_supported" in text or "model not found" in text:
+        return "model_unavailable"
+    status_code = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+    if status_code == 429 or "429" in text or "rate limit" in text or "too many requests" in text:
+        return "rate_limited"
+    if status_code in {401, 403} or "unauthorized" in text or "401" in text or "403" in text:
+        return "auth_failed"
+    if "timeout" in text or "timed out" in text:
+        return "timeout"
+    return "provider_error"
+
+
+_FENCED_BLOCK = re.compile(r"```(?:json)?\s*(.*?)```", re.S | re.I)
+
+
+def _first_json_object(text: str) -> str | None:
+    """Return the first balanced ``{...}`` substring that parses as a JSON object."""
+    decoder = json.JSONDecoder()
+    index = text.find("{")
+    while index != -1:
+        try:
+            value, end = decoder.raw_decode(text, index)
+        except json.JSONDecodeError:
+            index = text.find("{", index + 1)
+            continue
+        if isinstance(value, dict):
+            return text[index:end]
+        index = text.find("{", end)
+    return None
+
+
 def strip_code_fence(text: str) -> str:
-    """Granite and other chat models often wrap JSON in ```json fences."""
-    match = _CODE_FENCE.match(text or "")
-    return match.group(1) if match else (text or "").strip()
+    """Extract the JSON object from a model reply.
+
+    Real replies observed from watsonx (live test, Nov 2026) look like
+    ``}\\n```json\\n{...}\\n``` `` — a stray character continuing the prompt,
+    then a fenced block. Prefer a fenced block anywhere in the reply, then the
+    first parseable JSON object, and only then the stripped text unchanged.
+    """
+    raw = text or ""
+    whole = _CODE_FENCE.match(raw)
+    if whole:
+        return whole.group(1)
+    for block in _FENCED_BLOCK.findall(raw):
+        candidate = _first_json_object(block)
+        if candidate:
+            return candidate
+    candidate = _first_json_object(raw)
+    return candidate if candidate is not None else raw.strip()
 
 
 class LangflowService:
@@ -156,9 +219,19 @@ class LangflowService:
             text = strip_code_fence(text)
             response_model.model_validate_json(text)
             return {"status": "success", "text": text, "provider": "langflow", "telemetry": telemetry}
+        except urllib.error.HTTPError as exc:
+            telemetry["http_status"] = exc.code
+            if exc.code == 429:
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                telemetry["retry_after"] = retry_after
+                return {"status": "rate_limited", "text": None, "error_type": "HTTP429", "message": PROVIDER_STATUS_MESSAGES["rate_limited"], "telemetry": telemetry}
+            status = "auth_failed" if exc.code in {401, 403} else "provider_error"
+            return {"status": status, "text": None, "error_type": f"HTTP{exc.code}", "message": PROVIDER_STATUS_MESSAGES[status], "telemetry": telemetry}
         except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
             LOGGER.warning("Langflow structured evaluation failed", extra={"error_type": type(exc).__name__})
-            return {"status": "provider_error", "text": None, "error_type": type(exc).__name__, "telemetry": telemetry}
+            timed_out = isinstance(exc, TimeoutError) or "timed out" in str(exc).casefold()
+            status = "timeout" if timed_out else "provider_error"
+            return {"status": status, "text": None, "error_type": type(exc).__name__, "message": PROVIDER_STATUS_MESSAGES[status], "telemetry": telemetry}
         except ValueError as exc:  # pydantic ValidationError is a ValueError subclass
             return {"status": "invalid_response", "text": None, "error_type": type(exc).__name__, "telemetry": telemetry}
 

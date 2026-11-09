@@ -1,14 +1,11 @@
 from pathlib import Path
-import warnings
 import pytest
 
-warnings.filterwarnings("ignore", message=r".*httpx.*")
 from starlette.testclient import TestClient
 
 from bidsentry.asgi import create_asgi_app
 from bidsentry.config import Settings
-from bidsentry.types.schemas import ValidationError
-from bidsentry.generators.sanggahan_builder import _eligible, build_sanggahan_markdown
+from bidsentry.generators.sanggahan_builder import _eligible
 
 
 @pytest.fixture
@@ -184,3 +181,17 @@ def test_role_workspaces_are_separated_and_documents_render_engine_findings(clie
     assert draft["findings_included"] == ["SPEC-LOCKIN-CPU"]
     boq = client.post("/api/export/boq", json={"audit_id": vendor_audit["audit_id"]})
     assert boq.status_code == 200 and boq.json()["data"]["filename"].endswith(".xlsx")
+
+
+def test_unit_economics_and_benchmark_summary(client: TestClient):
+    _login(client, "pokja")
+    audit = client.post("/api/audit", json={"package_name": "Ekonomi", "dok_pemilihan": "Masa sanggah hanya 2 hari kerja."}).json()["data"]
+    economics = client.get(f"/api/audits/{audit['audit_id']}/economics?manual_hours=8&hourly_cost_idr=100000").json()["data"]
+    assert economics["tokens"]["basis"] == "estimated_from_document_length"
+    assert economics["inference_cost_idr"] > 0
+    assert economics["manual_review_cost_idr"] == 800000
+    assert economics["machine_seconds"] > 0 and economics["time_reduction_factor"] > 1000
+    assert economics["assumptions"]["manual_review_hours_per_package"] == 8
+    assert "asumsi" in economics["caveat"]
+    summary = client.get("/api/benchmark/summary").json()["data"]
+    assert summary["status"] in {"ok", "not_generated"}

@@ -1,24 +1,25 @@
 # Status Integrasi Teknologi IBM & Layanan Eksternal
 
 > **Dokumen Transparansi Teknis**: Dihasilkan oleh `scripts/verify_watsonx.py`.
-> Terakhir diperbarui: 2026-10-29 11:38:33 UTC
+> Terakhir diperbarui: 2026-11-09 11:01:56 UTC
 
 Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated Data). Evaluator dan juri dapat memverifikasi status secara mandiri.
 
 ---
 
-## 1. IBM watsonx.ai (Model Foundation: IBM Granite)
+## 1. IBM watsonx.ai
 
 | Komponen | Status Saat Ini | Keterangan |
 | :--- | :--- | :--- |
-| **Kredensial** | `CONNECTION_FAILED` | `Gagal menghubungi endpoint watsonx: WMLClientError - Model 'ibm/granite-3-8b-instruct' is not supported for this environment. Supported models: ['ibm/gra` |
-| **Model ID** | `ibm/granite-3-8b-instruct` | Standar: `ibm/granite-3-8b-instruct` |
-| **Latensi Uji** | `—` | Nilai aktual saat probe dijalankan |
-| **Panduan Aktivasi** | — | Pastikan API key, Project ID, dan kuota watsonx Cloud aktif. |
+| **Kredensial** | `VERIFIED_ONLINE` | `Terautentikasi ke IBM watsonx; spesifikasi model mistralai/mistral-small-3-1-24b-instruct-2503 berhasil diambil.` |
+| **Model ID** | `mistralai/mistral-small-3-1-24b-instruct-2503` | Model chat yang dipanggil lewat watsonx Chat API (dapat diganti via `WATSONX_MODEL_ID`) |
+| **Latensi Uji** | `6254.66 ms` | Nilai aktual saat probe dijalankan |
+| **Uji Generasi** | — | success pada 2026-11-09 11:01 UTC: 600 token masuk, 157 token keluar, 4521.2 ms, 2 kutipan terverifikasi, 0 ditolak (dokumen sintetis). |
+| **Panduan Aktivasi** | — | Setel WATSONX_API_KEY dan WATSONX_PROJECT_ID pada environment atau file .env lokal untuk mengaktifkan ekstraksi semantik via IBM watsonx.ai. |
 
 ### Peran IBM watsonx dalam Arsitektur BidSentry:
-- **Tingkat 1 (Local Engine)**: Menjalankan aturan deterministik Perpres 12/2021 secara 100% lokal, offline, dan tanpa LLM untuk kepatuhan regulasi mutlak.
-- **Tingkat 2 (watsonx Granite Advisory)**: Bila diaktifkan oleh pengguna, model IBM Granite digunakan untuk *semantic document extraction* sekunder (misal: merangkum kualifikasi tenaga ahli dan SLA). Seluruh data disanitasi oleh modul PII masking sebelum dikirim.
+- **Tingkat 1 (Local Engine)**: Menjalankan aturan deterministik di server BidSentry tanpa LLM dan tanpa koneksi keluar.
+- **Tingkat 2 (watsonx.ai)**: Bila disetujui pengguna per audit, model di IBM watsonx.ai mengekstrak kutipan (merek, jadwal, adendum, personel, SLA) dari cuplikan maksimal 48.000 karakter yang sudah disensor. Kutipan dicocokkan persis dengan dokumen. Kandidat yang lolos aturan Python menjadi temuan; kandidat merek di luar pola aturan ditampilkan untuk dicek manusia dan tidak memengaruhi verdict.
 
 ---
 
@@ -26,7 +27,7 @@ Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated
 
 | Komponen | Status Saat Ini | Keterangan |
 | :--- | :--- | :--- |
-| **Konfigurasi MCP** | `CONFIG_PRESENT` | `Konfigurasi Bob MCP server terverifikasi di bob/mcp.json (transport stdio, target: Langflow port 7860).` |
+| **Konfigurasi MCP** | `CONFIG_PRESENT` | `Konfigurasi Bob MCP server terverifikasi di bob/mcp.json (transport stdio, target: Langflow port 7860).` Hanya berkas konfigurasi; koneksi end-to-end belum diuji. |
 | **Transport** | `stdio` | Standar MCP specification |
 | **Target Eksekusi** | `langflow run --mcp-server` | Port 7860 |
 | **Panduan Aktivasi** | — | Jalankan Langflow lokal di port 7860 untuk menghubungkan agentic MCP server. |
@@ -39,6 +40,6 @@ Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated
 
 ## 3. Komponen Pendukung Lainnya
 
-- **Mesin Aturan Lokal**: `READY` (14 aturan deklaratif Perpres 12/2021 aktif secara deterministik dan offline).
+- **Mesin Aturan Lokal**: `READY` (30 aturan deklaratif aktif secara deterministik dan offline).
 - **Langflow Advisory**: Terintegrasi via HTTP REST client (`bidsentry/services/langflow_service.py`), mode opt-in dengan konfirmasi manual pengguna.
 - **Composio Automation**: Integrasi kalender dan dokumen tender, mode human-in-the-loop (memerlukan persetujuan eksplisit sebelum menyiapkan aksi).

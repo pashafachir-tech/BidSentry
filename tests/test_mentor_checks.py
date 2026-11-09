@@ -6,7 +6,6 @@ from pathlib import Path
 
 from docx import Document
 
-from bidsentry.audits.penalty_calculator import calculate_penalty_scenarios
 from bidsentry.evaluators.engine import EvaluationEngine, EvaluationRequest
 from bidsentry.evaluators.grounded_checker import verify_grounded_citation
 from bidsentry.forensics.adendum_diff import diff_addendum
@@ -118,7 +117,8 @@ def test_brand_lockin_detection_flags_exclusive_hardware_specifications() -> Non
     assert cpu_finding["status"] == "GAP"
     assert cpu_finding["severity"] == "HIGH"
     assert "Pasal 19" in cpu_finding["legal_reference"]
-    assert cpu_finding["legal_verification"] == "PERLU_VERIFIKASI_HUKUM"
+    assert "Pasal 19 ayat (2)" in cpu_finding["legal_reference"]
+    assert cpu_finding["legal_verification"] == "DIPERIKSA_NASKAH"
     assert cpu_finding["objectionable"] is True
 
 
@@ -128,10 +128,11 @@ def test_compressed_procurement_timeline_flags_short_bidding_and_objection_perio
     finding = next(f for f in result["findings"] if f["id"] == "PROC-TIMELINE-COMPRESSED")
     assert finding["status"] == "GAP"
     assert finding["severity"] == "HIGH"
-    assert "LKPP" in finding["legal_reference"]
+    assert "Nomor 12 Tahun 2021" in finding["legal_reference"]
+    assert finding["legal_verification"] == "PERLU_VERIFIKASI_HUKUM"  # schedule minimums not yet confirmed
     assert finding["calculation_ref"]
     assert "7 hari kerja" in finding["review_note"]
-    assert "5 hari kerja" in finding["review_note"]
+    assert "5 hari kalender" in finding["review_note"]
     assert result["verdict"] == "NO-GO"
 
 
@@ -248,7 +249,7 @@ def test_probe_engine_13_audit_scenarios() -> None:
     assert r2["verdict"] in ("GO", "TIDAK ADA SYARAT TERBACA")
 
     # P3: SBU issued 2023, valid until 2030 -> picked 2030 expiry date
-    r3 = engine.evaluate(EvaluationRequest(dok_pemilihan="Peserta wajib memiliki SBU.", pustaka="SBU diterbitkan 12 Januari 2023, berlaku sampai 12 Januari 2030"))
+    r3 = engine.evaluate(EvaluationRequest(dok_pemilihan="Peserta wajib memiliki SBU.", pustaka="SBU diterbitkan 12 Januari 2023, berlaku sampai 12 Januari 2030", bid_deadline="1 Juni 2026"))
     sbu = next(f for f in r3["findings"] if f["id"] == "ADM-SBU")
     assert sbu["status"] == "TERPENUHI"
     assert "2030" in sbu["review_note"]
@@ -266,13 +267,13 @@ def test_probe_engine_13_audit_scenarios() -> None:
     assert kswp["status"] == "GAP"
     assert r5["verdict"] == "NO-GO"
 
-    # P6: Uncapped penalty detected with and without contract value
+    # P6: the regulated 1 per mille rate with no stated cap asks for review; "tanpa batas" is a confirmed gap
     r6a = engine.evaluate(EvaluationRequest(dok_pemilihan="Denda keterlambatan 1/1000 per hari dari nilai kontrak."))
     pen_a = next(f for f in r6a["findings"] if f["id"] == "CON-PENALTY")
-    assert pen_a["status"] == "GAP"
-    assert r6a["verdict"] == "NO-GO"
+    assert pen_a["status"] == "REVIEW"
+    assert r6a["verdict"] == "BELUM CUKUP BUKTI"
 
-    r6b = engine.evaluate(EvaluationRequest(dok_pemilihan="Denda keterlambatan 1/1000 per hari dari nilai kontrak.", contract_value_idr=1_000_000_000))
+    r6b = engine.evaluate(EvaluationRequest(dok_pemilihan="Denda keterlambatan 1/1000 per hari dari nilai kontrak tanpa batas maksimal.", contract_value_idr=1_000_000_000))
     pen_b = next(f for f in r6b["findings"] if f["id"] == "CON-PENALTY")
     assert pen_b["status"] == "GAP"
     assert r6b["verdict"] == "NO-GO"
@@ -307,12 +308,11 @@ def test_probe_engine_13_audit_scenarios() -> None:
     # P11: Timeline 3 days not softened by "clean baseline"
     r11 = engine.evaluate(EvaluationRequest(dok_pemilihan="Dokumen ini clean baseline.\npenyusunan dokumen penawaran hanya 3 hari kerja"))
     tm = next(f for f in r11["findings"] if f["id"] == "PROC-TIMELINE-COMPRESSED")
-    assert tm["status"] == "GAP"
-    assert tm["severity"] == "HIGH"
-    assert r11["verdict"] == "NO-GO"
+    assert tm["status"] == "REVIEW" and tm["threshold_unverified"] is True
+    assert r11["verdict"] == "BELUM CUKUP BUKTI"
 
     # P12: Sanggahan draft contains specifications and timeline objections, excludes bidder's expired SBU
-    src12 = ("Spesifikasi wajib Intel Xeon Emerald Rapids.\npenyusunan dokumen penawaran hanya 3 hari kerja\nWajib SBU.")
+    src12 = ("Spesifikasi wajib Intel Xeon Emerald Rapids.\nmasa sanggah hanya 2 hari kerja\nWajib SBU.")
     r12 = engine.evaluate(EvaluationRequest(dok_pemilihan=src12, pustaka="SBU berlaku sampai 1 Januari 2020"))
     md = build_sanggahan_markdown(
         tender_id="T1", package_name="P", company_name="PT A", notice_number="N", pokja_name="Pokja",

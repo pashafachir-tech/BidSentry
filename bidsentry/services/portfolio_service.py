@@ -62,7 +62,7 @@ class PortfolioService:
                 "requirement_evidence": item.get("requirement_evidence"),
                 "evidence_source": item.get("evidence_source"),
                 "review_note": item.get("review_note", ""),
-                **{key: item[key] for key in ("rule_family", "party", "objectionable", "legal_reference", "legal_verification", "origin", "calculation_ref") if key in item},
+                **{key: item[key] for key in ("rule_family", "party", "objectionable", "legal_reference", "legal_verification", "origin", "calculation_ref", "threshold_unverified") if key in item},
             }
             for item in findings if isinstance(item, dict)
         ]
@@ -83,5 +83,6 @@ class PortfolioService:
             "ai_governance_metadata": event.get("ai_governance_metadata") or event.get("evaluation", {}).get("ai_governance_metadata") or {},
             "source": "local_audit_log", "risk_method": risk.get("method", "legacy-score"),
             "engine_duration_ms": event.get("engine_duration_ms"),
-            "has_source_text": bool(event.get("source_text")),
+            "has_source_text": bool(event.get("source_text") or event.get("has_source_text")),
+            "coverage": event.get("coverage") or {},
         }

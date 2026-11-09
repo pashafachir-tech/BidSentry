@@ -58,6 +58,12 @@ _WORD_CAP = re.compile(
 
 _CAP = _DIGIT_CAP
 
+# The model SSUK caps delay fines at the performance bond, stated without a percentage.
+_BOND_CAP = re.compile(
+    r"(?:tidak\s+(?:boleh\s+)?(?:melampaui|melebihi)|paling\s+(?:tinggi|banyak)|maksimal|maksimum|setinggi-tingginya|sebesar-besarnya|mencapai|dibatasi|not\s+exceeding|capped\s+at)\b.{0,60}?\bjaminan\s+pelaksanaan\b",
+    re.I,
+)
+
 
 def _parse_cap(clause: str) -> float | None:
     if not clause:
@@ -129,18 +135,27 @@ def calculate_penalty_scenarios(
     for line in lines:
         if re.search(r"denda|sanksi\s+keterlambatan|liquidated\s+damages|delay\s+penalty", line, re.I):
             penalty_lines.append(line)
-        elif penalty_lines and re.match(r"^(?:batas|maksimal|maksimum|paling\s+banyak|tidak\s+lebih|total\s+akumulasi|capped|up\s+to|not\s+exceeding)", line, re.I):
+        elif penalty_lines and (
+            re.match(r"^(?:batas|maksimal|maksimum|paling\s+banyak|tidak\s+lebih|total\s+akumulasi|capped|up\s+to|not\s+exceeding)", line, re.I)
+            or _BOND_CAP.search(line)
+        ):
             penalty_lines.append(line)
     clause = " ".join(penalty_lines)[:1200]
     contract_rate = _parse_rate(clause) if clause else None
     clause_cap = _parse_cap(clause) if clause else None
-    uncapped = bool(penalty_lines and clause_cap is None)
+    explicitly_uncapped = bool(_EXPLICIT_UNCAPPED.search(clause))
+    capped_by_bond = bool(clause and clause_cap is None and not explicitly_uncapped and _BOND_CAP.search(clause))
+    no_stated_cap = bool(penalty_lines and clause_cap is None and not capped_by_bond)
+    # Silence about a cap at the regulated rate is a question for the reviewer; only an
+    # explicit "no limit", or an above-regulation rate with no limit, is a confirmed gap.
+    uncapped = no_stated_cap and (explicitly_uncapped or (contract_rate is not None and contract_rate > statutory_daily_rate))
     scenarios: list[dict[str, Any]] = []
     for days in delay_days:
         if isinstance(days, bool) or days < 0:
             raise ValueError("delay_days must contain non-negative integers")
         contractual_raw = contract_value_idr * (contract_rate or statutory_daily_rate) * days
-        contractual_value = min(contractual_raw, contract_value_idr * clause_cap) if clause_cap is not None else contractual_raw
+        effective_cap = clause_cap if clause_cap is not None else illustrative_cap_percentage if capped_by_bond else None
+        contractual_value = min(contractual_raw, contract_value_idr * effective_cap) if effective_cap is not None else contractual_raw
         statutory_comparison_raw = contract_value_idr * statutory_daily_rate * days
         illustrative_cap = contract_value_idr * illustrative_cap_percentage
         scenarios.append({
@@ -156,6 +171,8 @@ def calculate_penalty_scenarios(
     alerts: list[str] = []
     if uncapped:
         alerts.append("CRITICAL_POISON_PILL")
+    elif no_stated_cap:
+        alerts.append("PENALTY_CAP_NOT_STATED")
     if contract_rate is not None and contract_rate > statutory_daily_rate:
         alerts.append("CONTRACT_RATE_ABOVE_1_PER_MILLE_COMPARISON")
     if not penalty_lines:
@@ -166,14 +183,16 @@ def calculate_penalty_scenarios(
         "clause_quote": clause or None,
         "contract_daily_rate": contract_rate,
         "contract_cap_percentage": clause_cap,
+        "contract_cap_basis": "persen_klausul" if clause_cap is not None else "jaminan_pelaksanaan" if capped_by_bond else None,
         "uncapped_clause_detected": uncapped,
         "alerts": alerts,
         "scenarios": scenarios,
         "assumptions": {
             "daily_comparison_rate": statutory_daily_rate,
-            "daily_rate_source": "Perpres 16/2018 jo. Perpres 12/2021 jo. Perpres 46/2025, Pasal 78 ayat (5) huruf f (konsolidasi LKPP)",
+            "daily_rate_source": "Perpres 16/2018 Pasal 79 ayat (4): 1‰ per hari dari nilai kontrak atau bagian kontrak (dikonfirmasi sumber sekunder; cocokkan dengan naskah konsolidasi)",
+            "cap_source": "Model SSUK LKPP: denda keterlambatan tidak melampaui besarnya Jaminan Pelaksanaan (sumber sekunder)",
             "illustrative_cap_percentage": illustrative_cap_percentage,
-            "cap_note": "Batas 5% adalah asumsi simulasi, bukan batas maksimum yang dinyatakan sebagai standar umum pada ketentuan denda harian tersebut.",
+            "cap_note": "Ilustrasi 5% mengasumsikan Jaminan Pelaksanaan sebesar 5% nilai kontrak; batas sebenarnya adalah besaran Jaminan Pelaksanaan pada kontrak paket.",
         },
         "review_note": "Aritmetika ini bukan nasihat hukum. Cocokkan basis pengenaan (nilai kontrak atau bagian kontrak), klausul final, dan aturan yang berlaku pada tanggal paket.",
     }

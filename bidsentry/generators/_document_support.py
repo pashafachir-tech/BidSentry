@@ -101,6 +101,6 @@ def normalize_finding(item: dict[str, Any]) -> dict[str, str]:
         "quote": clean_cell(quote, 900),
         "locator": clean_cell(locator, 200),
         "note": clean_cell(item.get("review_note") or item.get("description") or item.get("interpretation") or "Cocokkan dengan dokumen sumber dan kriteria paket.", 700),
-        "legal_reference": clean_cell(item.get("legal_reference") or "", 300),
+        "legal_reference": clean_cell(item.get("legal_reference") or "", 900),
         "reviewer": clean_cell(reviewer or "[Keputusan reviewer]", 80),
     }

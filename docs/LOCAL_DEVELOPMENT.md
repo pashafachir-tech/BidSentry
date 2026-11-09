@@ -2,12 +2,30 @@
 
 ## Start the application
 
-Use Python 3.10 or newer. There are no pip or npm dependencies for the local application.
+Use Python 3.11 or newer. There is no npm or frontend build step.
 
 ```powershell
+python -m venv .venv
+.venv\Scripts\pip install -r requirements.txt        # core app
+.venv\Scripts\pip install -r requirements-dev.txt    # optional: tests, lint, job engine, extra providers
 Copy-Item .env.example .env
-python server.py
+.venv\Scripts\python server.py
 ```
+
+| Requirements file | Contents |
+|---|---|
+| `requirements.txt` | Everything the web app needs, including IBM watsonx.ai |
+| `requirements-jobs.txt` | Optional async job engine (ARQ, Redis, SQLAlchemy); enable with `BIDSENTRY_JOB_ENGINE=redis` |
+| `requirements-dev.txt` | Jobs extras, Gemini/OpenAI providers, pytest, ruff |
+
+## Docker
+
+```bash
+docker build -t bidsentry .
+docker run -p 8000:8000 -v bidsentry-data:/app/var -e BIDSENTRY_ACCESS_TOKEN=<random> -e BIDSENTRY_POKJA_PIN=<pin> -e BIDSENTRY_VENDOR_PIN=<pin> -e BIDSENTRY_SESSION_SECRET=<random> bidsentry
+```
+
+The container listens on `0.0.0.0`, so the server requires `BIDSENTRY_ACCESS_TOKEN` and role PINs; it refuses to start without the token. The audit log and session secret are kept in the `/app/var` volume.
 
 Open `http://127.0.0.1:8000`. The application binds to loopback by default. Set `HOST=0.0.0.0` only when another machine or a container must reach it. `python verify_system.py` checks the API and reports optional integration modes.
 
@@ -19,6 +37,9 @@ Open `http://127.0.0.1:8000`. The application binds to loopback by default. Set 
 | `PORT` | `8000` | Local HTTP port; `BRIDGE_PORT` remains a fallback alias |
 | `MAX_REQUEST_BYTES` | `12582912` | Maximum accepted JSON request body |
 | `AUDIT_LOG_PATH` | `audit_log.jsonl` | Append-only local metadata log; relative paths resolve from the repo root |
+| `BIDSENTRY_POKJA_PIN` / `BIDSENTRY_VENDOR_PIN` | empty | Role PINs; required on non-loopback hosts. Five wrong PINs lock that client out of the role for 5 minutes |
+| `BIDSENTRY_SESSION_SECRET` | generated | HMAC key for the role session cookie |
+| `BIDSENTRY_JOB_ENGINE` | empty | `redis` mounts the optional async job API (`requirements-jobs.txt`) |
 | `LANGFLOW_ENABLED` | `false` | Enables the optional Langflow advisory adapter |
 | `LANGFLOW_URL` | `http://localhost:7860` | Langflow base URL; `LANGFLOW_HOST` remains a fallback alias |
 | `LANGFLOW_FLOW_ID` | empty | Flow identifier used at `/api/v1/run/{flow_id}` |
@@ -65,7 +86,7 @@ Live workspace follow-up is a separate, explicit reviewer action. Before sending
 
 ```powershell
 python -m unittest discover -s tests -v
-python -m compileall -q bidsentry server.py composio_dispatcher.py verify_system.py
+python -m compileall -q bidsentry server.py verify_system.py
 node --input-type=module --check < web/api.js
 node --input-type=module --check < web/state.js
 node --input-type=module --check < web/render.js

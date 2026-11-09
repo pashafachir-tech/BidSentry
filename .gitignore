@@ -98,3 +98,5 @@ htmlcov/
 !docs/screenshots/*.png
 !data/sample_tenders/rab_konstruksi_boq.xlsx
 !data/sample_tenders/pdf_tenders/*.pdf
+.bidsentry_session_secret
+backups/

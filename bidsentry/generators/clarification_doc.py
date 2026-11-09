@@ -7,7 +7,7 @@ from html import escape
 from collections.abc import Sequence
 from typing import Any
 
-from bidsentry.generators._document_support import DocumentGenerationError, clean_cell, render_pdf, require_docx
+from bidsentry.generators._document_support import clean_cell, render_pdf, require_docx
 
 
 def build_clarification_markdown(
@@ -147,16 +147,6 @@ def build_clarification_pdf(tender_id: str, vendor_name: str, anomalies: Sequenc
         [f"Paket/Tender: {clean_cell(tender_id, 200)}", f"Peserta: {clean_cell(vendor_name, 240)}", "Nomor: [diisi oleh pejabat berwenang]    Tanggal: [diisi]", "Draf permintaan klarifikasi untuk ditinjau dan disahkan Pokja Pemilihan. Klarifikasi tidak mengubah kriteria atau substansi penawaran."],
         [rows],
     )
-
-
-def write_clarification_docx(path: str, tender_id: str, vendor_name: str, anomalies: Sequence[dict[str, Any]]) -> str:
-    content = build_clarification_docx(tender_id, vendor_name, anomalies)
-    try:
-        with open(path, "wb") as stream:
-            stream.write(content)
-    except OSError as exc:
-        raise DocumentGenerationError("DOCX draft could not be saved to the requested path.") from exc
-    return path
 
 
 def _markdown_cell(value: Any) -> str:

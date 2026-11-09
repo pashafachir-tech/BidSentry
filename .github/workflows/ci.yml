@@ -2,13 +2,11 @@ name: BidSentry Continuous Integration
 
 on:
   push:
-    branches: [ main, master ]
   pull_request:
-    branches: [ main, master ]
 
 jobs:
   test:
-    name: Unit Tests & Regression Benchmark
+    name: Lint, tests & benchmark guard
     runs-on: ubuntu-latest
 
     env:
@@ -23,22 +21,33 @@ jobs:
         with:
           python-version: "3.11"
           cache: "pip"
+          cache-dependency-path: |
+            requirements.txt
+            requirements-jobs.txt
+            requirements-dev.txt
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install pytest openpyxl pyyaml playwright
-          playwright install --with-deps chromium
+          pip install -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check bidsentry scripts tests server.py verify_system.py
+
+      - name: Check documentation links
+        run: python scripts/check_doc_links.py
 
       - name: Verify IBM probe exits cleanly
-        run: |
-          python scripts/verify_watsonx.py
+        run: python scripts/verify_watsonx.py
 
-      - name: Run Pytest Suite
-        run: |
-          pytest tests/ -v
+      - name: Run test suite (warnings are errors)
+        run: pytest tests/ -q -W error::ResourceWarning -W error::DeprecationWarning
 
-      - name: Run Benchmark Regression Guard (all labelled suites)
+      - name: Run benchmark regression guard (all labelled suites)
+        run: python scripts/run_benchmarks.py --no-write --min-pooled-f1 0.9
+
+      - name: Core app runs without optional packages
         run: |
-          python scripts/run_benchmarks.py --no-write --min-pooled-f1 0.9
+          python -m venv /tmp/core
+          /tmp/core/bin/pip install -q -r requirements.txt pytest httpx
+          /tmp/core/bin/python -m pytest -q tests/test_optional_dependencies.py::test_core_app_runs_without_optional_packages

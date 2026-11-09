@@ -2,35 +2,25 @@
 
 from __future__ import annotations
 
+import hmac
 import ipaddress
 import json
 import logging
 import mimetypes
 import urllib.parse
 import uuid
-from contextlib import asynccontextmanager
-from collections.abc import AsyncIterator
-from pathlib import Path
 
-from arq import create_pool
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.concurrency import run_in_threadpool
 
+from bidsentry import __version__
 from bidsentry.api.auth_router import create_auth_router, session_role
 from bidsentry.api.routes import ApiResponse, ApiRouter
-from bidsentry.api.stream import router as audit_stream_router
 from bidsentry.api.v1_router import create_v1_router
 from bidsentry.app import create_application
 from bidsentry.config import Settings
-from bidsentry.core.config import AsyncEngineSettings
-from bidsentry.core.database import AsyncDatabase
-from bidsentry.core.worker import (
-    build_redis_settings,
-    deserialize_job_definition,
-    serialize_job_definition,
-)
 from bidsentry.types.responses import failure
 
 
@@ -97,12 +87,17 @@ def _is_local_request(request: Request, configured_port: int) -> bool:
     return parsed.hostname in allowed_hosts
 
 
+def _token_matches(candidate: str, expected: str) -> bool:
+    """Constant-time comparison so the access token cannot be guessed by timing."""
+    return bool(candidate) and hmac.compare_digest(candidate.encode("utf-8"), expected.encode("utf-8"))
+
+
 def _can_access_sensitive_route(request: Request, settings: Settings) -> bool:
     if settings.access_token:
         auth_header = request.headers.get("authorization", "").strip()
         bearer_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
         cookie_token = request.cookies.get("bidsentry_token", "").strip()
-        if bearer_token == settings.access_token or cookie_token == settings.access_token:
+        if _token_matches(bearer_token, settings.access_token) or _token_matches(cookie_token, settings.access_token):
             return True
     return _is_local_request(request, settings.port)
 
@@ -117,39 +112,16 @@ def create_asgi_app(settings: Settings | None = None) -> FastAPI:
     application = create_application(app_settings)
     router = ApiRouter(application)
 
-    @asynccontextmanager
-    async def lifespan(api: FastAPI) -> AsyncIterator[None]:
-        job_settings = AsyncEngineSettings()
-        database = AsyncDatabase(job_settings.database_url, echo=job_settings.database_echo)
-        await database.initialize()
-        api.state.job_settings = job_settings
-        api.state.database = database
-        api.state.redis_pool = None
-        try:
-            api.state.redis_pool = await create_pool(
-                build_redis_settings(job_settings.redis_url),
-                retry=0,
-                default_queue_name=job_settings.audit_queue_name,
-                job_serializer=serialize_job_definition,
-                job_deserializer=deserialize_job_definition,
-            )
-        except Exception:
-            LOGGER.exception("Redis job queue unavailable; async audit endpoints will return 503")
-        try:
-            yield
-        finally:
-            redis_pool = getattr(api.state, "redis_pool", None)
-            try:
-                if redis_pool is not None:
-                    await redis_pool.aclose()
-            except Exception:
-                LOGGER.exception("Could not close Redis job queue cleanly")
-            finally:
-                await database.dispose()
+    lifespan = None
+    if app_settings.job_engine == "redis":
+        # Imported lazily: the job engine and its dependencies are optional.
+        from bidsentry.api.jobs_router import job_engine_lifespan
+
+        lifespan = job_engine_lifespan
 
     api = FastAPI(
         title="BidSentry API",
-        version="2.2",
+        version=__version__,
         docs_url=None,
         redoc_url=None,
         openapi_url=None,
@@ -157,7 +129,12 @@ def create_asgi_app(settings: Settings | None = None) -> FastAPI:
     )
     api.include_router(create_auth_router(application))
     api.include_router(create_v1_router(application))
-    api.include_router(audit_stream_router)
+    if app_settings.job_engine == "redis":
+        from bidsentry.api.jobs_router import create_jobs_router
+        from bidsentry.api.stream import router as audit_stream_router
+
+        api.include_router(create_jobs_router(application))
+        api.include_router(audit_stream_router)
 
     @api.middleware("http")
     async def enforce_security(request: Request, call_next: RequestResponseEndpoint) -> Response:
@@ -182,7 +159,7 @@ def create_asgi_app(settings: Settings | None = None) -> FastAPI:
             bearer_token = auth_header[7:].strip() if auth_header.lower().startswith("bearer ") else ""
             cookie_token = request.cookies.get("bidsentry_token", "").strip()
             configured_token = application.settings.access_token
-            if bearer_token != configured_token and cookie_token != configured_token:
+            if not (_token_matches(bearer_token, configured_token) or _token_matches(cookie_token, configured_token)):
                 return JSONResponse(
                     failure("UNAUTHORIZED", "Token akses tidak valid atau belum diberikan.", request_id),
                     status_code=401,
@@ -237,7 +214,7 @@ def create_asgi_app(settings: Settings | None = None) -> FastAPI:
             )
             return JSONResponse(result.body, status_code=result.status, headers=result.headers or {})
         except OverflowError:
-            return JSONResponse(failure("PAYLOAD_TOO_LARGE", "Request body exceeds the configured limit.", request_id), status_code=413)
+            return JSONResponse(failure("PAYLOAD_TOO_LARGE", "Ukuran data melebihi batas server (maksimal 12 MB per permintaan). Pecah dokumen menjadi beberapa bagian.", request_id), status_code=413)
         except (UnicodeDecodeError, json.JSONDecodeError):
             return JSONResponse(failure("INVALID_JSON", "Request body must be valid UTF-8 JSON.", request_id), status_code=400)
         except ValueError as exc:
@@ -286,4 +263,6 @@ def _static_response(settings: Settings, url_path: str) -> Response:
     content_type, _ = mimetypes.guess_type(resolved.name)
     if resolved.suffix == ".js":
         content_type = "text/javascript"
+    elif resolved.suffix == ".woff2":
+        content_type = "font/woff2"
     return FileResponse(resolved, media_type=content_type, headers={"Cache-Control": "no-store"})

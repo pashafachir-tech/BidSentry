@@ -1,6 +1,49 @@
-# Catatan Perubahan & Riwayat Iterasi (Changelog Iterasi)
+# Catatan Perubahan BidSentry
 
-Dokumen ini mencatat riwayat perbaikan menyeluruh pada repositori BidSentry berdasarkan audit independen terhadap keamanan, akurasi engine, dan alur pengalaman pengguna (UX).
+Riwayat perubahan dari yang terbaru. Versi aplikasi tercantum di `pyproject.toml` dan `bidsentry/__init__.py`.
+
+---
+
+## [v4.2] - Akurasi Klausul Baku, AI yang Berguna, Integritas Log
+
+### Akurasi
+- Batas denda berbasis Jaminan Pelaksanaan dikenali; denda 1‰ tanpa keterangan batas kini REVIEW sesuai model SSKK LKPP.
+- Klausul kewajiban "benturan kepentingan" tidak lagi menjadi temuan; pengecualian Pasal 19 ayat (2) menjadi REVIEW.
+- Daftar merek non-TI (`brand_watchlist`), pembacaan rentang tanggal, hari kalender/kerja, dan offset jadwal.
+- Sanggah memakai 5 hari kalender dari Lampiran Peraturan LKPP 12/2021. Masa penawaran minimum tidak ditemukan di naskah, jadi hanya REVIEW.
+- Verdict tidak lagi bergantung tanggal audit; aturan R5b dan indikator cakupan mencegah GO dari cakupan sempit.
+
+### AI
+- Kandidat merek di luar pola aturan tampil untuk dicek manusia tanpa memengaruhi verdict.
+- Teks ke provider dibatasi 48.000 karakter; panggilan dibatalkan bila pola PII masih terdeteksi.
+
+### Keamanan & tata kelola
+- Akses audit dan keputusan reviewer diperiksa terhadap peran pemilik.
+- Audit log bersegel HMAC, penghapusan memakai tombstone dan menghapus teks sumber, status tampil di jejak audit.
+- Sensor PII diperluas; Berita Acara dan klarifikasi hanya dari audit tersimpan.
+- Surat vendor mengikuti tahap tender: permohonan penjelasan atau sanggahan.
+
+## [v4.1] - Tingkat Risiko Eksplisit, Dua Peran, Jejak Bukti, Benchmark Jujur
+
+### Keputusan & akurasi
+- Skor 100/100 diganti tabel keputusan deterministik R0–R6 dengan tingkat Rendah / Sedang / Tinggi / Kritis.
+- Benchmark terpadu: micro precision/recall/F1, interval Wilson 95%, pencocokan per rule family, dijaga CI.
+- Katalog 27 aturan dengan status verifikasi dasar hukum per pasal.
+
+### Alur pengguna
+- Login peran Pokja dan Vendor dengan command center masing-masing; isolasi audit per peran.
+- Dokumen naskah dinas DOCX (BA evaluasi, klarifikasi, sanggahan) dan BoQ XLSX dengan rumus hidup.
+- Mode presentasi dan pintasan keyboard (P, 1, 2, Esc, ?), demo seed Paket A/B.
+
+### AI & integrasi
+- Integrasi IBM watsonx.ai via Chat API, telemetri token dan latensi nyata, fallback lokal dengan batas waktu.
+- ProofLog per audit yang menunjukkan bagian yang dikerjakan AI dan bagian yang dihitung Python.
+
+### Ketahanan & keamanan
+- Suite chaos untuk input rusak, batas ukuran, PDF terenkripsi atau pindaian, dan ReDoS.
+- Kontrak respons Pydantic pada seluruh endpoint; pembatasan percobaan PIN login.
+- Mesin job asinkron dijadikan opsional; dependensi inti dipangkas.
+- Uji E2E browser `scripts/capture_screenshots.py` menggantikan `tests/e2e_smoke.py` dan memperbarui tangkapan layar dokumentasi.
 
 ---
 
@@ -78,3 +121,43 @@ Dokumen ini mencatat riwayat perbaikan menyeluruh pada repositori BidSentry berd
 - **Implementasi Blind Test Set Independen (10 Dokumen)**: Menambahkan 10 skenario pengadaan independen di `data/test_blind/` dan skrip evaluator `tests/benchmark_blind.py`. Dijalankan pada putaran pertama tanpa mengubah aturan engine, mencatat **70.0% Verdict Accuracy** dan **100.0% Trap Evasion Rate** disertai analisis kegagalan terbuka (format narasi bebas vs format tabel terstruktur), sebelum engine dikalibrasi pada iterasi berikutnya menjadi 90.0%.
 - **Penyempurnaan Sanggahan Builder**: Memastikan temuan yang ditandai *Ignored* (False Positive) oleh reviewer manusia secara otomatis dikecualikan dari sanggahan, dan draf sanggahan dari riwayat audit menyertakan kutipan bukti secara utuh.
 - **Pembersihan Klaim Rubrik**: Menyertakan rujukan resmi belanja PBJP (data LKPP/SiRUP > Rp 1.200 T), mengubah "persona riil" menjadi arketipe sasaran awal, memperjelas batasan throughput teknis (< 30 detik), dan menghapus terminologi berlebihan (*zero-hallucination*).
+
+---
+
+## [v2.1-modular] — Audit evidence and upload reliability
+
+- Changed custom keyword matches to review signals so a missing keyword is not represented as automatic noncompliance and a present keyword is not represented as verified fulfillment.
+- Added source filename and extracted-text line references to custom audit findings, plus separate requirement and evidence excerpts.
+- Preserved successfully extracted files in a mixed-result multi-file upload and kept per-file extraction errors visible in the upload form.
+- Clarified that text line references are not PDF page references and that scanned PDFs need OCR.
+
+## [v2.0] — Modular local review workspace
+
+### Architecture
+
+- Replaced the single HTTP handler/business-logic module with `bidsentry/api`, `controllers`, `services`, `lib`, and `types` packages.
+- Kept `server.py` as a small CLI entry point and preserved `run_rules_engine()` as a compatibility adapter.
+- Centralized bind settings, request limits, audit-log paths, Langflow configuration, and Composio configuration in `bidsentry/config.py` and `.env.example`.
+- Added explicit API routes for health, overview, audit search, JSON export, document audit, and workspace dispatch.
+- Standardized API success and error envelopes; malformed JSON, invalid fields, oversized payloads, unsupported methods, and unknown routes receive stable errors.
+
+### Audit and integrations
+
+- Moved rule matching out of the browser into `AuditService`; browser code now submits documents to the backend instead of maintaining a second parser.
+- Added a consistent 0–100 deterministic risk triage score with Low, Medium, High, and Critical bands, driver explanations, and an explicit uncalibrated-score disclosure.
+- Added contract review signals for unbounded penalty text, conditional/late payment terms, and mixed budget-source references. These are prompts for human review, not fraud findings.
+- Added an opt-in Langflow advisory adapter using the configured flow run endpoint. The local rules result remains available when Langflow is disabled, missing, or unavailable.
+- Kept Composio actions in a service facade with simulation fallback, and changed audit logging to store metadata only rather than document payloads.
+- Added a health response that distinguishes configured MCP metadata from a verified live IBM Bob connection.
+
+### UI/UX
+
+- Replaced the large inline dashboard with a small HTML shell and local ES modules for API access, UI state, rendering, and interactions.
+- Applied a restrained editorial layout informed by the supplied Lovelace theme: neutral canvas, fine dividers, rounded cards, compact status colors, and responsive navigation.
+- Added an executive overview, filterable procurement register, risk detail panel, contract findings, explicit synthetic-data labels, new-audit dialog, and JSON export.
+- Connected search/filtering, audit scans, export, health status, and Composio follow-up to the backend.
+
+### Validation boundary
+
+- The sample portfolio is explicitly labelled synthetic. No real-user feedback or live IBM Bob/Langflow flow is claimed by this refactor.
+- The supplied archive is a Home Assistant Lovelace integration. Its YAML and bundled JavaScript were inspected as reference material and are not application dependencies.

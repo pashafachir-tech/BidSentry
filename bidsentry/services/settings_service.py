@@ -27,7 +27,7 @@ MANAGED_DEFAULTS = {
     "WATSONX_API_KEY": "",
     "WATSONX_PROJECT_ID": "",
     "WATSONX_URL": "https://us-south.ml.cloud.ibm.com",
-    "WATSONX_MODEL_ID": "ibm/granite-3-8b-instruct",
+    "WATSONX_MODEL_ID": "mistralai/mistral-small-3-1-24b-instruct-2503",
 }
 
 
@@ -63,7 +63,7 @@ class SettingsService:
                 "api_key_saved": bool(getattr(settings, "watsonx_api_key", "") or getattr(settings, "llm_api_key", "")),
                 "project_id": getattr(settings, "watsonx_project_id", ""),
                 "url": getattr(settings, "watsonx_url", "https://us-south.ml.cloud.ibm.com"),
-                "model_id": getattr(settings, "watsonx_model_id", "ibm/granite-3-8b-instruct") or "ibm/granite-3-8b-instruct",
+                "model_id": getattr(settings, "watsonx_model_id", "mistralai/mistral-small-3-1-24b-instruct-2503") or "mistralai/mistral-small-3-1-24b-instruct-2503",
             },
         }
 

@@ -73,12 +73,6 @@ def _pdf_datetime(value: Any) -> str | None:
         return None
 
 
-def parse_pdf_datetime(value: Any) -> str | None:
-    """Public parser for PDF ``CreationDate`` and ``ModDate`` metadata values."""
-
-    return _pdf_datetime(value)
-
-
 def extract_pdf_metadata(pdf_bytes: bytes) -> dict[str, Any]:
     """Extract non-content PDF metadata and per-document font fingerprints."""
     if not isinstance(pdf_bytes, bytes) or not pdf_bytes:

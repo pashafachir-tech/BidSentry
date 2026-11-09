@@ -15,9 +15,8 @@ from decimal import Decimal
 from bidsentry.audits.default_predictor import predict_default_risk
 from bidsentry.config import Settings
 from bidsentry.forensics.collusion import compare_proposals
-from bidsentry.lib.pii import mask_text, mask_value
+from bidsentry.lib.pii import mask_text
 from bidsentry.schemas.comprehensive import DefaultRiskInput
-from bidsentry.services.dispatch_service import DispatchService
 from bidsentry.services.watsonx_service import WatsonxService
 
 
@@ -46,7 +45,7 @@ class ResponsibleAiTests(unittest.TestCase):
         service = WatsonxService(settings)
         status = service.status()
         self.assertEqual(status["provider"], "ibm_watsonx_ai")
-        self.assertEqual(status["model_id"], "ibm/granite-3-8b-instruct")
+        self.assertEqual(status["model_id"], "mistralai/mistral-small-3-1-24b-instruct-2503")
 
         # Test preflight guardrails (verbatim grounding & pattern-based PII scrubbing)
         preflight = service.evaluate_preflight_guardrails(candidate_quotes=["MATH_MISMATCH", "HARGA_TIMPANG_HIGH"])
@@ -81,6 +80,26 @@ class ResponsibleAiTests(unittest.TestCase):
         self.assertEqual(res["status"], "screening_score")
         self.assertIn("umkm_bias_protection", res)
         self.assertIn("Pasal 65", res["umkm_bias_protection"])
+
+    def test_default_predictor_scores_scale_neutrally(self):
+        """A small firm with the same capacity ratios must not score worse than a large one."""
+        def index(multiplier: int) -> float:
+            result = predict_default_risk(DefaultRiskInput(
+                tender_value=Decimal("500000000") * multiplier,
+                skn_amount=Decimal("300000000") * multiplier,
+                working_capital_amount=Decimal("100000000") * multiplier,
+                subcontracting_commitments=Decimal("200000000") * multiplier,
+                internal_execution_capacity=Decimal("100000000") * multiplier,
+            ))
+            return result["project_abandonment_index"]
+
+        self.assertEqual(index(1), index(1000))
+
+    def test_default_predictor_rewards_capacity_not_size(self):
+        """Absolute size is irrelevant: the better-covered small package scores lower."""
+        small = predict_default_risk(DefaultRiskInput(tender_value=Decimal("100000000"), skn_amount=Decimal("90000000"), working_capital_amount=Decimal("90000000")))
+        large = predict_default_risk(DefaultRiskInput(tender_value=Decimal("10000000000"), skn_amount=Decimal("5000000000"), working_capital_amount=Decimal("5000000000")))
+        self.assertLess(small["project_abandonment_index"], large["project_abandonment_index"])
 
 
 if __name__ == "__main__":

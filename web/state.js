@@ -10,7 +10,9 @@ const initialState = {
   reviewTab: "matrix", reviewInsightsVisited: false,
   adendumActive: true, exposureDays: 35, customReview: null, lastAuditDraft: null,
   reviewFeedback: null, crossSummaryTab: "project",
-  proof: null, proofLoading: false, presentation,
+  proof: null, proofIntegrity: null, proofLoading: false, presentation,
+  benchmark: null, economics: null, economicsInputs: {}, roleTransition: null,
+  hideHints: false,
 };
 
 let state = { ...initialState };
@@ -22,7 +24,8 @@ export function setState(patch, { notify = true } = {}) {
   if (notify) for (const listener of listeners) listener(state);
 }
 export function resetWorkspaceState() {
-  state = { ...initialState, session: state.session, sessionChecked: true, presentation: state.presentation };
+  // Clean isolation between Pokja and Vendor: nothing from the previous workspace survives.
+  state = { ...initialState, session: state.session, sessionChecked: true, presentation: state.presentation, benchmark: state.benchmark, hideHints: state.hideHints };
   for (const listener of listeners) listener(state);
 }
 export function subscribe(listener) {

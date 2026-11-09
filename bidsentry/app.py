@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from bidsentry.config import Settings
 from bidsentry.controllers.audit_controller import AuditController, PortfolioController
+from bidsentry.core.auth import audit_seal_key
 from bidsentry.controllers.dispatch_controller import DispatchController
 from bidsentry.evaluators.engine import EvaluationEngine
 from bidsentry.lib.audit_log import AuditLog
@@ -48,11 +50,14 @@ class Application:
 
 def create_application(settings: Settings | None = None) -> Application:
     config = settings or Settings.from_environment()
-    audit_log = AuditLog(config.audit_log_path)
+    audit_log = AuditLog(config.audit_log_path, seal_key=audit_seal_key(config))
     try:
         audit_log.purge_older_than(config.audit_retention_days)
     except Exception:
         pass
+    valid, records, message = audit_log.verify_chain()
+    if not valid:
+        logging.getLogger("bidsentry.audit_log").warning("Integritas audit log gagal (%s catatan): %s", records, message)
     langflow = LangflowService(config)
     watsonx = WatsonxService(config)
     evaluation_engine = EvaluationEngine(config, langflow)

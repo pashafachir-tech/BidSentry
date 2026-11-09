@@ -81,7 +81,7 @@ class Verdict(str, Enum):
 
 
 Party = Literal["tender_document", "bidder_evidence"]
-Origin = Literal["deterministic_rule", "ai_extraction_python_validated"]
+Origin = Literal["deterministic_rule", "ai_extraction_python_validated", "ai_extraction_unconfirmed"]
 
 
 class Finding(BaseModel):
@@ -102,10 +102,12 @@ class Finding(BaseModel):
     evidence_source: str = Field(default="Bukti belum ditemukan", max_length=240)
     evidence: str = Field(default="", max_length=4000)
     review_note: str = Field(default="", max_length=4000)
-    legal_reference: str = Field(default="", max_length=400)
-    legal_verification: Literal["PERLU_VERIFIKASI_HUKUM", "TERVERIFIKASI"] = "PERLU_VERIFIKASI_HUKUM"
+    legal_reference: str = Field(default="", max_length=1200)
+    legal_verification: Literal["DIPERIKSA_NASKAH", "DIPERIKSA_SEKUNDER", "PERLU_VERIFIKASI_HUKUM"] = "PERLU_VERIFIKASI_HUKUM"
+    legal_basis: list[dict[str, str]] = Field(default_factory=list, max_length=10)
     origin: Origin = "deterministic_rule"
     calculation_ref: str | None = Field(default=None, max_length=80, description="Proof-log step id holding the arithmetic.")
+    threshold_unverified: bool = Field(default=False, description="Raised by a numeric threshold not yet confirmed in regulation text, so it asks for review instead of a NO-GO.")
 
 
 class RiskDriver(BaseModel):
@@ -156,7 +158,7 @@ class ProofStep(BaseModel):
     sequence: int
     kind: ProofKind
     title: str
-    actor: str = Field(description="Component that executed the step, e.g. 'python:penalty_calculator' or 'watsonx:ibm/granite-…'.")
+    actor: str = Field(description="Component that executed the step, e.g. 'python:penalty_calculator' or 'watsonx:mistralai/…'.")
     status: Literal["ok", "skipped", "failed", "rejected"] = "ok"
     duration_ms: float | None = None
     inputs: dict[str, Any] = Field(default_factory=dict)

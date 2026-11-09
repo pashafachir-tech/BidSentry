@@ -29,15 +29,15 @@ Langflow berfungsi sebagai lapisan orkestrasi dan analisis lintas dokumen, bukan
 
 ## Hipotesis monetisasi yang perlu diuji
 
-Model awal yang paling mudah dijelaskan adalah langganan workspace dengan kuota analisis AI, karena biaya AI bisa berubah menurut pemakaian. Harga berikut adalah **harga uji wawancara**, bukan harga pasar BidSentry yang telah tervalidasi:
+Harga acuan BidSentry ada di satu tempat, yaitu [MONETIZATION_STRATEGY.md](MONETIZATION_STRATEGY.md), dan sama dengan tabel di README. Semua harga masih **hipotesis yang diuji lewat wawancara**, belum harga pasar tervalidasi:
 
-| Paket hipotesis | Harga uji | Batas nilai yang diuji |
-|---|---:|---|
-| Reviewer | Rp299.000/workspace/bulan | 1 reviewer, kuota audit terbatas, matriks sumber, ekspor, dan kuota insight AI kecil |
-| Tim | Rp699.000/workspace/bulan | Hingga 5 reviewer, aturan bersama, review kolaboratif, kuota insight lebih besar, dan laporan |
-| Organisasi | Penawaran setelah discovery | Deployment privat, retensi khusus, kontrol akses, integrasi, onboarding, dan dukungan |
+| Paket | Sasaran | Harga uji |
+|---|---|---:|
+| Pay-Per-Audit (QRIS) | Kontraktor CV/UMKM | Rp5.000 per 10 audit (Rp500/dokumen) |
+| Vendor Pro | Kontraktor aktif LPSE | Rp300.000/bulan |
+| BUMD/BLUD Pilot | RSUD BLUD, BUMD, satuan pengawas | Rp800.000/bulan (Rp9,6 juta/tahun, cukup SPK) |
 
-Angka itu dipilih untuk menguji rentang beberapa ratus ribu rupiah. Fitur tim seperti kolaborasi, aturan bersama, laporan, dan deployment privat belum seluruhnya tersedia; jangan menjualnya sebagai fitur aktif sebelum dibangun. Sebagai pembanding kategori yang berdekatan—bukan kompetitor langsung atau bukti kesediaan membayar BidSentry—Cicero mencantumkan Legal Pro Rp499.000/bulan, sedangkan Privy mencantumkan harga Enterprise tanda tangan elektronik Rp225.000/akun pegawai/bulan. Alur, biaya, dan manfaat produknya berbeda; gunakan hanya sebagai bahan pertanyaan wawancara: [Cicero pricing](https://cicero.id/pricing), [Privy pricing](https://privy.id/id/digital-signature).
+Fitur tim seperti kolaborasi dan deployment privat belum tersedia; jangan menjualnya sebagai fitur aktif sebelum dibangun. Sebagai pembanding kategori yang berdekatan (bukan kompetitor langsung atau bukti kesediaan membayar), Cicero mencantumkan Legal Pro Rp499.000/bulan dan Privy mencantumkan Enterprise tanda tangan elektronik Rp225.000/akun/bulan: [Cicero pricing](https://cicero.id/pricing), [Privy pricing](https://privy.id/id/digital-signature).
 
 Sebelum menentukan harga tetap, wawancarai pengguna dan pembeli secara terpisah. Cari tahu frekuensi review, siapa pemilik anggaran, metode kerja saat ini, batas pemrosesan data, biaya support, dan apakah pembeli lebih memilih per-seat, per-workspace, atau per-paket. Catat penolakan dan alasan harga terasa tidak layak.
 

@@ -29,7 +29,15 @@ class AuditController:
             if not isinstance(exc, PydanticValidationError):
                 raise
             details = [{"field": ".".join(str(part) for part in item["loc"]), "issue": str(item["type"]), "message": str(item["msg"])} for item in exc.errors(include_url=False)]
-            raise ValidationError("Request evaluasi tidak memenuhi skema.", details) from exc
+            too_long = [item for item in exc.errors(include_url=False) if item.get("type") == "string_too_long"]
+            if too_long:
+                field = str(too_long[0]["loc"][-1])
+                limit = (too_long[0].get("ctx") or {}).get("max_length")
+                raise ValidationError(
+                    f"Isi '{field}' terlalu panjang (maksimal {limit:,} karakter). Pecah dokumen menjadi beberapa bagian lalu audit per bagian.".replace(",", "."),
+                    details,
+                ) from exc
+            raise ValidationError("Data evaluasi tidak lengkap atau formatnya tidak sesuai. Periksa kembali isian formulir.", details) from exc
         if not request.all_document_text:
             raise ValidationError("Masukkan setidaknya satu teks dokumen.", [{"field": "dok_pemilihan", "issue": "at_least_one_document_required"}])
         result = self.audit_service.audit(request)
@@ -111,6 +119,8 @@ class AuditController:
             "adendum_reconciliation": result.get("adendum_reconciliation", {}),
             "contextual_extraction": result.get("contextual_extraction", {}),
             "ai_governance_metadata": ai_governance,
+            "engine_mode": result.get("engine_mode"),
+            "coverage": result.get("coverage", {}),
             "proof_log": result.get("proof_log", []),
             "proof_summary": result.get("proof_summary", {}),
             "has_source_text": bool(request.all_document_text),

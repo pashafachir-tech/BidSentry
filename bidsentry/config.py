@@ -37,6 +37,14 @@ def _flag(name: str, default: bool = False) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _float_env(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if value >= 0 and value == value and value != float("inf") else default
+
+
 def _workspace_path(value: str | None, fallback: Path) -> Path:
     if not value:
         return fallback
@@ -61,6 +69,10 @@ def _validate_service_url(value: str, setting: str) -> None:
             pass
     if parsed.scheme == "http" and not is_loopback:
         raise ValueError(f"{setting} must use HTTPS for non-local services.")
+
+
+# Upper bound of document text sent to the AI provider per audit (about 12,000 tokens).
+AI_CONTEXT_MAX_CHARS = 48_000
 
 
 @dataclass(frozen=True)
@@ -91,10 +103,18 @@ class Settings:
     access_token: str = ""
     audit_retention_days: int = 90
     watsonx_api_key: str = ""
-    watsonx_model_id: str = "ibm/granite-3-8b-instruct"
+    watsonx_model_id: str = "mistralai/mistral-small-3-1-24b-instruct-2503"
+    job_engine: str = ""  # "redis" mounts the optional async job API
     pokja_pin: str = ""
     vendor_pin: str = ""
     session_secret: str = ""
+    # Unit-economics assumptions (shown in the UI, overridable via env and per request)
+    ai_price_usd_per_1m_input_tokens: float = 0.106
+    ai_price_usd_per_1m_output_tokens: float = 0.318
+    ai_price_source: str = "Daftar harga resmi IBM watsonx.ai untuk mistralai/mistral-small-3-1-24b-instruct-2503 (ibm.com/products/watsonx-ai/pricing, dicek 8 Nov 2026; indikatif, belum termasuk pajak)."
+    usd_idr_rate: float = 16500.0
+    manual_review_hours_per_package: float = 4.5
+    manual_hourly_cost_idr: float = 75000.0
 
     @property
     def composio_entity_id(self) -> str:
@@ -176,16 +196,18 @@ class Settings:
             access_token=access_token,
             audit_retention_days=audit_retention_days,
             watsonx_api_key=os.environ.get("WATSONX_API_KEY", "").strip(),
-            watsonx_model_id=os.environ.get("WATSONX_MODEL_ID", "ibm/granite-3-8b-instruct").strip() or "ibm/granite-3-8b-instruct",
+            watsonx_model_id=os.environ.get("WATSONX_MODEL_ID", "mistralai/mistral-small-3-1-24b-instruct-2503").strip() or "mistralai/mistral-small-3-1-24b-instruct-2503",
+            job_engine=os.environ.get("BIDSENTRY_JOB_ENGINE", "").strip().casefold(),
             pokja_pin=os.environ.get("BIDSENTRY_POKJA_PIN", "").strip(),
             vendor_pin=os.environ.get("BIDSENTRY_VENDOR_PIN", "").strip(),
             session_secret=os.environ.get("BIDSENTRY_SESSION_SECRET", "").strip(),
+            ai_price_usd_per_1m_input_tokens=_float_env("AI_PRICE_USD_PER_1M_INPUT_TOKENS", 0.106),
+            ai_price_usd_per_1m_output_tokens=_float_env("AI_PRICE_USD_PER_1M_OUTPUT_TOKENS", 0.318),
+            ai_price_source=os.environ.get("AI_PRICE_SOURCE", "").strip() or cls.ai_price_source,
+            usd_idr_rate=_float_env("USD_IDR_RATE", 16500.0),
+            manual_review_hours_per_package=_float_env("MANUAL_REVIEW_HOURS_PER_PACKAGE", 4.5),
+            manual_hourly_cost_idr=_float_env("MANUAL_HOURLY_COST_IDR", 75000.0),
         )
 
 
-def get_async_engine_settings() -> "AsyncEngineSettings":
-    from bidsentry.core.config import AsyncEngineSettings
-    return AsyncEngineSettings()
-
-
-__all__ = ["Settings", "load_env_file", "get_async_engine_settings"]
+__all__ = ["Settings", "load_env_file"]

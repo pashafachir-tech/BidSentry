@@ -5,7 +5,8 @@
   "input": {
     "package_name": "Pekerjaan Mekanikal Elektrikal",
     "dok_pemilihan": "Persyaratan Dokumen:\nPeserta wajib melampirkan SBU elektrikal.",
-    "pustaka": "Lampiran Dokumen Perusahaan:\nSertifikat Badan Usaha (SBU) registrasi aktif\nberlaku sampai dengan\n25 Desember 2030 oleh LPJK."
+    "pustaka": "Lampiran Dokumen Perusahaan:\nSertifikat Badan Usaha (SBU) registrasi aktif\nberlaku sampai dengan\n25 Desember 2030 oleh LPJK.",
+    "bid_deadline": "1 Juni 2026"
   },
   "expected_findings": [
     {

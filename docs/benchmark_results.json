@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-07T21:29:48+0700",
+  "generated_at": "2026-11-09T18:05:36+0700",
   "engine": "deterministic rules only (AI extraction disabled)",
-  "unit": "red flag = finding with status GAP or EXPIRING; matched by rule family",
+  "unit": "red flag = finding with status GAP or EXPIRING, or REVIEW held only because its numeric threshold is unverified; matched by rule family",
   "suites": [
     {
       "suite": "dev_regression",
@@ -12,6 +12,32 @@
       "real_world_documents": false,
       "mode": "flags",
       "documents": 24,
+      "document_characters": [
+        354,
+        196,
+        185,
+        113,
+        81,
+        139,
+        79,
+        191,
+        143,
+        110,
+        132,
+        140,
+        98,
+        152,
+        179,
+        201,
+        177,
+        186,
+        162,
+        135,
+        147,
+        128,
+        96,
+        128
+      ],
       "family": {
         "tp": 13,
         "fp": 0,
@@ -44,14 +70,14 @@
           1.0
         ]
       },
-      "verdict_accuracy": 1.0,
-      "verdict_correct": 24,
+      "verdict_accuracy": 0.9583,
+      "verdict_correct": 23,
       "verdict_total": 24,
       "traps_without_false_positive": 9,
       "trap_documents": 9,
       "documents_with_false_positive": 0,
       "evidence_requests": 0,
-      "median_latency_ms": 0.389,
+      "median_latency_ms": 0.417,
       "cases": [
         {
           "case_id": "doc_01_clean_ict_procurement",
@@ -72,7 +98,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 24.397
+          "latency_ms": 13.781
         },
         {
           "case_id": "doc_02_brand_lockin_cpu_only",
@@ -99,7 +125,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.62
+          "latency_ms": 0.599
         },
         {
           "case_id": "doc_03_brand_lockin_gpu_with_equiv",
@@ -120,7 +146,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.479
+          "latency_ms": 0.452
         },
         {
           "case_id": "doc_04_brand_lockin_gpu_strict",
@@ -147,15 +173,15 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.378
+          "latency_ms": 0.349
         },
         {
           "case_id": "doc_05_compressed_timeline_bid_prep",
           "is_trap": false,
           "expected_verdict": "NO-GO",
-          "actual_verdict": "NO-GO",
-          "verdict_match": true,
-          "risk_level": "HIGH",
+          "actual_verdict": "BELUM CUKUP BUKTI",
+          "verdict_match": false,
+          "risk_level": "MEDIUM",
           "expected": [
             "PROC-TIMELINE"
           ],
@@ -174,7 +200,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.473
+          "latency_ms": 0.342
         },
         {
           "case_id": "doc_06_sufficient_timeline_8days",
@@ -195,7 +221,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.353
+          "latency_ms": 0.371
         },
         {
           "case_id": "doc_07_compressed_sanggah_timeline",
@@ -222,7 +248,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.303
+          "latency_ms": 0.312
         },
         {
           "case_id": "doc_08_normative_integrity_no_coi",
@@ -243,7 +269,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.65
+          "latency_ms": 0.815
         },
         {
           "case_id": "doc_09_actual_coi_recom_letter",
@@ -270,7 +296,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.358
+          "latency_ms": 0.38
         },
         {
           "case_id": "doc_10_normative_pagu_guideline",
@@ -291,7 +317,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.296
+          "latency_ms": 0.323
         },
         {
           "case_id": "doc_11_actual_overbudget_boq",
@@ -318,7 +344,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.675
+          "latency_ms": 0.484
         },
         {
           "case_id": "doc_12_reasonable_billing_rates",
@@ -339,7 +365,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.359
+          "latency_ms": 0.386
         },
         {
           "case_id": "doc_13_markup_billing_rate_pm",
@@ -366,7 +392,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.5
+          "latency_ms": 0.552
         },
         {
           "case_id": "doc_14_double_counted_license_maint",
@@ -393,7 +419,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.441
+          "latency_ms": 0.518
         },
         {
           "case_id": "doc_15_uncapped_penalty_contract",
@@ -420,7 +446,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.382
+          "latency_ms": 0.54
         },
         {
           "case_id": "doc_16_capped_penalty_contract",
@@ -441,7 +467,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.326
+          "latency_ms": 0.355
         },
         {
           "case_id": "doc_17_sbu_expired",
@@ -468,7 +494,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.787
+          "latency_ms": 0.832
         },
         {
           "case_id": "doc_18_sbu_valid_broken_lines",
@@ -489,7 +515,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.301
+          "latency_ms": 0.341
         },
         {
           "case_id": "doc_19_kswp_valid_labeled",
@@ -510,7 +536,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.473
+          "latency_ms": 0.507
         },
         {
           "case_id": "doc_20_kswp_invalid",
@@ -537,7 +563,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.256
+          "latency_ms": 0.276
         },
         {
           "case_id": "doc_21_warranty_12_months_vs_1_year",
@@ -558,7 +584,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.389
+          "latency_ms": 0.417
         },
         {
           "case_id": "doc_22_warranty_deficient",
@@ -585,7 +611,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.278
+          "latency_ms": 0.291
         },
         {
           "case_id": "doc_23_empty_no_requirements",
@@ -606,7 +632,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.263
+          "latency_ms": 0.266
         },
         {
           "case_id": "doc_24_discriminatory_regional_assoc",
@@ -633,7 +659,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.684
+          "latency_ms": 0.73
         }
       ]
     },
@@ -646,6 +672,18 @@
       "real_world_documents": false,
       "mode": "flags",
       "documents": 10,
+      "document_characters": [
+        378,
+        323,
+        393,
+        303,
+        352,
+        265,
+        306,
+        303,
+        286,
+        262
+      ],
       "family": {
         "tp": 2,
         "fp": 0,
@@ -685,7 +723,7 @@
       "trap_documents": 9,
       "documents_with_false_positive": 0,
       "evidence_requests": 0,
-      "median_latency_ms": 0.501,
+      "median_latency_ms": 0.577,
       "cases": [
         {
           "case_id": "trap_01_denda_berbatas_ragam_satuan",
@@ -706,7 +744,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.487
+          "latency_ms": 0.726
         },
         {
           "case_id": "trap_02_spesifikasi_merek_setara",
@@ -727,7 +765,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.501
+          "latency_ms": 0.624
         },
         {
           "case_id": "trap_03_kalimat_normatif_pagu_hps",
@@ -748,7 +786,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.569
+          "latency_ms": 0.623
         },
         {
           "case_id": "trap_04_pakta_integritas_normatif",
@@ -769,7 +807,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.763
+          "latency_ms": 0.553
         },
         {
           "case_id": "trap_05_lokasi_pekerjaan_proyek",
@@ -790,7 +828,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.559
+          "latency_ms": 0.597
         },
         {
           "case_id": "trap_06_produk_bersertifikat_sni_tkdn",
@@ -811,7 +849,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.479
+          "latency_ms": 0.519
         },
         {
           "case_id": "trap_07_jadwal_standar_lkpp",
@@ -832,7 +870,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.516
+          "latency_ms": 0.577
         },
         {
           "case_id": "trap_08_kantor_lapangan_workshop",
@@ -853,7 +891,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.487
+          "latency_ms": 0.556
         },
         {
           "case_id": "trap_09_english_equivalent_clause",
@@ -874,7 +912,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.437
+          "latency_ms": 0.503
         },
         {
           "case_id": "trap_10_kontrol_positif_lockin_dan_denda",
@@ -904,7 +942,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.418
+          "latency_ms": 0.485
         }
       ]
     },
@@ -912,11 +950,23 @@
       "suite": "blind_v1",
       "title": "Blind v1 (10 dokumen)",
       "path": "data/test_blind",
-      "provenance": "Disusun tim (scripts/generate_blind_set.py). Setelah putaran pertama engine dikalibrasi pada set ini (lihat CHANGELOG_ITERASI), jadi tidak lagi independen.",
+      "provenance": "Disusun tim (scripts/generate_blind_set.py). Setelah putaran pertama engine dikalibrasi pada set ini (lihat docs/BENCHMARK_RESULTS.md), jadi tidak lagi independen.",
       "independent_of_rule_tuning": false,
       "real_world_documents": false,
       "mode": "flags",
       "documents": 10,
+      "document_characters": [
+        1278,
+        363,
+        287,
+        274,
+        414,
+        441,
+        341,
+        375,
+        333,
+        336
+      ],
       "family": {
         "tp": 6,
         "fp": 0,
@@ -949,14 +999,14 @@
           0.6411
         ]
       },
-      "verdict_accuracy": 1.0,
-      "verdict_correct": 10,
+      "verdict_accuracy": 0.9,
+      "verdict_correct": 9,
       "verdict_total": 10,
       "traps_without_false_positive": 3,
       "trap_documents": 3,
       "documents_with_false_positive": 0,
       "evidence_requests": 0,
-      "median_latency_ms": 0.625,
+      "median_latency_ms": 0.759,
       "cases": [
         {
           "case_id": "blind_01_konstruksi_standar_clean",
@@ -977,7 +1027,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 1.174
+          "latency_ms": 2.094
         },
         {
           "case_id": "blind_02_pengadaan_laptop_lockin_intel",
@@ -1004,15 +1054,15 @@
             "fn": 1
           },
           "evidence_requests": [],
-          "latency_ms": 0.586
+          "latency_ms": 0.645
         },
         {
           "case_id": "blind_03_konsultansi_jadwal_mepet",
           "is_trap": false,
           "expected_verdict": "NO-GO",
-          "actual_verdict": "NO-GO",
-          "verdict_match": true,
-          "risk_level": "HIGH",
+          "actual_verdict": "BELUM CUKUP BUKTI",
+          "verdict_match": false,
+          "risk_level": "MEDIUM",
           "expected": [
             "PROC-TIMELINE"
           ],
@@ -1031,7 +1081,7 @@
             "fn": 2
           },
           "evidence_requests": [],
-          "latency_ms": 0.532
+          "latency_ms": 0.655
         },
         {
           "case_id": "blind_04_alkes_denda_tanpa_batas",
@@ -1058,7 +1108,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.294
+          "latency_ms": 0.33
         },
         {
           "case_id": "blind_05_outsourcing_pakta_integritas_trap",
@@ -1079,7 +1129,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.625
+          "latency_ms": 0.759
         },
         {
           "case_id": "blind_06_jasa_erp_over_budget",
@@ -1106,7 +1156,7 @@
             "fn": 1
           },
           "evidence_requests": [],
-          "latency_ms": 0.721
+          "latency_ms": 0.804
         },
         {
           "case_id": "blind_07_sewa_kendaraan_equivalent_trap",
@@ -1127,7 +1177,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.536
+          "latency_ms": 0.674
         },
         {
           "case_id": "blind_08_meubeler_sbu_hampir_kadaluwarsa",
@@ -1154,7 +1204,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.501
+          "latency_ms": 0.857
         },
         {
           "case_id": "blind_09_konsultan_billing_rate_tinggi",
@@ -1181,7 +1231,7 @@
             "fn": 1
           },
           "evidence_requests": [],
-          "latency_ms": 0.626
+          "latency_ms": 0.9
         },
         {
           "case_id": "blind_10_dokumen_narasi_lepas_tanpa_pasal",
@@ -1202,7 +1252,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.825
+          "latency_ms": 0.754
         }
       ]
     },
@@ -1210,41 +1260,48 @@
       "suite": "narrative_budget",
       "title": "Narasi anggaran (5 dokumen)",
       "path": "data/test_narrative_budget",
-      "provenance": "Disusun tim untuk menguji angka pagu/BoQ dalam prosa bebas.",
+      "provenance": "Disusun tim untuk menguji angka pagu/BoQ dalam prosa bebas. Miss budget_03 dilihat lalu diperbaiki secara umum (normalizer Rupiah + batas kata kunci), jadi set ini juga in-sample.",
       "independent_of_rule_tuning": false,
       "real_world_documents": false,
       "mode": "flags",
       "documents": 5,
+      "document_characters": [
+        562,
+        467,
+        526,
+        512,
+        512
+      ],
       "family": {
-        "tp": 2,
+        "tp": 3,
         "fp": 1,
-        "fn": 1,
-        "precision": 0.6667,
-        "recall": 0.6667,
-        "f1": 0.6667,
+        "fn": 0,
+        "precision": 0.75,
+        "recall": 1.0,
+        "f1": 0.8571,
         "precision_ci95": [
-          0.2077,
-          0.9385
+          0.3006,
+          0.9544
         ],
         "recall_ci95": [
-          0.2077,
-          0.9385
+          0.4385,
+          1.0
         ]
       },
       "strict_id": {
-        "tp": 2,
+        "tp": 3,
         "fp": 1,
-        "fn": 1,
-        "precision": 0.6667,
-        "recall": 0.6667,
-        "f1": 0.6667,
+        "fn": 0,
+        "precision": 0.75,
+        "recall": 1.0,
+        "f1": 0.8571,
         "precision_ci95": [
-          0.2077,
-          0.9385
+          0.3006,
+          0.9544
         ],
         "recall_ci95": [
-          0.2077,
-          0.9385
+          0.4385,
+          1.0
         ]
       },
       "verdict_accuracy": 0.8,
@@ -1253,8 +1310,8 @@
       "traps_without_false_positive": 1,
       "trap_documents": 1,
       "documents_with_false_positive": 1,
-      "evidence_requests": 2,
-      "median_latency_ms": 0.792,
+      "evidence_requests": 3,
+      "median_latency_ms": 0.88,
       "cases": [
         {
           "case_id": "budget_01_prose_over_budget",
@@ -1281,7 +1338,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.869
+          "latency_ms": 1.025
         },
         {
           "case_id": "budget_02_prose_within_budget",
@@ -1305,7 +1362,7 @@
             "ADM-NIB",
             "ADM-NPWP"
           ],
-          "latency_ms": 0.764
+          "latency_ms": 0.787
         },
         {
           "case_id": "budget_03_prose_hps_over_pagu",
@@ -1313,28 +1370,31 @@
           "expected_verdict": "NO-GO",
           "actual_verdict": "NO-GO",
           "verdict_match": true,
-          "risk_level": "HIGH",
+          "risk_level": "CRITICAL",
           "expected": [
             "FIN-OVER-BUDGET"
           ],
           "predicted": [
+            "FIN-OVER-BUDGET",
             "PROC-TIMELINE"
           ],
-          "true_positive": [],
+          "true_positive": [
+            "FIN-OVER-BUDGET"
+          ],
           "false_positive": [
             "PROC-TIMELINE"
           ],
-          "false_negative": [
-            "FIN-OVER-BUDGET"
-          ],
+          "false_negative": [],
           "forbidden_hit": [],
           "strict": {
-            "tp": 0,
+            "tp": 1,
             "fp": 1,
-            "fn": 1
+            "fn": 0
           },
-          "evidence_requests": [],
-          "latency_ms": 0.728
+          "evidence_requests": [
+            "PROC-TIMELINE-COMPRESSED"
+          ],
+          "latency_ms": 0.885
         },
         {
           "case_id": "budget_04_prose_normative_guideline_trap",
@@ -1355,7 +1415,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 1.048
+          "latency_ms": 0.853
         },
         {
           "case_id": "budget_05_prose_multi_item_recap",
@@ -1382,7 +1442,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.792
+          "latency_ms": 0.88
         }
       ]
     },
@@ -1395,6 +1455,10 @@
       "real_world_documents": false,
       "mode": "flags",
       "documents": 2,
+      "document_characters": [
+        689,
+        595
+      ],
       "family": {
         "tp": 2,
         "fp": 0,
@@ -1434,7 +1498,7 @@
       "trap_documents": 0,
       "documents_with_false_positive": 0,
       "evidence_requests": 0,
-      "median_latency_ms": 1.435,
+      "median_latency_ms": 1.63,
       "cases": [
         {
           "case_id": "fixture_001",
@@ -1464,7 +1528,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 1.435
+          "latency_ms": 1.63
         },
         {
           "case_id": "fixture_002",
@@ -1485,7 +1549,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.829
+          "latency_ms": 0.877
         }
       ]
     },
@@ -1498,6 +1562,9 @@
       "real_world_documents": true,
       "mode": "recognition",
       "documents": 1,
+      "document_characters": [
+        253
+      ],
       "family": {
         "tp": 2,
         "fp": 0,
@@ -1537,7 +1604,7 @@
       "trap_documents": 0,
       "documents_with_false_positive": 0,
       "evidence_requests": 0,
-      "median_latency_ms": 0.988,
+      "median_latency_ms": 0.637,
       "cases": [
         {
           "case_id": "LPSE-KEMKES-10261197000",
@@ -1567,42 +1634,42 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.988
+          "latency_ms": 0.637
         }
       ]
     }
   ],
   "pooled_all_synthetic": {
-    "tp": 25,
+    "tp": 26,
     "fp": 1,
-    "fn": 1,
-    "precision": 0.9615,
-    "recall": 0.9615,
-    "f1": 0.9615,
+    "fn": 0,
+    "precision": 0.963,
+    "recall": 1.0,
+    "f1": 0.9811,
     "precision_ci95": [
-      0.8111,
-      0.9932
+      0.8172,
+      0.9934
     ],
     "recall_ci95": [
-      0.8111,
-      0.9932
+      0.8713,
+      1.0
     ],
     "documents": 51
   },
   "pooled_excluding_dev_regression": {
-    "tp": 12,
+    "tp": 13,
     "fp": 1,
-    "fn": 1,
-    "precision": 0.9231,
-    "recall": 0.9231,
-    "f1": 0.9231,
+    "fn": 0,
+    "precision": 0.9286,
+    "recall": 1.0,
+    "f1": 0.963,
     "precision_ci95": [
-      0.6669,
-      0.9863
+      0.6853,
+      0.9873
     ],
     "recall_ci95": [
-      0.6669,
-      0.9863
+      0.7719,
+      1.0
     ],
     "documents": 27
   },

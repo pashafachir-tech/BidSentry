@@ -1,6 +1,5 @@
 """Generate rich multi-page PDF sample tenders with structured tables and metadata."""
 
-import os
 from pathlib import Path
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors

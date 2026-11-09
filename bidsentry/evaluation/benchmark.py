@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import math
+import statistics
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -50,14 +51,28 @@ SUITES: tuple[Suite, ...] = (
     Suite("traps_v2", "Traps v2 (10 dokumen jebakan)", "data/test_traps_v2",
           "Disusun tim setelah perbaikan bug false positive; dipakai sebagai regression guard.", False, False),
     Suite("blind_v1", "Blind v1 (10 dokumen)", "data/test_blind",
-          "Disusun tim (scripts/generate_blind_set.py). Setelah putaran pertama engine dikalibrasi pada set ini (lihat CHANGELOG_ITERASI), jadi tidak lagi independen.", False, False),
+          "Disusun tim (scripts/generate_blind_set.py). Setelah putaran pertama engine dikalibrasi pada set ini (lihat docs/BENCHMARK_RESULTS.md), jadi tidak lagi independen.", False, False),
     Suite("narrative_budget", "Narasi anggaran (5 dokumen)", "data/test_narrative_budget",
-          "Disusun tim untuk menguji angka pagu/BoQ dalam prosa bebas.", False, False),
+          "Disusun tim untuk menguji angka pagu/BoQ dalam prosa bebas. Miss budget_03 dilihat lalu diperbaiki secara umum (normalizer Rupiah + batas kata kunci), jadi set ini juga in-sample.", False, False),
     Suite("sample_fixtures", "Fixture sintetis (2 paket)", "data/sample_tenders",
           "Fixture regresi sintetis untuk SBU kedaluwarsa dan jaminan penawaran.", False, False),
     Suite("public_lpse", "Halaman LPSE publik (1 dokumen nyata)", "data/public_lpse",
           "Satu halaman pengumuman LPSE nyata, dianotasi satu orang. Mengukur pengenalan syarat, bukan deteksi pelanggaran.", True, True, "recognition"),
 )
+
+
+# Disagreements between a label and the configured rule that we refuse to "fix" by
+# bending the engine toward the label; they are surfaced in the report instead.
+LABEL_NOTES: dict[str, str] = {
+    "budget_03_prose_hps_over_pagu": (
+        "Dokumen menulis 'pemasukan penawaran 6 hari kerja'. Aturan memakai ambang 7 hari kerja "
+        "(config/rules.yaml), sehingga engine menandai PROC-TIMELINE, sedangkan label tidak. Dihitung sebagai FP "
+        "sampai ahli pengadaan memutuskan ambang yang benar untuk metode pemilihan paket ini."
+    ),
+    "budget_02_prose_within_budget": (
+        "Verdict BELUM CUKUP BUKTI karena NPWP/NIB diminta tetapi bukti penyedia tidak dilampirkan; label mengharapkan GO."
+    ),
+}
 
 
 @dataclass
@@ -102,6 +117,7 @@ def load_cases(suite: Suite) -> Iterator[Case]:
                 "package_name": truth["fixture_id"], "contract_value_idr": 1_000_000_000,
                 "dok_pemilihan": (folder / "dok_pemilihan.txt").read_text(encoding="utf-8"),
                 "pustaka": (folder / "bukti_penyedia.txt").read_text(encoding="utf-8"),
+                "bid_deadline": truth.get("bid_deadline"),
             }
             yield Case(truth["fixture_id"], request, {item: "GAP" for item in truth.get("expected_issue_ids", [])})
     elif suite.key == "public_lpse":
@@ -151,7 +167,8 @@ def evaluate_case(engine: EvaluationEngine, case: Case, mode: str) -> dict[str, 
         predicted_raw = {item["id"] for item in findings}
         expected_raw = set(case.expected)
     else:
-        predicted_raw = {item["id"] for item in findings if item["status"] in FLAG_STATUSES}
+        # A flag held at REVIEW only because its numeric threshold is unverified is still a detection.
+        predicted_raw = {item["id"] for item in findings if item["status"] in FLAG_STATUSES or item.get("threshold_unverified")}
         expected_raw = {code for code, status in case.expected.items() if str(status).upper() in FLAG_STATUSES}
     predicted_family = {family_of(code) for code in predicted_raw}
     expected_family = {family_of(code) for code in expected_raw}
@@ -177,7 +194,8 @@ def evaluate_case(engine: EvaluationEngine, case: Case, mode: str) -> dict[str, 
 
 
 def run_suite(engine: EvaluationEngine, suite: Suite) -> dict[str, Any]:
-    cases = [evaluate_case(engine, case, suite.mode) for case in load_cases(suite)]
+    loaded = list(load_cases(suite))
+    cases = [evaluate_case(engine, case, suite.mode) for case in loaded]
     tp = sum(len(case["true_positive"]) for case in cases)
     fp = sum(len(case["false_positive"]) for case in cases)
     fn = sum(len(case["false_negative"]) for case in cases)
@@ -193,6 +211,7 @@ def run_suite(engine: EvaluationEngine, suite: Suite) -> dict[str, Any]:
         "real_world_documents": suite.real_world,
         "mode": suite.mode,
         "documents": len(cases),
+        "document_characters": [sum(len(str(value)) for key, value in case.request.items() if key in {"dok_pemilihan", "adendum", "pustaka", "contract_draft"} and value) for case in loaded],
         "family": _prf(tp, fp, fn),
         "strict_id": _prf(sum(s["tp"] for s in strict), sum(s["fp"] for s in strict), sum(s["fn"] for s in strict)),
         "verdict_accuracy": round(sum(case["verdict_match"] for case in with_verdict) / len(with_verdict), 4) if with_verdict else None,
@@ -225,7 +244,7 @@ def run_all(settings: Settings | None = None) -> dict[str, Any]:
     return {
         "generated_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         "engine": "deterministic rules only (AI extraction disabled)",
-        "unit": "red flag = finding with status GAP or EXPIRING; matched by rule family",
+        "unit": "red flag = finding with status GAP or EXPIRING, or REVIEW held only because its numeric threshold is unverified; matched by rule family",
         "suites": suites,
         "pooled_all_synthetic": {**pooled, "documents": sum(suite["documents"] for suite in flag_suites)},
         "pooled_excluding_dev_regression": {**pooled_non_dev, "documents": sum(suite["documents"] for suite in held_out)},
@@ -276,6 +295,7 @@ def render_markdown(report: dict[str, Any]) -> str:
         f"- **Tanpa set development** ({non_dev['documents']} dokumen): precision {_pct(non_dev['precision'])} ({_ci(non_dev['precision_ci95'])}), "
         f"recall {_pct(non_dev['recall'])} ({_ci(non_dev['recall_ci95'])}), {non_dev['fp']} false positive, {non_dev['fn']} false negative.",
         f"- **Dokumen nyata yang independen dari tuning:** {report['independent_real_world_documents']} (halaman LPSE publik; mengukur pengenalan syarat, bukan deteksi pelanggaran).",
+        f"- **Panjang dokumen uji:** median {int(statistics.median([chars for suite in report['suites'] for chars in suite['document_characters']]))} karakter. Dokumen tender nyata umumnya puluhan hingga ratusan halaman, sehingga set ini menguji pola klausul, bukan dokumen utuh.",
         f"- **Permintaan bukti tambahan** (status REVIEW di luar label, tidak dihitung sebagai positif): {sum(suite['evidence_requests'] for suite in report['suites'])}.",
         "",
         "## Pengaruh pemetaan ID (strict vs family)",
@@ -302,6 +322,8 @@ def render_markdown(report: dict[str, Any]) -> str:
                 lines.append(f"- **{suite['title']} / {case['case_id']}** — " + "; ".join(parts))
     if not any_error:
         lines.append("- Tidak ada kesalahan pada set yang tersedia (ingat: semua set pernah dilihat saat pengembangan).")
+    lines += ["", "## Label yang perlu ditinjau ahli", ""]
+    lines += [f"- **{case_id}** — {note}" for case_id, note in LABEL_NOTES.items()]
     lines += ["", "## Asal-usul tiap set", ""]
     for suite in report["suites"]:
         lines.append(f"- **{suite['title']}** (`{suite['path']}`): {suite['provenance']}")

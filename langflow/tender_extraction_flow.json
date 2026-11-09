@@ -1157,7 +1157,7 @@
                 "trace_as_metadata": true,
                 "track_in_telemetry": false,
                 "type": "str",
-                "value": "ibm/granite-3-8b-instruct"
+                "value": "mistralai/mistral-small-3-1-24b-instruct-2503"
               },
               "ollama_base_url": {
                 "_input_type": "StrInput",

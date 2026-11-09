@@ -27,25 +27,6 @@ def get_threshold(name: str, default: Any = None) -> Any:
     return cfg.get("thresholds", {}).get(name, default)
 
 
-def get_brand_equivalency_phrases() -> list[str]:
-    cfg = load_rules_config()
-    return cfg.get("brand_lockin", {}).get("equivalency_phrases", [
-        "atau setara", "setara", "atau ekuivalen", "ekuivalen", "equivalent", "or equivalent"
-    ])
-
-
-def get_rules_list() -> list[dict[str, Any]]:
-    cfg = load_rules_config()
-    return cfg.get("rules", [])
-
-
-def get_rule_by_id(rule_id: str) -> dict[str, Any] | None:
-    for rule in get_rules_list():
-        if rule.get("id") == rule_id:
-            return rule
-    return None
-
-
 def get_billing_rate_limits(role: str) -> tuple[float, float, str]:
     cfg = load_rules_config()
     rates = cfg.get("thresholds", {}).get("billing_rates", {})

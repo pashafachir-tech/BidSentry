@@ -11,11 +11,14 @@ triggered it are returned so the UI and the proof log can show *why*.
     R3  >=1 confirmed GAP with severity HIGH                -> TINGGI
     R4  >=1 confirmed GAP (other severities)                -> SEDANG
     R5  >=1 EXPIRING or REVIEW (evidence missing/expiring)  -> SEDANG
+    R5b most of a long document matched no rule             -> SEDANG
     R6  otherwise                                           -> RENDAH
 
 The verdict follows the Model Card policy: NO-GO only for confirmed GAPs,
 BELUM CUKUP BUKTI for expiring or missing evidence. Findings a human reviewer
 marked NOT_SUPPORTED can be excluded to produce a post-review assessment.
+Candidates an AI proposed but no rule confirmed are shown to reviewers and never
+take part in this table.
 """
 
 from __future__ import annotations
@@ -35,6 +38,7 @@ DECISION_TABLE: tuple[tuple[str, str], ...] = (
     ("R3", "≥1 kesenjangan terkonfirmasi berkeparahan tinggi"),
     ("R4", "≥1 kesenjangan terkonfirmasi berkeparahan sedang/rendah"),
     ("R5", "Ada bukti yang belum lengkap atau dokumen segera kedaluwarsa"),
+    ("R5b", "Dokumen panjang tetapi hampir tidak ada klausul yang dikenali aturan"),
     ("R6", "Seluruh persyaratan yang terbaca terpenuhi"),
 )
 
@@ -59,10 +63,12 @@ def assess(
     *,
     requirements_recognized: int,
     excluded_finding_ids: Iterable[str] = (),
+    low_coverage: bool = False,
 ) -> RiskAssessment:
     """Return verdict and risk tier from deterministic findings only."""
     excluded = {str(item) for item in excluded_finding_ids}
-    active = [item for item in findings if str(item.get("id")) not in excluded]
+    decisive = [item for item in findings if item.get("origin") != "ai_extraction_unconfirmed"]
+    active = [item for item in decisive if str(item.get("id")) not in excluded]
     counts = {status: sum(item.get("status") == status for item in active) for status in STATUSES}
 
     gaps = [item for item in active if item.get("status") == "GAP"]
@@ -70,7 +76,7 @@ def assess(
     high_gaps = [item for item in gaps if item.get("severity") in {"HIGH", "CRITICAL"}]
     pending = [item for item in active if item.get("status") in {"EXPIRING", "REVIEW"}]
 
-    if requirements_recognized == 0 and not findings:
+    if requirements_recognized == 0 and not decisive:
         level, rule, drivers = RiskLevel.NOT_ASSESSABLE, "R0", []
     elif critical_gaps:
         level, rule = RiskLevel.CRITICAL, "R1"
@@ -87,6 +93,8 @@ def assess(
     elif pending:
         level, rule = RiskLevel.MEDIUM, "R5"
         drivers = [_driver(item, "Bukti belum lengkap" if item.get("status") == "REVIEW" else "Segera kedaluwarsa") for item in pending]
+    elif low_coverage:
+        level, rule, drivers = RiskLevel.MEDIUM, "R5b", []
     else:
         level, rule, drivers = RiskLevel.LOW, "R6", []
 
@@ -94,7 +102,7 @@ def assess(
         verdict = Verdict.NOT_READABLE
     elif gaps:
         verdict = Verdict.NO_GO
-    elif pending:
+    elif pending or low_coverage:
         verdict = Verdict.INSUFFICIENT_EVIDENCE
     else:
         verdict = Verdict.GO
@@ -125,7 +133,7 @@ def assess(
 
 def decision_table() -> list[dict[str, str]]:
     """Expose the table so the UI and docs render the exact same rules."""
-    levels = {"R0": "NOT_ASSESSABLE", "R1": "CRITICAL", "R2": "CRITICAL", "R3": "HIGH", "R4": "MEDIUM", "R5": "MEDIUM", "R6": "LOW"}
+    levels = {"R0": "NOT_ASSESSABLE", "R1": "CRITICAL", "R2": "CRITICAL", "R3": "HIGH", "R4": "MEDIUM", "R5": "MEDIUM", "R5b": "MEDIUM", "R6": "LOW"}
     return [{"rule": rule, "condition": text, "level": levels[rule], "label": RiskLevel(levels[rule]).label} for rule, text in DECISION_TABLE]
 
 

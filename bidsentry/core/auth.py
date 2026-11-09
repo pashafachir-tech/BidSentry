@@ -17,6 +17,7 @@ import hashlib
 import hmac
 import json
 import secrets
+import threading
 import time
 from enum import Enum
 from typing import Any
@@ -25,7 +26,8 @@ from bidsentry.config import Settings
 
 SESSION_COOKIE = "bidsentry_session"
 SESSION_TTL_SECONDS = 8 * 3600
-_PROCESS_SECRET = secrets.token_bytes(32)
+SECRET_FILENAME = ".bidsentry_session_secret"
+_SECRET_CACHE: dict[str, bytes] = {}
 
 
 class Role(str, Enum):
@@ -50,11 +52,93 @@ class AuthError(Exception):
         self.code = code
         self.message = message
         self.status = status
+        self.retry_after: int | None = None
 
 
 def _secret(settings: Settings) -> bytes:
+    """Signing key: BIDSENTRY_SESSION_SECRET, else a persisted random key.
+
+    The fallback key is generated once and stored next to the audit log
+    (owner-only permissions where the OS supports it), so a server reload does
+    not log Pokja and Vendor users out in the middle of a demo or review.
+    """
     configured = getattr(settings, "session_secret", "") or ""
-    return configured.encode("utf-8") if configured else _PROCESS_SECRET
+    if configured:
+        return configured.encode("utf-8")
+    path = settings.audit_log_path.parent / SECRET_FILENAME
+    key = str(path)
+    if key in _SECRET_CACHE:
+        return _SECRET_CACHE[key]
+    secret: bytes | None = None
+    try:
+        if path.is_file():
+            stored = bytes.fromhex(path.read_text(encoding="ascii").strip())
+            secret = stored if len(stored) >= 32 else None
+    except (OSError, ValueError):
+        secret = None
+    if secret is None:
+        secret = secrets.token_bytes(32)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(secret.hex(), encoding="ascii")
+            path.chmod(0o600)
+        except OSError:
+            pass  # read-only workspace: sessions last for this process only
+    _SECRET_CACHE[key] = secret
+    return secret
+
+
+def audit_seal_key(settings: Settings) -> bytes:
+    """Key for the audit log's HMAC seal, derived so it never equals the session key."""
+    return hmac.new(_secret(settings), b"bidsentry-audit-log-seal", hashlib.sha256).digest()
+
+
+class LoginThrottle:
+    """Lock a (client, role) pair after repeated wrong PINs.
+
+    PINs are short, so without this an exposed server could be brute-forced.
+    Five failures inside 15 minutes lock that client out of that role for
+    5 minutes; a successful login clears the counter. State is in memory,
+    which is enough for the single-process demo server.
+    """
+
+    def __init__(self, max_failures: int = 5, window_seconds: int = 900, lock_seconds: int = 300, clock: Any = time.monotonic):
+        self.max_failures = max_failures
+        self.window_seconds = window_seconds
+        self.lock_seconds = lock_seconds
+        self._clock = clock
+        self._lock = threading.Lock()
+        self._failures: dict[tuple[str, str], list[float]] = {}
+        self._locked_until: dict[tuple[str, str], float] = {}
+
+    def retry_after(self, client: str, role: str) -> int:
+        """Seconds until this client may try again (0 when not locked)."""
+        with self._lock:
+            until = self._locked_until.get((client, role), 0.0)
+            remaining = until - self._clock()
+            if remaining <= 0:
+                self._locked_until.pop((client, role), None)
+                return 0
+            return int(remaining) + 1
+
+    def record_failure(self, client: str, role: str) -> None:
+        now = self._clock()
+        key = (client, role)
+        with self._lock:
+            recent = [at for at in self._failures.get(key, []) if now - at < self.window_seconds]
+            recent.append(now)
+            if len(recent) >= self.max_failures:
+                self._locked_until[key] = now + self.lock_seconds
+                recent = []
+            self._failures[key] = recent
+
+    def record_success(self, client: str, role: str) -> None:
+        with self._lock:
+            self._failures.pop((client, role), None)
+            self._locked_until.pop((client, role), None)
+
+
+LOGIN_THROTTLE = LoginThrottle()
 
 
 def _pin_for(role: Role, settings: Settings) -> str:
@@ -69,16 +153,27 @@ def pin_required(role: Role, settings: Settings) -> bool:
     return bool(_pin_for(role, settings)) or not _is_loopback(settings.host)
 
 
-def login(role_value: Any, pin: Any, settings: Settings) -> str:
-    """Validate credentials and return a signed session token."""
+def login(role_value: Any, pin: Any, settings: Settings, client: str = "", throttle: LoginThrottle | None = None) -> str:
+    """Validate credentials and return a signed session token.
+
+    ``client`` identifies the caller (its IP address) for the wrong-PIN lockout.
+    """
     try:
         role = Role(str(role_value or "").strip().casefold())
     except ValueError as exc:
         raise AuthError("INVALID_ROLE", "Pilih peran Pokja atau Vendor.", 400) from exc
+    guard = throttle or LOGIN_THROTTLE
     expected = _pin_for(role, settings)
     if expected:
-        if not isinstance(pin, str) or not hmac.compare_digest(pin.strip(), expected):
+        wait = guard.retry_after(client, role.value)
+        if wait:
+            error = AuthError("TOO_MANY_ATTEMPTS", f"Terlalu banyak PIN salah. Coba lagi dalam {wait} detik.", 429)
+            error.retry_after = wait
+            raise error
+        if not isinstance(pin, str) or not hmac.compare_digest(pin.strip().encode("utf-8"), expected.encode("utf-8")):
+            guard.record_failure(client, role.value)
             raise AuthError("INVALID_PIN", "PIN tidak sesuai untuk peran ini.", 401)
+        guard.record_success(client, role.value)
     elif not _is_loopback(settings.host):
         raise AuthError("ROLE_DISABLED", f"PIN {role.label} belum dikonfigurasi pada server non-lokal.", 403)
     return issue_token(role, settings)
@@ -131,4 +226,4 @@ def describe(role: Role | None, settings: Settings) -> dict[str, Any]:
     }
 
 
-__all__ = ["AuthError", "Role", "SESSION_COOKIE", "describe", "issue_token", "login", "require_role", "role_from_token"]
+__all__ = ["AuthError", "Role", "SESSION_COOKIE", "audit_seal_key", "describe", "issue_token", "login", "require_role", "role_from_token"]
