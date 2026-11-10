@@ -1,6 +1,6 @@
 # Laporan Benchmark BidSentry
 
-_Dihasilkan otomatis oleh `scripts/run_benchmarks.py` pada 2026-11-09T18:05:36+0700. Jangan edit manual._
+_Dihasilkan otomatis oleh `scripts/run_benchmarks.py` pada 2026-11-09T19:08:43+0700. Jangan edit manual._
 
 **Mesin:** deterministic rules only (AI extraction disabled). **Unit:** red flag = finding with status GAP or EXPIRING, or REVIEW held only because its numeric threshold is unverified; matched by rule family.
 
@@ -12,7 +12,7 @@ _Dihasilkan otomatis oleh `scripts/run_benchmarks.py` pada 2026-11-09T18:05:36+0
 | --- | ---: | --- | --- | ---: | ---: | --- | --- |
 | Development regression (24 dokumen) | 24 | 100.0% (77–100%) | 100.0% (77–100%) | 100.0% | 0 | 23/24 | Tidak |
 | Traps v2 (10 dokumen jebakan) | 10 | 100.0% (34–100%) | 100.0% (34–100%) | 100.0% | 0 | 10/10 | Tidak |
-| Blind v1 (10 dokumen) | 10 | 100.0% (61–100%) | 100.0% (61–100%) | 100.0% | 0 | 9/10 | Tidak |
+| Blind v1 (10 dokumen) | 10 | 100.0% (61–100%) | 100.0% (61–100%) | 100.0% | 0 | 10/10 | Tidak |
 | Narasi anggaran (5 dokumen) | 5 | 75.0% (30–95%) | 100.0% (44–100%) | 85.7% | 1 | 4/5 | Tidak |
 | Fixture sintetis (2 paket) | 2 | 100.0% (34–100%) | 100.0% (34–100%) | 100.0% | 0 | — | Tidak |
 | Halaman LPSE publik (1 dokumen nyata) | 1 | 100.0% (34–100%) | 100.0% (34–100%) | 100.0% | 0 | — | Ya |
@@ -21,7 +21,7 @@ _Dihasilkan otomatis oleh `scripts/run_benchmarks.py` pada 2026-11-09T18:05:36+0
 - **Tanpa set development** (27 dokumen): precision 92.9% (69–99%), recall 100.0% (77–100%), 1 false positive, 0 false negative.
 - **Dokumen nyata yang independen dari tuning:** 1 (halaman LPSE publik; mengukur pengenalan syarat, bukan deteksi pelanggaran).
 - **Panjang dokumen uji:** median 269 karakter. Dokumen tender nyata umumnya puluhan hingga ratusan halaman, sehingga set ini menguji pola klausul, bukan dokumen utuh.
-- **Permintaan bukti tambahan** (status REVIEW di luar label, tidak dihitung sebagai positif): 3.
+- **Permintaan bukti tambahan** (status REVIEW di luar label, tidak dihitung sebagai positif): 4.
 
 ## Pengaruh pemetaan ID (strict vs family)
 
@@ -39,7 +39,6 @@ Strict-ID menghitung label lama (mis. `FIN-HPS-OVER-PAGU`) sebagai miss walau en
 ## Kesalahan yang tersisa (apa adanya)
 
 - **Development regression (24 dokumen) / doc_05_compressed_timeline_bid_prep** — verdict BELUM CUKUP BUKTI (label NO-GO)
-- **Blind v1 (10 dokumen) / blind_03_konsultansi_jadwal_mepet** — verdict BELUM CUKUP BUKTI (label NO-GO)
 - **Narasi anggaran (5 dokumen) / budget_02_prose_within_budget** — verdict BELUM CUKUP BUKTI (label GO)
 - **Narasi anggaran (5 dokumen) / budget_03_prose_hps_over_pagu** — FP: `PROC-TIMELINE`
 

@@ -40,6 +40,6 @@ Dokumen ini mendokumentasikan status sebenarnya tanpa klaim palsu (No Fabricated
 
 ## 3. Komponen Pendukung Lainnya
 
-- **Mesin Aturan Lokal**: `READY` (30 aturan deklaratif aktif secara deterministik dan offline).
+- **Mesin Aturan Lokal**: `READY` (31 aturan deklaratif aktif secara deterministik dan offline).
 - **Langflow Advisory**: Terintegrasi via HTTP REST client (`bidsentry/services/langflow_service.py`), mode opt-in dengan konfirmasi manual pengguna.
 - **Composio Automation**: Integrasi kalender dan dokumen tender, mode human-in-the-loop (memerlukan persetujuan eksplisit sebelum menyiapkan aksi).

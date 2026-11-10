@@ -63,6 +63,31 @@ class EvaluationRequest(BaseModel):
         return "\n".join(text for text in (self.dok_pemilihan, self.adendum, self.pustaka, self.contract_draft) if text)
 
 
+_PAGE_FURNITURE = re.compile(r"^(?:-\s*\d+\s*-|Paraf\s+(?:I{1,3}|IV|\d)|jdih\.[\w.]+(?:\s*-\s*\d+\s*-)?)$", re.I)
+_TOC_LEADER = re.compile(r"(?:\.\s?){6,}|\S\s*-\s*\d{1,3}\s*-\s*$")
+_TEMPLATE_BLANK = re.compile(r"_{4,}|\[\s*(?:diisi|pilih|sebutkan|isi)\b", re.I)
+# Thresholds and conditions ("dalam hal HPS di atas Rp10 M") describe a rule, not this package's figures.
+_CONDITIONAL_AMOUNT = re.compile(r"\b(?:dalam\s+hal|apabila|jika|untuk\s+(?:paket|nilai|pekerjaan)|dengan\s+nilai)\b|(?:paling\s+(?:sedikit|banyak)|di\s?atas|sampai\s+dengan|s\.?\s?d\.?|kurang\s+dari|lebih\s+dari)\s+(?:bernilai\s+)?(?:di\s?atas\s+)?Rp", re.I)
+
+
+_TABLE_CELL = re.compile(r"^[A-Z0-9(].{0,44}$")
+_PROSE_WORD = re.compile(r"\b(?:yang|untuk|dengan|dari|pada|atau|oleh|ini|sebagai|dalam|akan|harus|wajib)\b", re.I)
+
+
+def _table_or_sentence(label: str, cells: list[str]) -> list[tuple[str, str]]:
+    """One sentence normally; a spec table's cells become adjacent pairs.
+
+    PDF tables arrive as runs of short unpunctuated lines. Joining them lets a word
+    from one row change how a rule reads another row. Small overlapping groups keep
+    "Garansi" next to "3 Tahun" without merging the whole table. Narrow-column prose
+    also has short lines, but it starts in lowercase and is full of function words.
+    """
+    cell_like = sum(bool(_TABLE_CELL.match(cell)) and not _PROSE_WORD.search(cell) for cell in cells)
+    if len(cells) >= 6 and cell_like >= len(cells) * 0.7:
+        return [(f"{label} · sel {index + 1}", " ".join(cells[index:index + 3])) for index in range(max(1, len(cells) - 2))]
+    return [(label, " ".join(cells))]
+
+
 def _lines(text: str, source: str) -> list[tuple[str, str]]:
     """Parse text into reconstructed sentences/lines with source line references."""
     result: list[tuple[str, str]] = []
@@ -73,12 +98,17 @@ def _lines(text: str, source: str) -> list[tuple[str, str]]:
 
     for idx, raw in enumerate(raw_lines, start=1):
         stripped = raw.strip()
+        if _PAGE_FURNITURE.match(stripped):
+            continue  # page numbers and initials must not split or pollute a sentence
+        if _TOC_LEADER.search(stripped):
+            buffer = []  # a contents entry, including the title lines gathered before its dots
+            continue
         header = re.match(r"^---\s+(.+?)\s+---$", stripped)
         if header:
             if buffer:
                 end_line = idx - 1
                 lbl = f"{current_source} · baris teks {start_line}-{end_line}" if start_line != end_line else f"{current_source} · baris teks {start_line}"
-                result.append((lbl, " ".join(buffer)))
+                result.extend(_table_or_sentence(lbl, buffer))
                 buffer = []
             current_source = header.group(1).strip() or source
             start_line = idx + 1
@@ -88,7 +118,7 @@ def _lines(text: str, source: str) -> list[tuple[str, str]]:
             if buffer:
                 end_line = idx - 1
                 lbl = f"{current_source} · baris teks {start_line}-{end_line}" if start_line != end_line else f"{current_source} · baris teks {start_line}"
-                result.append((lbl, " ".join(buffer)))
+                result.extend(_table_or_sentence(lbl, buffer))
                 buffer = []
             start_line = idx + 1
             continue
@@ -97,7 +127,7 @@ def _lines(text: str, source: str) -> list[tuple[str, str]]:
         if buffer and (is_bullet or re.search(r"[.:;?!]$", buffer[-1])):
             end_line = idx - 1
             lbl = f"{current_source} · baris teks {start_line}-{end_line}" if start_line != end_line else f"{current_source} · baris teks {start_line}"
-            result.append((lbl, " ".join(buffer)))
+            result.extend(_table_or_sentence(lbl, buffer))
             buffer = [stripped]
             start_line = idx
         else:
@@ -108,7 +138,7 @@ def _lines(text: str, source: str) -> list[tuple[str, str]]:
     if buffer:
         end_line = len(raw_lines)
         lbl = f"{current_source} · baris teks {start_line}-{end_line}" if start_line != end_line else f"{current_source} · baris teks {start_line}"
-        result.append((lbl, " ".join(buffer)))
+        result.extend(_table_or_sentence(lbl, buffer))
 
     return [segment for item in result for segment in _split_long_segment(item)]
 
@@ -135,6 +165,12 @@ def _split_long_segment(item: tuple[str, str]) -> list[tuple[str, str]]:
         parts.append((f"{label} · segmen {index}", text[start:end].strip()))
         start, index = end, index + 1
     return parts
+
+
+def _all_lines(lines: list[tuple[str, str]], pattern: str) -> list[tuple[str, str]]:
+    """Every matching sentence. Long documents repeat a keyword, so the first hit is rarely the one that matters."""
+    compiled = re.compile(pattern, re.I)
+    return [(source, line) for source, line in lines if compiled.search(line)]
 
 
 def _line_find(lines: list[tuple[str, str]], pattern: str) -> tuple[str, str] | None:
@@ -243,7 +279,7 @@ _DATE_RANGE_SEP = r"(?:sampai\s+dengan|sampai|hingga|s\.?\s*/?\s*d\.?|until|to|[
 _DATE_RANGE = re.compile(rf"({_DATE_TOKEN})\s*(?:pukul\s*[\d.:]+\s*)?{_DATE_RANGE_SEP}\s*({_DATE_TOKEN})", re.I)
 _DURATION = re.compile(r"(\d{1,3})(?:\s*\([^)]{1,30}\))?\s*(?:hari(?:\s+(kerja|kalender))?|(working|calendar)?\s*days?\b)", re.I)
 _RELATIVE_OFFSET = re.compile(r"^\s*(?:setelah|sesudah|sebelum|after|before)\b", re.I)
-_DURATION_CUE = re.compile(r"(?:selama|hanya|only|during|for)\s*$", re.I)
+_DURATION_CUE = re.compile(r"(?:selama|hanya|dalam\s+waktu|only|during|for|within)\s*$", re.I)
 
 
 @dataclass(frozen=True)
@@ -284,7 +320,11 @@ def _parse_period(text: str) -> _Period | None:
         start, end = _to_date(span.group(1)), _to_date(span.group(2))
         if start and end and end >= start:
             return _Period((end - start).days + 1, "rentang", start, end)
-    candidates = [match for match in _DURATION.finditer(text) if not _RELATIVE_OFFSET.match(text[match.end():])]
+    # "1 hari setelah penjelasan" is an offset, but "dalam waktu 5 hari setelah pengumuman" is a period.
+    candidates = [
+        match for match in _DURATION.finditer(text)
+        if _DURATION_CUE.search(text[:match.start()]) or not _RELATIVE_OFFSET.match(text[match.end():])
+    ]
     if candidates:
         chosen = next((match for match in candidates if _DURATION_CUE.search(text[:match.start()])), candidates[0])
         word = (chosen.group(2) or chosen.group(3) or "").casefold()
@@ -396,10 +436,16 @@ _BRAND_BACKGROUND = re.compile(r"\blatar\s+belakang\b|\bsaat\s+ini\b|\bselama\s+
 _COMPANY_PREFIX = re.compile(r"\b(?:PT|CV|UD|Perum|Persero)\.?\s+(?:[A-Z][\w&-]*\s+){0,3}$")
 
 
-def _brand_line_kind(text: str) -> str:
+def _brand_line_kind(text: str, brand_span: tuple[int, int] | None = None) -> str:
+    """Classify a brand mention; an exception word only counts when it is about that brand."""
     if _BRAND_BACKGROUND.search(text):
         return "background"
-    return "exception" if _BRAND_EXCEPTION.search(text) else "requirement"
+    for match in _BRAND_EXCEPTION.finditer(text):
+        if re.search(r"garansi|warranty|labou?r|service|layanan", text[max(0, match.start() - 40):match.start()], re.I):
+            continue  # "garansi (labor, sparepart)" describes support terms, not what is being bought
+        if brand_span is None or match.start() - brand_span[1] <= 100 and brand_span[0] - match.end() <= 100:
+            return "exception"
+    return "requirement"
 
 
 PENALTY_KEYWORD = r"denda|sanksi\s+keterlambatan|liquidated\s+damages|delay\s+penalty"
@@ -470,7 +516,7 @@ def _excerpt_for_ai(text: str, budget: int) -> str:
     head_end = head_end if head_end > 0 else min(AI_DOCUMENT_HEAD_CHARS, budget)
     kept, used = [text[:head_end]], head_end
     for line in text[head_end:].splitlines():
-        if line.strip() and _AI_RELEVANT_LINE.search(line):
+        if line.strip() and _AI_RELEVANT_LINE.search(line) and not _TOC_LEADER.search(line):
             if used + len(line) + 1 > budget:
                 break
             kept.append(line)
@@ -491,6 +537,15 @@ def _ai_excerpts(documents: dict[str, str]) -> tuple[dict[str, str], bool]:
         remaining -= len(result[name])
         pending -= 1
     return result, any(result[name] != text for name, text in documents.items())
+
+
+def _sentence_around(text: str, start: int, end: int, reach: int = 160) -> str:
+    """The sentence holding a match; PDF line wraps stay inside, neighbouring statements stay out."""
+    left = text[max(0, start - reach):start]
+    right = text[end:end + reach]
+    left_cut = max((left.rfind(mark) + len(mark) for mark in ("\n\n", ". ", ".\n", ":\n") if mark in left), default=0)
+    right_cuts = [right.find(mark) for mark in ("\n\n", ". ", ".\n") if mark in right]
+    return left[left_cut:] + text[start:end] + right[:min(right_cuts) if right_cuts else len(right)]
 
 
 def _find_keyword_and_amount(keyword_pat: str, text: str, stop_pat: str) -> tuple[re.Match | None, float | None, str]:
@@ -516,6 +571,8 @@ def _find_keyword_and_amount(keyword_pat: str, text: str, stop_pat: str) -> tupl
         post = text[m.end():min(len(text), m.end() + 30)]
         if normative_pre.search(pre) or normative_post.search(post):
             continue
+        if _CONDITIONAL_AMOUNT.search(_sentence_around(text, m.start(), m.end())):
+            continue  # a threshold rule in the standard text, not this package's figure
         # Prefer an amount on the same line as the keyword; a heading such as
         # "RINCIAN BILL OF QUANTITIES" must not borrow the pagu figure printed below it.
         keyword_len = m.end() - m.start()
@@ -611,7 +668,10 @@ class EvaluationEngine:
         ctx = _AuditContext(
             request=request,
             ref_date=ref_date,
-            requirement_lines=_lines(request.dok_pemilihan, "Dokumen pemilihan") + _lines(request.adendum, "Adendum"),
+            requirement_lines=[
+                row for row in _lines(request.dok_pemilihan, "Dokumen pemilihan") + _lines(request.adendum, "Adendum")
+                if not _TEMPLATE_BLANK.search(row[1])
+            ],
             evidence_lines=_lines(request.pustaka, "Bukti penyedia"),
             contract_lines=_lines(request.contract_draft or request.dok_pemilihan, "Draf kontrak"),
         )
@@ -698,7 +758,11 @@ class EvaluationEngine:
             if counts["EXPIRING"]:
                 details.append(f"{counts['EXPIRING']} dokumen kualifikasi mendekati masa kedaluwarsa (≤ {warning_days} hari)")
             if missing_mandatory:
-                details.append(f"{missing_mandatory} persyaratan memerlukan bukti pemenuhan dokumen dari penyedia")
+                details.append(
+                    f"{missing_mandatory} syarat penyedia belum dapat dinilai karena dokumen penawaran belum dilampirkan; tidak ada kesenjangan terkonfirmasi pada dokumen tender"
+                    if not ctx.request.pustaka.strip() and not counts["EXPIRING"]
+                    else f"{missing_mandatory} persyaratan memerlukan bukti pemenuhan dokumen dari penyedia"
+                )
             if needs_review:
                 details.append(f"{needs_review} ketentuan dokumen tender perlu ditelaah manusia")
             if counts["REVIEW"] and not missing_mandatory and not needs_review:
@@ -881,11 +945,16 @@ class EvaluationEngine:
         findings = ctx.findings
         proof = ctx.proof
         # 5. Bid-bond amount check, comparing explicit amounts or a stated percentage.
-        bond_req = _line_find(requirement_lines, r"jaminan\s+penawaran|bid\s+bond")
+        bond_candidates = _all_lines(requirement_lines, r"jaminan\s+penawaran|bid\s+bond")
+        bond_req = next(
+            (row for row in bond_candidates if not _CONDITIONAL_AMOUNT.search(row[1])
+             and re.search(r"(?:jaminan\s+penawaran|bid\s+bond)[\s\S]{0,60}?\d{1,3}(?:[.,\s]\d{3})+|\d+(?:[.,]\d+)?\s*%", row[1], re.I)),
+            next((row for row in bond_candidates if re.search(r"besar(?:an)?|nilai|syarat|melampirkan|menyampaikan|surat\s+jaminan", row[1], re.I) and not re.search(r"pencairan", row[1], re.I)), bond_candidates[0] if bond_candidates else None),
+        )
         bond_evidence = _line_find(evidence_lines, r"jaminan\s+penawaran|bid\s+bond")
         if bond_req or bond_evidence:
             required: float | None = None
-            if bond_req:
+            if bond_req and not _CONDITIONAL_AMOUNT.search(bond_req[1]):
                 req_text = bond_req[1]
                 bond_amt = re.search(r"(?:jaminan\s+penawaran|bid\s+bond)[\s\S]{0,40}?(?:sebesar\s+)?(?:Rp\.?\s*)?(\d{1,3}(?:[.,\s]\d{3})+|\d{5,})", req_text, re.I)
                 pct = re.search(r"(\d+(?:[.,]\d+)?)\s*%", req_text)
@@ -935,8 +1004,13 @@ class EvaluationEngine:
         findings = ctx.findings
         proof = ctx.proof
         # 6. Warranty/guarantee duration comparison.
-        warranty_req = _line_find(requirement_lines, r"garansi|masa\s+jaminan|warranty|jaminan\s+pemeliharaan")
-        warranty_evidence = _line_find(evidence_lines, r"garansi|masa\s+jaminan|warranty|jaminan\s+pemeliharaan")
+        # A "garansi bank" is a financial instrument; only a product or work warranty belongs to this check.
+        warranty_pattern = r"garansi|masa\s+jaminan|warranty|jaminan\s+pemeliharaan"
+        not_product_warranty = re.compile(r"garansi\s+bank|bank\s+garansi|surety|penerbit\s+jaminan|penjamin|jaminan\s+(?:uang\s+muka|pelaksanaan|penawaran|sanggah)", re.I)
+        has_duration = re.compile(r"\b\d{1,4}\s*(?:\([^)]{1,30}\)\s*)?(?:hari|days?|bulan|months?|tahun|years?)\b", re.I)
+        warranty_rows = [row for row in _all_lines(requirement_lines, warranty_pattern) if not not_product_warranty.search(row[1])]
+        warranty_req = next((row for row in warranty_rows if has_duration.search(row[1])), None) or next((row for row in warranty_rows if re.search(r"garansi|warranty", row[1], re.I)), None)
+        warranty_evidence = next((row for row in _all_lines(evidence_lines, warranty_pattern) if not not_product_warranty.search(row[1])), None)
         if warranty_req or warranty_evidence:
             required_days = _duration_days(warranty_req[1]) if warranty_req else None
             offered_days = _duration_days(warranty_evidence[1]) if warranty_evidence else None
@@ -1062,16 +1136,19 @@ class EvaluationEngine:
 
         def first_lockin(pattern: re.Pattern[str]) -> tuple[str, str] | None:
             nonlocal mentioned
-            for source, line in requirement_lines:
-                if not pattern.search(line):
+            for position, (source, line) in enumerate(requirement_lines):
+                brand = pattern.search(line)
+                if not brand:
                     continue
                 mentioned = True
                 if has_valid_equivalency(line):
                     continue
-                kind = _brand_line_kind(line)
+                kind = _brand_line_kind(line, brand.span())
                 if kind == "exception":
                     exceptions.append((source, line))
                 elif kind == "requirement":
+                    if "· sel" in source:  # table cells overlap; quote the group holding the fullest product name
+                        return max(requirement_lines[position:position + 3], key=lambda row: len(found.group(0)) if (found := pattern.search(row[1])) else 0)
                     return source, line
             return None
 
@@ -1113,7 +1190,7 @@ class EvaluationEngine:
                 match = watch_pattern.search(line)
                 if not match or _COMPANY_PREFIX.search(line[:match.start()]) or has_valid_equivalency(line):
                     continue
-                kind = _brand_line_kind(line)
+                kind = _brand_line_kind(line, match.span())
                 if kind == "exception":
                     exceptions.append((source, line))
                 elif kind == "requirement":
@@ -1125,7 +1202,7 @@ class EvaluationEngine:
             findings.append(_finding(
                 "SPEC-BRAND-WATCH", f"Merek disebut tanpa opsi setara ({names})"[:400], "Spesifikasi", "REVIEW",
                 first, ("Dokumen pemilihan", first[1]),
-                f"{len(watch_hits)} kalimat menyebut merek ({names}) tanpa frasa setara. Telaah terhadap Pasal 19 ayat (2): penyebutan merek hanya dimungkinkan untuk komponen, suku cadang, bagian sistem yang sudah ada, atau katalog elektronik.",
+                f"Merek ({names}) disebut tanpa frasa setara. Telaah terhadap Pasal 19 ayat (2): penyebutan merek hanya dimungkinkan untuk komponen, suku cadang, bagian sistem yang sudah ada, atau katalog elektronik.",
                 "MEDIUM",
             ))
         if exceptions and not lockin_detected:
@@ -1150,18 +1227,25 @@ class EvaluationEngine:
 
         timeline_redflag = _line_find(requirement_lines, r"compressed\s+timeline|jadwal\s+mepet|terlalu\s+mepet|unrealistic\s+bidding\s+window|tight\s+deadline")
         duration_or_range = rf"(?:(?:hanya\s+|only\s+)?(\d+|[A-Za-z]+)(?:\s*\([A-Za-z]+\))?\s*(?:hari\s*(?:kerja|kalender)?|(?:working\s+|calendar\s+)?days?)|{_DATE_TOKEN}\s*(?:pukul\s*[\d.:]+\s*)?{_DATE_RANGE_SEP}\s*{_DATE_TOKEN})"
-        bid_prep_match = _line_find(
-            requirement_lines,
-            r"(?:penyusunan\s+dokumen\s+penawaran|(?:pemasukan|penyampaian)\s+(?:dokumen\s+)?penawaran|bidding\s+period|submission\s+deadline|tender\s+duration)[\s\S]{0,120}?" + duration_or_range,
-        )
-        sanggah_match = _line_find(
-            requirement_lines,
-            r"(?:masa\s+sanggah|sanggah\s+disampaikan|objection\s+period|appeal\s+period)[\s\S]{0,120}?" + duration_or_range,
-        )
+        bid_rows = [
+            (row, period) for row in _all_lines(
+                requirement_lines,
+                r"(?:penyusunan\s+dokumen\s+penawaran|(?:pemasukan|penyampaian)\s+(?:dokumen\s+)?penawaran|bidding\s+period|submission\s+deadline|tender\s+duration)[\s\S]{0,120}?" + duration_or_range,
+            )
+            if not re.search(r"adendum|addendum|masa\s+berlaku", row[1], re.I) and (period := _parse_period(row[1]))
+        ]
+        sanggah_rows = [
+            (row, period) for row in _all_lines(
+                requirement_lines,
+                r"(?:masa\s+sanggah|sanggah\s+disampaikan|objection\s+period|appeal\s+period)[\s\S]{0,120}?" + duration_or_range,
+            )
+            if not re.search(r"banding|jawaban|menjawab", row[1], re.I) and (period := _parse_period(row[1]))
+        ]
+        # The tightest stated period is the one a bidder actually has to live with.
+        bid_prep_match, prep_period = min(bid_rows, key=lambda item: item[1].working_days, default=(None, None))
+        sanggah_match, sanggah_period = min(sanggah_rows, key=lambda item: item[1].calendar_days, default=(None, None))
 
         timeline_issues: list[str] = []
-        prep_period = _parse_period(bid_prep_match[1]) if bid_prep_match else None
-        sanggah_period = _parse_period(sanggah_match[1]) if sanggah_match else None
         prep_days = prep_period.working_days if prep_period else None
         sanggah_days = sanggah_period.calendar_days if sanggah_period else None
         bid_short = prep_days is not None and prep_days < min_bidding_days
@@ -1212,9 +1296,8 @@ class EvaluationEngine:
             r"(?:milik|kerabat|keluarga|hubungan\s+keluarga|keponakan|anak|istri|suami|saudara)\s+(?:dari\s+)?(?:kepala\s+dinas|pejabat|ppk|pokja|direksi|komisaris)"
         )
         if not coi_match:
-            candidate_coi = _line_find(requirement_lines, r"benturan\s+kepentingan|conflict\s+of\s+interest")
-            if candidate_coi:
-                text_lower = candidate_coi[1].casefold()
+            for candidate_coi in _all_lines(requirement_lines, r"(?:benturan|pertentangan)\s+kepentingan|conflict\s+of\s+interest"):
+                text_lower = candidate_coi[1].casefold().replace("pertentangan kepentingan", "benturan kepentingan")
                 is_negation = bool(re.search(
                     r"\b(?:tidak\s+ada|bebas(?:\s+dari)?|tidak\s+terdapat|tidak\s+memiliki|tanpa|pernyataan\s+tidak|tidak\s+sedang\s+mengalami)\s+(?:adanya\s+)?benturan\s+kepentingan"
                     r"|pakta\s+integritas|surat\s+pernyataan\s+tidak\s+menuntut",
@@ -1226,8 +1309,12 @@ class EvaluationEngine:
                     r"|benturan\s+kepentingan.{0,60}\b(?:dilarang|harus\s+dihindari|wajib\s+dihindari|dicegah)\b",
                     text_lower,
                 ))
-                if not is_negation and not is_duty_clause:
+                # Tender templates mention this topic constantly; only a sentence stating that one exists counts.
+                asserts_conflict = bool(re.search(r"\b(?:terdapat|adanya|terjadi|terindikasi|indikasi|berpotensi|mengandung|sarat)\b.{0,40}benturan\s+kepentingan|benturan\s+kepentingan\s+antara\b", text_lower))
+                refuses_conflict = bool(re.search(r"\btidak\b.{0,50}benturan\s+kepentingan|melanggar\s+ketentuan\s+benturan", text_lower))
+                if asserts_conflict and not is_negation and not is_duty_clause and not refuses_conflict:
                     coi_match = candidate_coi
+                    break
         if coi_match:
             findings.append(_finding(
                 "GOV-CONFLICT-INTEREST",
@@ -1281,17 +1368,18 @@ class EvaluationEngine:
         requirement_lines = ctx.requirement_lines
         findings = ctx.findings
         # 13. Discriminatory Regional Association Lock-in
-        regional_assoc_match = _line_find(
+        regional_rows = _all_lines(
             requirement_lines,
             r"(?i)keanggotaan\s+asosiasi\s+regional|ADCR-Jabar|asosiasi.{0,200}regional.{0,200}jawa\s+barat|Gold\s+Partner|asosiasi\s+data\s+center\s+regional|"
             r"(?:asosiasi|domisili|keberadaan\s+kantor|khusus\s+penyedia)\s+(?:lokal|daerah|[A-Z][a-z]+|wilayah\s+[A-Z][a-z]+|Kalsel|Jabar|Jateng|Jatim|DKI)\s+(?:saja|wajib|mutlak|diwajibkan)|"
             r"(?:wajib|harus|diwajibkan)\s+(?:berdomisili|memiliki\s+(?:kantor|fasilitas)(?:\s+(?:operasional|perwakilan|cabang))?)\s+di\s+(?:wilayah|daerah|[A-Za-z]+)|"
-            r"(?:memiliki|wajib\s+memiliki|harus\s+memiliki)\s+kantor\s+(?:perwakilan|cabang)(?:\s+di\s+[A-Za-z]+)?|"
+            r"(?:memiliki|wajib\s+memiliki|harus\s+memiliki)\s+kantor\s+(?:pusat\s+(?:atau|dan/atau)\s+kantor\s+)?(?:perwakilan|cabang)(?:\s+di\s+[A-Za-z]+)?|"
             r"anggota\s+KADIN\s+(?:Kota|Kabupaten|Provinsi)(?:\s+[A-Za-z]+)?|"
             r"(?:keanggotaan\s+asosiasi|anggota\s+(?:asosiasi|kadin|gapensi|akli|infindo|hipmi))\s+(?:pengusaha\s+)?(?:lokal|daerah|regional|(?:kota|kabupaten|provinsi))|"
             r"asosiasi\s+pengusaha\s+lokal"
         )
-        if regional_assoc_match:
+        regional_assoc_match = None
+        for regional_assoc_match in regional_rows:
             is_legit_site = bool(re.search(
                 r"(?i)\b(?:lokasi\s+pekerjaan|pekerjaan\s+dilaksanakan|tempat\s+pelaksanaan|workshop|bengkel\s+kerja|kantor\s+lapangan|fasilitas\s+pembuangan|lokasi\s+proyek)\s+(?:berada\s+)?di\b",
                 regional_assoc_match[1]
@@ -1313,7 +1401,8 @@ class EvaluationEngine:
                     "Persyaratan keanggotaan asosiasi regional, keanggotaan KADIN daerah, pembatasan domisili, atau kewajiban kantor cabang daerah dapat membatasi akses penyedia berkualifikasi dari luar daerah. Telaah terhadap prinsip terbuka dan tidak diskriminatif (Pasal 6 Perpres 16/2018 sebagaimana diubah).",
                     "HIGH",
                 ))
-        ctx.recognized["regional_lockin"] = bool(regional_assoc_match)
+                break
+        ctx.recognized["regional_lockin"] = bool(regional_rows)
 
     def _check_incumbent_lockin(self, ctx: _AuditContext) -> None:
         """Restrictive Incumbent Experience Lock-in"""
@@ -1333,6 +1422,25 @@ class EvaluationEngine:
                 "HIGH",
             ))
         ctx.recognized["incumbent_lockin"] = bool(incumbent_match)
+
+    def _check_principal_restriction(self, ctx: _AuditContext) -> None:
+        """Partner tiers and principal letters can narrow the field without naming a product."""
+        pattern = (
+            r"\b(?:Titanium|Platinum|Gold|Silver|Premier|Elite|Diamond)\s+Partner\b|"
+            r"\bpartner\s+(?:resmi\s+)?(?:dari\s+)?prin[cs]ip\w*|"
+            r"surat\s+(?:dukungan|penunjukan|keagenan)\s+(?:\w+\s+){0,2}dari\s+(?:prin[cs]ip\w*|pabrikan|distributor|agen)|"
+            r"\bdistributor\s+tunggal\b|satu-satunya\s+distributor|\bagen\s+tunggal\b|"
+            r"\bauthori[sz]ed\s+(?:partner|reseller|distributor|dealer)\b"
+        )
+        rows = [row for row in _all_lines(ctx.requirement_lines, pattern) if not re.search(r"barang\s+impor", row[1], re.I)]
+        ctx.recognized["principal_restriction"] = bool(rows)
+        if rows:
+            ctx.findings.append(_finding(
+                "SPEC-PRINCIPAL-REVIEW", "Syarat kemitraan atau dukungan principal perlu ditelaah", "Kualifikasi", "REVIEW",
+                rows[0], ("Dokumen pemilihan", rows[0][1]),
+                f"{len(rows)} ketentuan mengaitkan kelayakan penyedia dengan principal, tingkat kemitraan, atau distributor tertentu. Syarat ini dapat membatasi persaingan. Model dokumen LKPP memuat surat dukungan pabrikan khusus untuk barang impor, jadi nilai kewajarannya per paket.",
+                "MEDIUM",
+            ))
 
     def _check_over_budget(self, ctx: _AuditContext) -> None:
         """Financial & Budget Checks (Over Budget, Billing Rate Mark-Up, Double Counting, Personnel Qualification)"""
@@ -1571,10 +1679,10 @@ class EvaluationEngine:
 
             if re.search(r"Solution\s+Architect|TOGAF", req_text_all, re.I):
                 sa_ok = bool(re.search(r"TOGAF|Solution\s+Architect|sertifikasi.{0,200}arsitektur", pustaka_text_all, re.I))
-                role_slots.append({"role": "Solution Architect (TOGAF)", "status": "TERPENUHI" if sa_ok else "REVIEW"})
+                role_slots.append({"role": "Solution Architect (TOGAF)" if re.search(r"TOGAF", req_text_all, re.I) else "Solution Architect", "status": "TERPENUHI" if sa_ok else "REVIEW"})
             if re.search(r"Project\s+Manager|PMP|PRINCE2", req_text_all, re.I):
                 pm_ok = bool(re.search(r"PMP|PRINCE2|Project\s+Manager", pustaka_text_all, re.I))
-                role_slots.append({"role": "Project Manager (PMP/PRINCE2)", "status": "TERPENUHI" if pm_ok else "REVIEW"})
+                role_slots.append({"role": "Project Manager (PMP/PRINCE2)" if re.search(r"PMP|PRINCE2", req_text_all, re.I) else "Project Manager", "status": "TERPENUHI" if pm_ok else "REVIEW"})
             if re.search(r"CISSP|CISM|GCIH|GCFA|OSCP", req_text_all, re.I):
                 sec_ok = bool(re.search(r"CISSP|CISM|GCIH|GCFA|OSCP|sertifikasi\s+keamanan", pustaka_text_all, re.I))
                 role_slots.append({"role": "SOC / Security Engineer (CISSP/OSCP)", "status": "TERPENUHI" if sec_ok else "REVIEW"})
@@ -1626,6 +1734,7 @@ class EvaluationEngine:
         _check_unrealistic_timeline,
         _check_regional_lockin,
         _check_incumbent_lockin,
+        _check_principal_restriction,
         _check_over_budget,
         _check_boq_arithmetic,
         _check_markup_rate,

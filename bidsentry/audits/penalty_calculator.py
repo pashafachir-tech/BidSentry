@@ -132,19 +132,24 @@ def calculate_penalty_scenarios(
         raise ValueError("Penalty rate and cap must be within valid percentage bounds")
     lines = [line.strip() for line in clause_text.splitlines() if line.strip()]
     penalty_lines: list[str] = []
-    for line in lines:
+    last_penalty_index = -10
+    for index, line in enumerate(lines):
         if re.search(r"denda|sanksi\s+keterlambatan|liquidated\s+damages|delay\s+penalty", line, re.I):
             penalty_lines.append(line)
-        elif penalty_lines and (
+            last_penalty_index = index
+        elif index - last_penalty_index <= 2 and (
             re.match(r"^(?:batas|maksimal|maksimum|paling\s+banyak|tidak\s+lebih|total\s+akumulasi|capped|up\s+to|not\s+exceeding)", line, re.I)
             or _BOND_CAP.search(line)
         ):
             penalty_lines.append(line)
-    clause = " ".join(penalty_lines)[:1200]
-    contract_rate = _parse_rate(clause) if clause else None
-    clause_cap = _parse_cap(clause) if clause else None
-    explicitly_uncapped = bool(_EXPLICIT_UNCAPPED.search(clause))
-    capped_by_bond = bool(clause and clause_cap is None and not explicitly_uncapped and _BOND_CAP.search(clause))
+    full_clause = " ".join(penalty_lines)
+    clause = full_clause[:1200]
+    # Judge the harshest daily rate in the document, wherever it appears.
+    daily_rates = [rate for line in penalty_lines if re.search(r"hari|\bday|‰|permil|/\s*1000", line, re.I) and (rate := _parse_rate(line)) is not None]
+    contract_rate = max(daily_rates) if daily_rates else _parse_rate(full_clause) if full_clause else None
+    clause_cap = _parse_cap(full_clause) if full_clause else None
+    explicitly_uncapped = bool(_EXPLICIT_UNCAPPED.search(full_clause))
+    capped_by_bond = bool(full_clause and clause_cap is None and not explicitly_uncapped and _BOND_CAP.search(full_clause))
     no_stated_cap = bool(penalty_lines and clause_cap is None and not capped_by_bond)
     # Silence about a cap at the regulated rate is a question for the reviewer; only an
     # explicit "no limit", or an above-regulation rate with no limit, is a confirmed gap.

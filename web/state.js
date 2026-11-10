@@ -1,5 +1,3 @@
-let presentation = false;
-try { presentation = localStorage.getItem("bidsentry-presentation") === "on"; } catch {}
 
 const initialState = {
   // Session: { authenticated, role: "pokja" | "vendor", label, capabilities, roles }
@@ -10,9 +8,8 @@ const initialState = {
   reviewTab: "matrix", reviewInsightsVisited: false,
   adendumActive: true, exposureDays: 35, customReview: null, lastAuditDraft: null,
   reviewFeedback: null, crossSummaryTab: "project",
-  proof: null, proofIntegrity: null, proofLoading: false, presentation,
+  proof: null, proofIntegrity: null, proofLoading: false,
   benchmark: null, economics: null, economicsInputs: {}, roleTransition: null,
-  hideHints: false,
 };
 
 let state = { ...initialState };
@@ -25,7 +22,7 @@ export function setState(patch, { notify = true } = {}) {
 }
 export function resetWorkspaceState() {
   // Clean isolation between Pokja and Vendor: nothing from the previous workspace survives.
-  state = { ...initialState, session: state.session, sessionChecked: true, presentation: state.presentation, benchmark: state.benchmark, hideHints: state.hideHints };
+  state = { ...initialState, session: state.session, sessionChecked: true, benchmark: state.benchmark };
   for (const listener of listeners) listener(state);
 }
 export function subscribe(listener) {

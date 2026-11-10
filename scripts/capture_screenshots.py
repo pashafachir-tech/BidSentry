@@ -73,8 +73,8 @@ def main() -> int:
                 page.wait_for_timeout(1300)  # role transition animation
                 page.screenshot(path=str(OUT / "02_command_center_pokja.png"))
 
-                # Toasts and the presenter hint bar are fixed overlays; keep them out of the documentation images.
-                page.add_style_tag(content="#toast, .toast, .presenter-hint { display: none !important; }")
+                # Toasts are fixed overlays; keep them out of the documentation images.
+                page.add_style_tag(content="#toast, .toast { display: none !important; }")
                 page.keyboard.press("1")  # Demo A: over-budget + uncapped penalty
                 expect(page.locator("#risk-review")).to_be_visible(timeout=20000)
                 expect(page.locator(".review-table tbody tr").first).to_be_visible()

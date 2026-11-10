@@ -5,7 +5,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688.svg)](https://fastapi.tiangolo.com)
 [![IBM watsonx](https://img.shields.io/badge/IBM-watsonx.ai-052FAD.svg)](https://www.ibm.com/watsonx)
-[![Tests Passing](https://img.shields.io/badge/tests-275%20passed-brightgreen.svg)](tests/)
+[![Tests Passing](https://img.shields.io/badge/tests-301%20passed-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 ---
@@ -133,7 +133,7 @@ BidSentry mengadopsi model **Lean Micro-Utility & Micro-SaaS** yang membumi dan 
 
 | Skema Layanan | Sasaran Pengguna | Biaya & Model Pembayaran | Fitur & Benefit Inklusif |
 | :--- | :--- | :--- | :--- |
-| **Pay-Per-Audit (QRIS Instant)** | Kontraktor CV / UMKM (H-1 lelang) | **Rp 5.000 / 10 kali audit** (efektif **Rp 500 / dokumen**) | Scan kilat KAK/BoQ, validasi 30 aturan deterministik, verifikasi batas denda & over-budget. |
+| **Pay-Per-Audit (QRIS Instant)** | Kontraktor CV / UMKM (H-1 lelang) | **Rp 5.000 / 10 kali audit** (efektif **Rp 500 / dokumen**) | Scan kilat KAK/BoQ, validasi 31 aturan deterministik, verifikasi batas denda & over-budget. |
 | **Vendor Pro (Langganan)** | Kontraktor Aktif LPSE (Rutin lelang) | **Rp 300.000 / bulan** (setara **Rp 10.000 / hari**) | Kuota 30 tender/bln, deteksi klausul diskriminatif, generator draf surat penjelasan/sanggahan (.docx). |
 | **BUMD / BLUD Pilot** | RSUD BLUD / BUMD Daerah / Satuan Pengawas | **Rp 800.000 / bulan** (setara **Rp 9,6 Jt / thn** — SPK Langsung) | Kuota 100 dokumen/bln, audit BoQ vs HPS, skrining kolusi (rencana antarmuka, kini lewat API), generator Berita Acara (.docx). |
 
@@ -162,7 +162,7 @@ Angka dihasilkan otomatis oleh `python scripts/run_benchmarks.py` ke [docs/BENCH
 | Dokumen nyata yang independen dari pengembangan | 1 (halaman LPSE publik, 253 karakter) |
 | Median panjang dokumen uji | sekitar 270 karakter |
 
-> **Cara membaca angka ini:** semua set deteksi red flag disusun tim dan pernah dilihat saat pengembangan, sehingga angka di atas adalah **uji regresi**, bukan estimasi akurasi lapangan. Satu false positive yang tersisa (`budget_03`, jadwal 6 hari kerja terhadap ambang 7) adalah perbedaan label yang dicatat di laporan, bukan disembunyikan. Set ini menguji pola klausul pendek, bukan dokumen utuh. Klaim akurasi memerlukan dokumen tender nyata berlabel independen (rencana pilot 5 rekanan). Verdict `blind_03` dan `doc_05` kini sengaja berbeda dari label lamanya: masa penawaran pendek menjadi BELUM CUKUP BUKTI karena ambangnya tidak ditemukan di regulasi.
+> **Cara membaca angka ini:** semua set deteksi red flag disusun tim dan pernah dilihat saat pengembangan, sehingga angka di atas adalah **uji regresi**, bukan estimasi akurasi lapangan. Satu false positive yang tersisa (`budget_03`, jadwal 6 hari kerja terhadap ambang 7) adalah perbedaan label yang dicatat di laporan, bukan disembunyikan. Set ini menguji pola klausul pendek, bukan dokumen utuh. Klaim akurasi memerlukan dokumen tender nyata berlabel independen (rencana pilot 5 rekanan). Verdict `doc_05` kini sengaja berbeda dari label lamanya: masa penawaran pendek menjadi BELUM CUKUP BUKTI karena ambangnya tidak ditemukan di regulasi. Hasil pada 4 PDF tender publik dicatat di [REAL_DOCUMENT_TEST.md](docs/REAL_DOCUMENT_TEST.md) dan belum diperiksa pihak independen.
 
 ### ⚠️ Batasan yang Diketahui (Known Limitations)
 - **Data uji belum independen**: lihat catatan di atas; belum ada korpus dokumen tender nyata berlabel independen.
@@ -214,15 +214,13 @@ python server.py
 | :---: | :--- |
 | `1` | Masuk sebagai **Pokja** dan buka **Paket A** (konstruksi: HPS melampaui pagu + denda tanpa batas → Risiko Kritis) |
 | `2` | Masuk sebagai **Vendor** dan buka **Paket B** (jaringan: lock-in merek + selisih BoQ Rp15.000.000 → Risiko Tinggi) |
-| `P` | Mode presentasi (huruf membesar mengikuti resolusi proyektor) |
 | `Esc` | Tutup dialog/overlay |
-| `?` | Sembunyikan/tampilkan petunjuk tombol |
 
 Tombol tidak aktif saat sedang mengetik di form. Paket demo berjalan tanpa pengiriman teks ke provider AI. Untuk menunjukkan watsonx langsung, jalankan audit baru dengan persetujuan AI lalu buka tab jejak audit; `python scripts/verify_watsonx.py --generate` memeriksa koneksi sebelum tampil.
 
 ---
 
-## 🧪 Rangkaian Pengujian Mandiri (275 Test Cases)
+## 🧪 Rangkaian Pengujian Mandiri (301 Test Cases)
 
 Seluruh komponen dapat diverifikasi secara independen oleh juri teknis melalui perintah berikut:
 

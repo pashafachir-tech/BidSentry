@@ -9,7 +9,7 @@
 
 :root {
   color-scheme: light;
-  /* Type scale (rem, so the whole UI scales with html font-size / presentation mode) */
+  /* Type scale (rem, so the whole UI scales with html font-size) */
   --fs-2xs: 0.78rem;
   --fs-xs: 0.845rem;
   --fs-sm: 0.905rem;
@@ -1491,7 +1491,6 @@ a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible
 /* v3: readability, explicit risk tiers, role workspaces, proof viewer   */
 /* ===================================================================== */
 html { font-size: 100%; }
-html[data-presentation="on"] { font-size: 118.75%; } /* 19px base for projector demos */
 body { font-size: var(--fs-base); line-height: 1.5; }
 .eyebrow { letter-spacing: .06em; }
 
@@ -1761,14 +1760,6 @@ h1, h2, h3, .review-heading h2, .dialog-heading h2, .utility-dialog-head h2, .me
 .pipe-idle em { color: var(--muted-2); }
 .proof-kv dt { font-family: inherit; }
 
-/* Presentation mode: fluid scaling for 1080p, 4K and 16:10 projectors */
-html[data-presentation="on"] { font-size: clamp(18px, calc(0.55vw + 11px), 34px); }
-html[data-presentation="on"] .page-content { width: min(2400px, 100%); }
-html[data-presentation="on"] .app-shell { grid-template-columns: clamp(220px, 14vw, 420px) minmax(0, 1fr); }
-html[data-presentation="on"] body { --muted: #334155; --muted-2: #475569; }
-html[data-presentation="on"] .review-table td, html[data-presentation="on"] .review-table th { padding-top: .7em; padding-bottom: .7em; }
-html[data-presentation="on"] .risk-badge-large { font-size: var(--fs-2xl); }
-html[data-presentation="on"] svg { width: 1.1em; height: 1.1em; }
 
 @media (max-width: 1200px) {
   .proof-pipeline { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -1787,12 +1778,6 @@ html[data-presentation="on"] svg { width: 1.1em; height: 1.1em; }
 .role-chip { white-space: nowrap; }
 .role-chip b { white-space: nowrap; }
 
-/* Presenter hint bar */
-.presenter-hint { position: fixed; left: 16px; bottom: 14px; z-index: 150; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; max-width: calc(100vw - 32px); padding: 7px 12px; border-radius: 10px; background: rgba(15, 23, 42, .82); color: #e2e8f0; font-size: var(--fs-2xs); box-shadow: 0 6px 18px rgba(15, 23, 42, .25); pointer-events: none; }
-.presenter-hint span { opacity: .5; }
-.presenter-hint kbd { display: inline-grid; place-items: center; min-width: 1.6em; padding: 1px 6px; border-radius: 5px; border: 1px solid rgba(226, 232, 240, .5); background: rgba(255, 255, 255, .12); font-family: inherit; font-weight: 760; color: #fff; }
-@media print { .presenter-hint { display: none; } }
-@media (max-width: 768px), (hover: none) { .presenter-hint { display: none; } }
 .risk-coverage { margin: 8px 0 0; font-size: var(--fs-2xs); color: var(--muted, #64748b); }
 .risk-coverage.is-low { color: #b45309; font-weight: 650; }
 .integrity-banner { margin: 12px 0; padding: 9px 12px; border-radius: 10px; font-size: var(--fs-2xs); font-weight: 650; }
@@ -1804,3 +1789,17 @@ html[data-presentation="on"] svg { width: 1.1em; height: 1.1em; }
 .legal-ref ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
 
 .text-warn { color: var(--amber); font-weight: 650; }
+
+/* Long text stays inside its own box */
+.risk-panel { grid-template-columns: minmax(0, 1fr); }
+.risk-panel-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.risk-panel .risk-badge { display: inline-flex; width: fit-content; white-space: nowrap; }
+.package-cell > span:last-child { min-width: 0; }
+.package-cell strong, .package-cell small { max-width: 185px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.breadcrumb { flex: 1 1 auto; min-width: 0; }
+.breadcrumb span { flex: none; }
+.breadcrumb strong { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.topbar { gap: 16px; }
+.topbar-actions { flex: none; }
+.topbar-actions > * { white-space: nowrap; }
+@media (max-width: 1100px) { .topbar-text-action { display: none; } .breadcrumb span { display: none; } }

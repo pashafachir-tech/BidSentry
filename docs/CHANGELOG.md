@@ -13,6 +13,14 @@ Riwayat perubahan dari yang terbaru. Versi aplikasi tercantum di `pyproject.toml
 - Sanggah memakai 5 hari kalender dari Lampiran Peraturan LKPP 12/2021. Masa penawaran minimum tidak ditemukan di naskah, jadi hanya REVIEW.
 - Verdict tidak lagi bergantung tanggal audit; aturan R5b dan indikator cakupan mencegah GO dari cakupan sempit.
 
+### Dokumen panjang
+- Daftar isi, nomor halaman, paraf, dan baris formulir kosong tidak lagi terbaca sebagai syarat.
+- Aturan memeriksa semua kalimat, bukan kemunculan pertama; ambang bersyarat tidak dibaca sebagai nilai paket.
+- Garansi bank dipisahkan dari garansi produk, dan tarif denda terberat yang dinilai.
+
+- Tabel spesifikasi dipecah per sel berdampingan; kata pengecualian hanya berlaku bila terkait merek yang disebut.
+- Aturan baru SPEC-PRINCIPAL-REVIEW untuk syarat kemitraan, surat dukungan principal, dan distributor tunggal.
+
 ### AI
 - Kandidat merek di luar pola aturan tampil untuk dicek manusia tanpa memengaruhi verdict.
 - Teks ke provider dibatasi 48.000 karakter; panggilan dibatalkan bila pola PII masih terdeteksi.

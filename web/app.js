@@ -56,7 +56,6 @@ function render() {
     : -1;
 
   const current = getState();
-  document.documentElement.dataset.presentation = current.presentation ? "on" : "off";
   if (!current.sessionChecked) {
     root.innerHTML = '<main class="boot-screen"><div class="boot-brand">BidSentry</div><p>Memeriksa sesi…</p></main>';
     return;
@@ -931,9 +930,8 @@ function clearDraftInputs() {
 }
 
 // ---------------------------------------------------------------------------
-// Presenter hotkeys (stage runner)
-//   [P] presentation mode   [1] Pokja + Paket A   [2] Vendor + Paket B
-//   [Esc] close dialogs/overlays   [?] show/hide the hint bar
+// Demo hotkeys
+//   [1] Pokja + Paket A   [2] Vendor + Paket B   [Esc] close dialogs/overlays
 // Keys are ignored while typing in a form field or when Ctrl/Alt/Cmd is held.
 // ---------------------------------------------------------------------------
 let demoPackagesCache = null;
@@ -1005,18 +1003,9 @@ document.addEventListener("keydown", (event) => {
   }
   if (isTypingTarget(event.target) || document.querySelector("dialog[open]")) return;
   const key = event.key.toLowerCase();
-  if (key === "p") {
-    event.preventDefault();
-    const presentation = !getState().presentation;
-    try { localStorage.setItem("bidsentry-presentation", presentation ? "on" : "off"); } catch {}
-    setState({ presentation });
-    toast(presentation ? "Mode presentasi aktif." : "Mode presentasi nonaktif.");
-  } else if (key === "1" || key === "2") {
+  if (key === "1" || key === "2") {
     event.preventDefault();
     runDemo(key === "1" ? "A" : "B");
-  } else if (key === "?") {
-    event.preventDefault();
-    setState({ hideHints: !getState().hideHints });
   }
 });
 
@@ -1085,11 +1074,6 @@ document.addEventListener("click", async (event) => {
     render();
   }
   if (action === "logout") { await logout(); return; }
-  if (action === "toggle-presentation") {
-    const presentation = !getState().presentation;
-    try { localStorage.setItem("bidsentry-presentation", presentation ? "on" : "off"); } catch {}
-    setState({ presentation });
-  }
   if (action === "export-boq") exportBoq();
   if (action === "export-clarification") exportClarificationDoc();
   if (action === "open-proof-step") {

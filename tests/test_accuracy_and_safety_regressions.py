@@ -341,3 +341,144 @@ def test_retention_purge_keeps_chain_and_removes_source(tmp_path: Path) -> None:
     log.save_source_text("old", "teks lama", retention_days=0)
     assert log.purge_older_than(90) == 1
     assert log.get_source_text("old") is None and log.verify_chain()[0] is True
+
+
+# -------------------------------------------- long, template-based documents
+# Patterns below were observed in public Dokumen Pemilihan PDFs based on the LKPP model.
+LONG_PREFIX = "Syarat umum pelaksanaan pekerjaan.\n\n"
+
+
+@pytest.mark.parametrize("noise", [
+    "JAMINAN PENAWARAN ...................... - 28 -",
+    "Jaminan Pemeliharaan dari Bank ............ - 103 -",
+    "GARANSI BANK sebagai JAMINAN UANG MUKA No. 123",
+])
+def test_contents_pages_and_bank_guarantees_are_not_requirements(engine: EvaluationEngine, noise: str) -> None:
+    statuses = _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=LONG_PREFIX + noise)))
+    assert "ADM-WARRANTY" not in statuses
+    if "...." in noise:
+        assert "ADM-BOND" not in statuses
+
+
+def test_page_furniture_does_not_split_a_sentence(engine: EvaluationEngine) -> None:
+    doc = "Masa sanggah ditetapkan\n- 29 -\nParaf I\nselama 2 (dua) hari kerja."
+    assert _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=doc)))["PROC-TIMELINE-COMPRESSED"] == "GAP"
+
+
+def test_template_rows_are_not_requirements(engine: EvaluationEngine) -> None:
+    assert "ADM-NPWP" not in _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan="NPWP perusahaan : _______________")))
+
+
+@pytest.mark.parametrize(("doc", "finding"), [
+    ("Sanggah disampaikan dalam waktu 5 (lima) hari kalender setelah pengumuman pemenang.\n\nMasa sanggah ditetapkan selama 2 hari kerja.", "PROC-TIMELINE-COMPRESSED"),
+    ("Para pihak wajib mencegah benturan kepentingan.\n\nTerdapat benturan kepentingan antara direktur penyedia dan anggota Pokja.", "GOV-CONFLICT-INTEREST"),
+    ("Penyedia memiliki kantor perwakilan di lokasi pekerjaan.\n\nPeserta wajib berdomisili di Kabupaten Banyumas.", "SPEC-REGIONAL-LOCKIN"),
+])
+def test_a_harmless_first_mention_does_not_hide_a_later_violation(engine: EvaluationEngine, doc: str, finding: str) -> None:
+    assert _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=doc)))[finding] == "GAP"
+
+
+def test_offset_cue_keeps_a_real_objection_period(engine: EvaluationEngine) -> None:
+    doc = "Sanggah disampaikan dalam waktu 3 (tiga) hari kalender setelah pengumuman pemenang."
+    assert _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=doc)))["PROC-TIMELINE-COMPRESSED"] == "GAP"
+
+
+@pytest.mark.parametrize("sentence", [
+    "Peserta yang terbukti melanggar ketentuan pertentangan kepentingan digugurkan sebagai peserta.",
+    "Pertentangan kepentingan sebagaimana dimaksud pada angka 5.1 antara lain meliputi:",
+    "Keikutsertaan yang bersangkutan tidak menimbulkan pertentangan kepentingan.",
+    "Saya tidak sedang dan tidak akan terlibat pertentangan kepentingan dengan para pihak.",
+])
+def test_standard_conflict_of_interest_template_is_not_an_incident(engine: EvaluationEngine, sentence: str) -> None:
+    assert "GOV-CONFLICT-INTEREST" not in _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=sentence)))
+
+
+def test_threshold_rules_are_not_read_as_the_package_budget(engine: EvaluationEngine) -> None:
+    doc = ("Untuk paket dengan nilai pagu anggaran di atas Rp50.000.000.000,00 berlaku ketentuan khusus.\n\n"
+           "Untuk HPS paling sedikit di atas Rp100.000.000.000,00 berlaku ketentuan lain.\n\n"
+           "2. Pagu Anggaran: Rp3.608.000.000,00\n3. Harga Perkiraan Sendiri (HPS): Rp3.466.011.009,79")
+    assert "FIN-OVER-BUDGET" not in _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=doc)))
+    over = doc.replace("Rp3.466.011.009,79", "Rp3.900.000.000,00")
+    assert _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=over)))["FIN-OVER-BUDGET"] == "GAP"
+
+
+def test_bond_requirement_skips_conditional_amounts(engine: EvaluationEngine) -> None:
+    doc = ("Dalam hal nilai HPS paling sedikit di atas Rp10.000.000.000,00, Jaminan Penawaran wajib dilampirkan.\n\n"
+           "Nilai Jaminan Penawaran adalah Rp 120.000.000,00.")
+    evidence = "Jaminan Penawaran dari Bank Nusantara senilai Rp 130.000.000."
+    assert _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=doc, pustaka=evidence)))["ADM-BOND"] == "TERPENUHI"
+    conditional_only = doc.split("\n\n")[0]
+    assert _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=conditional_only, pustaka=evidence)))["ADM-BOND"] == "REVIEW"
+
+
+def test_distant_maximum_line_is_not_a_penalty_cap(engine: EvaluationEngine) -> None:
+    filler = "\n".join(f"Ketentuan umum nomor {i}." for i in range(10))
+    doc = f"Denda keterlambatan sebesar 5% per hari dari nilai kontrak.\n{filler}\nMaksimal 10% dari jumlah personel."
+    assert _statuses(engine.evaluate(EvaluationRequest(contract_draft=doc, contract_value_idr=1e9)))["CON-PENALTY"] == "GAP"
+
+
+def test_harshest_daily_rate_is_used(engine: EvaluationEngine) -> None:
+    doc = "Denda 1/1000 per hari untuk bagian A.\n\nDenda 3/1000 per hari untuk bagian B."
+    assert engine.evaluate(EvaluationRequest(contract_draft=doc, contract_value_idr=1e9))["penalty_simulation"]["contract_daily_rate"] == pytest.approx(0.003)
+
+
+def test_expert_label_does_not_invent_a_certificate(engine: EvaluationEngine) -> None:
+    result = engine.evaluate(EvaluationRequest(dok_pemilihan="Kualifikasi tenaga ahli: Project Manager berpengalaman."))
+    finding = next(item for item in result["findings"] if item["id"] == "ADM-EXPERTS")
+    assert "PMP" not in finding["clause"]
+
+
+# ------------------------------------------------------- specification tables
+SPEC_TABLE = """1. Compute Node A
+ITEM
+SPESIFIKASI
+QTY
+SET
+Seri / Tahun Produksi Minimal 2021
+5
+2
+Processor
+Intel Xeon Gold 5318N / 5318S, 48 Core
+RAM
+256 GB
+Power Suply
+1300 - 1500 Watt
+Garansi / Service
+3 Tahun (Labor, Sparepart dan Suport Onsite)
+Indent
+10 Minggu"""
+
+
+def test_spec_table_row_is_read_on_its_own(engine: EvaluationEngine) -> None:
+    result = engine.evaluate(EvaluationRequest(dok_pemilihan=SPEC_TABLE))
+    statuses = _statuses(result)
+    assert statuses["SPEC-LOCKIN-CPU"] == "GAP" and "SPEC-BRAND-EXCEPTION" not in statuses
+    cpu = next(item for item in result["findings"] if item["id"] == "SPEC-LOCKIN-CPU")
+    assert len(cpu["requirement_evidence"]) < 80
+    warranty = next(item for item in result["findings"] if item["id"] == "ADM-WARRANTY")
+    assert "3 Tahun" in warranty["requirement_evidence"] and "Intel" not in warranty["requirement_evidence"]
+
+
+def test_normal_wrapped_paragraph_stays_one_sentence(engine: EvaluationEngine) -> None:
+    doc = "Masa sanggah\nuntuk paket\nini ditetapkan\noleh Pokja\nyang bertugas\nselama 2 (dua) hari kerja."
+    assert _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=doc)))["PROC-TIMELINE-COMPRESSED"] == "GAP"
+
+
+@pytest.mark.parametrize("sentence", [
+    "Penyedia merupakan partner dari principal produk minimal Titanium Partner.",
+    "Mendapat surat dukungan langsung dari Principle Indonesia.",
+    "Penawaran wajib melampirkan surat penunjukan dari distributor tunggal.",
+    "Penyedia harus Authorized Reseller produk yang ditawarkan.",
+])
+def test_principal_requirements_ask_for_review(engine: EvaluationEngine, sentence: str) -> None:
+    assert _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=sentence)))["SPEC-PRINCIPAL-REVIEW"] == "REVIEW"
+
+
+def test_lkpp_import_support_letter_is_not_flagged(engine: EvaluationEngine) -> None:
+    sentence = "Surat dukungan dari pabrikan khusus untuk barang impor dilampirkan pada penawaran."
+    assert "SPEC-PRINCIPAL-REVIEW" not in _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=sentence)))
+
+
+def test_head_office_or_branch_location_requirement_is_flagged(engine: EvaluationEngine) -> None:
+    sentence = "Penyedia memiliki kantor pusat atau kantor perwakilan di Jakarta."
+    assert _statuses(engine.evaluate(EvaluationRequest(dok_pemilihan=sentence)))["SPEC-REGIONAL-LOCKIN"] == "GAP"

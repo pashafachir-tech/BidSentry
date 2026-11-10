@@ -161,6 +161,7 @@ _RULES: tuple[RuleSpec, ...] = (
              critical_on_gap=True, legal_basis=(ETHICS_COI,)),
     RuleSpec("SPEC-REGIONAL-LOCKIN", "SPEC-REGIONAL", "Persyaratan domisili/asosiasi regional diskriminatif", "Kualifikasi", "tender_document",
              legal_basis=(PRINCIPLES,), aliases=("DISC-GEO-BRANCH", "DISC-GEO-DOMICILE")),
+    RuleSpec("SPEC-PRINCIPAL-REVIEW", "SPEC-PRINCIPAL-REVIEW", "Syarat kemitraan atau dukungan principal", "Kualifikasi", "tender_document", "MEDIUM", legal_basis=(PRINCIPLES,)),
     RuleSpec("SPEC-INCUMBENT-LOCKIN", "SPEC-INCUMBENT", "Kriteria pengalaman mengarah ke inkumben", "Kualifikasi", "tender_document", legal_basis=(PRINCIPLES, BRAND)),
     RuleSpec("FIN-OVER-BUDGET", "FIN-OVER-BUDGET", "Total BoQ/HPS melebihi pagu anggaran", "Keuangan", "tender_document",
              critical_on_gap=True, legal_basis=(BUDGET, HPS_CEILING), aliases=("FIN-HPS-OVER-PAGU",)),

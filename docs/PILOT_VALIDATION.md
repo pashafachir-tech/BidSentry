@@ -44,7 +44,7 @@ Sebagai acuan perbandingan baseline terukur dalam protokol pengujian:
   - Penyusunan draf Berita Acara Evaluasi (Pokja) atau Surat Sanggahan (Vendor): 60 – 120 menit.
 - **Perkiraan Pipeline Mesin (dokumen sekitar 100 halaman, belum diukur di dokumen nyata)**:
   - Ekstraksi teks & tabel dari PDF multi-halaman (`DocumentExtractionService`): **1.2 – 3.5 detik**.
-  - Evaluasi matriks kepatuhan 30 aturan deterministik (`bidsentry.evaluators.engine`): **< 0.5 detik**.
+  - Evaluasi matriks kepatuhan 31 aturan deterministik (`bidsentry.evaluators.engine`): **< 0.5 detik**.
   - Pemeriksaan ketimpangan harga satuan BoQ & denda kontrak: **< 0.2 detik**.
   - Ekstraksi kutipan via IBM watsonx.ai (atau fallback lokal): **15 – 30 detik**.
   - Pembentukan draf Berita Acara / surat DOCX: **< 1 detik**.
@@ -83,7 +83,7 @@ Sebagai acuan perbandingan baseline terukur dalam protokol pengujian:
 | User impact & benefits (15%) | Alur reviewer dan pencatatan disposisi yang benar-benar dimasukkan | Baseline dan hasil tugas berpasangan, keterlacakan sumber, kasus terlewat, feedback pengguna |
 | Technical execution & prototype (20%) | Demo file yang didukung, hasil audit, pencarian/filter, ekspor, dan status koneksi | Catatan run end-to-end di mesin presentasi, format berhasil/gagal, runtime terukur, bukti integrasi live bila diklaim |
 | Responsible AI (10%) | Skor triase tidak terkalibrasi, batas aturan, consent, pemrosesan lokal, dan log metadata | Persetujuan pilot, pemeriksaan privasi, adjudikasi, proses eskalasi dan penghapusan data |
-| Pitching presentation & QnA (20%) | Stage runner demo, mode presentasi, jejak audit | Deck, naskah, pembagian peran bicara, latihan Q&A, dan kepatuhan waktu |
+| Pitching presentation & QnA (20%) | Stage runner demo dan jejak audit | Deck, naskah, pembagian peran bicara, latihan Q&A, dan kepatuhan waktu |
 
 **Status saat ini:** protokol dan alur demonstrasi tersedia; hasil pilot, validasi masalah, dampak, kesediaan membayar, serta deck pitching belum tersedia dalam workspace ini.
 

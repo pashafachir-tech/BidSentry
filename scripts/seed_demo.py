@@ -9,8 +9,8 @@ deleted), so engine metrics on the dashboard start fresh. The packages are run
 through the real evaluation pipeline, so every number shown on stage is a real
 engine result for the synthetic demo documents.
 
-After seeding, open http://127.0.0.1:8000 and use the presenter hotkeys:
-    [1] Pokja + Paket A   [2] Vendor + Paket B   [P] presentation mode   [Esc] close
+After seeding, open http://127.0.0.1:8000 and use the demo hotkeys:
+    [1] Pokja + Paket A   [2] Vendor + Paket B   [Esc] close
 """
 
 from __future__ import annotations

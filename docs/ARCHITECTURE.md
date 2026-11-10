@@ -69,7 +69,7 @@ sequenceDiagram
     DocSvc-->>API: Teks dokumen terstruktur (BoQ parsed)
 
     API->>Engine: Evaluasi Kepatuhan Regulasi (Perpres 16/2018 s.t.d.t.d. 46/2025)
-    Note over Engine: Evaluasi 30 Aturan Deklaratif (Brand lock-in, Jadwal, Denda, Pagu)
+    Note over Engine: Evaluasi 31 Aturan Deklaratif (Brand lock-in, Jadwal, Denda, Pagu)
     Engine-->>API: Temuan Matriks Kepatuhan & Verdict (GO/NO-GO)
 
     alt Persetujuan Analisis Eksternal Aktif (allow_external_processing = true)
@@ -124,7 +124,7 @@ sequenceDiagram
 
 | Kategori | Modul | Keterangan |
 | :--- | :--- | :--- |
-| **Mesin aturan** | `bidsentry.evaluators.engine` | Evaluasi deterministik 30 aturan dari `rule_catalog.py`; ambang angka di `config/rules.yaml`. |
+| **Mesin aturan** | `bidsentry.evaluators.engine` | Evaluasi deterministik 31 aturan dari `rule_catalog.py`; ambang angka di `config/rules.yaml`. |
 | **Keputusan risiko** | `bidsentry.services.risk_engine` | Tabel keputusan R0–R6 → Rendah / Sedang / Tinggi / Kritis dan verdict GO / NO-GO / BELUM CUKUP BUKTI. |
 | **Audit finansial** | `bidsentry.audits.financial`, `penalty_calculator`, `excel_parser` | Aritmetika BoQ, batas denda, dan parser Excel. |
 | **Layanan audit** | `bidsentry.services.audit_service` | Fasad `.audit()` (aturan) dan `.audit_comprehensive()` (modul forensik). |

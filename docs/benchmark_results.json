@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-09T18:05:36+0700",
+  "generated_at": "2026-11-09T19:08:43+0700",
   "engine": "deterministic rules only (AI extraction disabled)",
   "unit": "red flag = finding with status GAP or EXPIRING, or REVIEW held only because its numeric threshold is unverified; matched by rule family",
   "suites": [
@@ -76,8 +76,8 @@
       "traps_without_false_positive": 9,
       "trap_documents": 9,
       "documents_with_false_positive": 0,
-      "evidence_requests": 0,
-      "median_latency_ms": 0.417,
+      "evidence_requests": 1,
+      "median_latency_ms": 0.45,
       "cases": [
         {
           "case_id": "doc_01_clean_ict_procurement",
@@ -98,7 +98,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 13.781
+          "latency_ms": 13.813
         },
         {
           "case_id": "doc_02_brand_lockin_cpu_only",
@@ -125,7 +125,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.599
+          "latency_ms": 0.637
         },
         {
           "case_id": "doc_03_brand_lockin_gpu_with_equiv",
@@ -146,7 +146,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.452
+          "latency_ms": 0.525
         },
         {
           "case_id": "doc_04_brand_lockin_gpu_strict",
@@ -173,7 +173,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.349
+          "latency_ms": 0.396
         },
         {
           "case_id": "doc_05_compressed_timeline_bid_prep",
@@ -200,7 +200,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.342
+          "latency_ms": 0.379
         },
         {
           "case_id": "doc_06_sufficient_timeline_8days",
@@ -221,7 +221,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.371
+          "latency_ms": 0.433
         },
         {
           "case_id": "doc_07_compressed_sanggah_timeline",
@@ -248,7 +248,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.312
+          "latency_ms": 0.423
         },
         {
           "case_id": "doc_08_normative_integrity_no_coi",
@@ -269,7 +269,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.815
+          "latency_ms": 1.067
         },
         {
           "case_id": "doc_09_actual_coi_recom_letter",
@@ -296,7 +296,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.38
+          "latency_ms": 0.429
         },
         {
           "case_id": "doc_10_normative_pagu_guideline",
@@ -317,7 +317,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.323
+          "latency_ms": 0.35
         },
         {
           "case_id": "doc_11_actual_overbudget_boq",
@@ -344,7 +344,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.484
+          "latency_ms": 0.558
         },
         {
           "case_id": "doc_12_reasonable_billing_rates",
@@ -365,7 +365,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.386
+          "latency_ms": 0.433
         },
         {
           "case_id": "doc_13_markup_billing_rate_pm",
@@ -392,7 +392,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.552
+          "latency_ms": 0.558
         },
         {
           "case_id": "doc_14_double_counted_license_maint",
@@ -419,7 +419,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.518
+          "latency_ms": 0.513
         },
         {
           "case_id": "doc_15_uncapped_penalty_contract",
@@ -446,7 +446,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.54
+          "latency_ms": 0.67
         },
         {
           "case_id": "doc_16_capped_penalty_contract",
@@ -467,7 +467,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.355
+          "latency_ms": 0.412
         },
         {
           "case_id": "doc_17_sbu_expired",
@@ -494,7 +494,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.832
+          "latency_ms": 0.859
         },
         {
           "case_id": "doc_18_sbu_valid_broken_lines",
@@ -515,7 +515,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.341
+          "latency_ms": 0.392
         },
         {
           "case_id": "doc_19_kswp_valid_labeled",
@@ -536,7 +536,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.507
+          "latency_ms": 0.539
         },
         {
           "case_id": "doc_20_kswp_invalid",
@@ -563,7 +563,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.276
+          "latency_ms": 0.307
         },
         {
           "case_id": "doc_21_warranty_12_months_vs_1_year",
@@ -584,7 +584,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.417
+          "latency_ms": 0.45
         },
         {
           "case_id": "doc_22_warranty_deficient",
@@ -611,7 +611,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.291
+          "latency_ms": 0.357
         },
         {
           "case_id": "doc_23_empty_no_requirements",
@@ -632,7 +632,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.266
+          "latency_ms": 0.317
         },
         {
           "case_id": "doc_24_discriminatory_regional_assoc",
@@ -658,8 +658,10 @@
             "fp": 0,
             "fn": 0
           },
-          "evidence_requests": [],
-          "latency_ms": 0.73
+          "evidence_requests": [
+            "SPEC-PRINCIPAL-REVIEW"
+          ],
+          "latency_ms": 0.86
         }
       ]
     },
@@ -723,7 +725,7 @@
       "trap_documents": 9,
       "documents_with_false_positive": 0,
       "evidence_requests": 0,
-      "median_latency_ms": 0.577,
+      "median_latency_ms": 0.662,
       "cases": [
         {
           "case_id": "trap_01_denda_berbatas_ragam_satuan",
@@ -744,7 +746,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.726
+          "latency_ms": 0.714
         },
         {
           "case_id": "trap_02_spesifikasi_merek_setara",
@@ -765,7 +767,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.624
+          "latency_ms": 0.696
         },
         {
           "case_id": "trap_03_kalimat_normatif_pagu_hps",
@@ -786,7 +788,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.623
+          "latency_ms": 0.748
         },
         {
           "case_id": "trap_04_pakta_integritas_normatif",
@@ -807,7 +809,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.553
+          "latency_ms": 0.644
         },
         {
           "case_id": "trap_05_lokasi_pekerjaan_proyek",
@@ -828,7 +830,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.597
+          "latency_ms": 0.675
         },
         {
           "case_id": "trap_06_produk_bersertifikat_sni_tkdn",
@@ -849,7 +851,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.519
+          "latency_ms": 0.571
         },
         {
           "case_id": "trap_07_jadwal_standar_lkpp",
@@ -870,7 +872,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.577
+          "latency_ms": 0.662
         },
         {
           "case_id": "trap_08_kantor_lapangan_workshop",
@@ -891,7 +893,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.556
+          "latency_ms": 0.612
         },
         {
           "case_id": "trap_09_english_equivalent_clause",
@@ -912,7 +914,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.503
+          "latency_ms": 0.55
         },
         {
           "case_id": "trap_10_kontrol_positif_lockin_dan_denda",
@@ -942,7 +944,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.485
+          "latency_ms": 0.536
         }
       ]
     },
@@ -999,14 +1001,14 @@
           0.6411
         ]
       },
-      "verdict_accuracy": 0.9,
-      "verdict_correct": 9,
+      "verdict_accuracy": 1.0,
+      "verdict_correct": 10,
       "verdict_total": 10,
       "traps_without_false_positive": 3,
       "trap_documents": 3,
       "documents_with_false_positive": 0,
       "evidence_requests": 0,
-      "median_latency_ms": 0.759,
+      "median_latency_ms": 0.817,
       "cases": [
         {
           "case_id": "blind_01_konstruksi_standar_clean",
@@ -1027,7 +1029,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 2.094
+          "latency_ms": 1.603
         },
         {
           "case_id": "blind_02_pengadaan_laptop_lockin_intel",
@@ -1054,15 +1056,15 @@
             "fn": 1
           },
           "evidence_requests": [],
-          "latency_ms": 0.645
+          "latency_ms": 0.698
         },
         {
           "case_id": "blind_03_konsultansi_jadwal_mepet",
           "is_trap": false,
           "expected_verdict": "NO-GO",
-          "actual_verdict": "BELUM CUKUP BUKTI",
-          "verdict_match": false,
-          "risk_level": "MEDIUM",
+          "actual_verdict": "NO-GO",
+          "verdict_match": true,
+          "risk_level": "HIGH",
           "expected": [
             "PROC-TIMELINE"
           ],
@@ -1081,7 +1083,7 @@
             "fn": 2
           },
           "evidence_requests": [],
-          "latency_ms": 0.655
+          "latency_ms": 0.728
         },
         {
           "case_id": "blind_04_alkes_denda_tanpa_batas",
@@ -1108,7 +1110,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.33
+          "latency_ms": 0.383
         },
         {
           "case_id": "blind_05_outsourcing_pakta_integritas_trap",
@@ -1129,7 +1131,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.759
+          "latency_ms": 0.817
         },
         {
           "case_id": "blind_06_jasa_erp_over_budget",
@@ -1156,7 +1158,7 @@
             "fn": 1
           },
           "evidence_requests": [],
-          "latency_ms": 0.804
+          "latency_ms": 0.975
         },
         {
           "case_id": "blind_07_sewa_kendaraan_equivalent_trap",
@@ -1177,7 +1179,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.674
+          "latency_ms": 0.725
         },
         {
           "case_id": "blind_08_meubeler_sbu_hampir_kadaluwarsa",
@@ -1204,7 +1206,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.857
+          "latency_ms": 0.641
         },
         {
           "case_id": "blind_09_konsultan_billing_rate_tinggi",
@@ -1231,7 +1233,7 @@
             "fn": 1
           },
           "evidence_requests": [],
-          "latency_ms": 0.9
+          "latency_ms": 0.832
         },
         {
           "case_id": "blind_10_dokumen_narasi_lepas_tanpa_pasal",
@@ -1252,7 +1254,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.754
+          "latency_ms": 0.879
         }
       ]
     },
@@ -1311,7 +1313,7 @@
       "trap_documents": 1,
       "documents_with_false_positive": 1,
       "evidence_requests": 3,
-      "median_latency_ms": 0.88,
+      "median_latency_ms": 1.026,
       "cases": [
         {
           "case_id": "budget_01_prose_over_budget",
@@ -1338,7 +1340,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 1.025
+          "latency_ms": 1.222
         },
         {
           "case_id": "budget_02_prose_within_budget",
@@ -1362,7 +1364,7 @@
             "ADM-NIB",
             "ADM-NPWP"
           ],
-          "latency_ms": 0.787
+          "latency_ms": 0.867
         },
         {
           "case_id": "budget_03_prose_hps_over_pagu",
@@ -1394,7 +1396,7 @@
           "evidence_requests": [
             "PROC-TIMELINE-COMPRESSED"
           ],
-          "latency_ms": 0.885
+          "latency_ms": 1.073
         },
         {
           "case_id": "budget_04_prose_normative_guideline_trap",
@@ -1415,7 +1417,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.853
+          "latency_ms": 0.982
         },
         {
           "case_id": "budget_05_prose_multi_item_recap",
@@ -1442,7 +1444,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.88
+          "latency_ms": 1.026
         }
       ]
     },
@@ -1498,7 +1500,7 @@
       "trap_documents": 0,
       "documents_with_false_positive": 0,
       "evidence_requests": 0,
-      "median_latency_ms": 1.63,
+      "median_latency_ms": 1.921,
       "cases": [
         {
           "case_id": "fixture_001",
@@ -1528,7 +1530,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 1.63
+          "latency_ms": 1.921
         },
         {
           "case_id": "fixture_002",
@@ -1549,7 +1551,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.877
+          "latency_ms": 0.985
         }
       ]
     },
@@ -1604,7 +1606,7 @@
       "trap_documents": 0,
       "documents_with_false_positive": 0,
       "evidence_requests": 0,
-      "median_latency_ms": 0.637,
+      "median_latency_ms": 0.726,
       "cases": [
         {
           "case_id": "LPSE-KEMKES-10261197000",
@@ -1634,7 +1636,7 @@
             "fn": 0
           },
           "evidence_requests": [],
-          "latency_ms": 0.637
+          "latency_ms": 0.726
         }
       ]
     }

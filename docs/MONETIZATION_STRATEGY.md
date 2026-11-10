@@ -13,7 +13,7 @@ Model penetapan harga dirancang tanpa friksi birokrasi (*frictionless adoption*)
 │ TIER 1: PAY-PER-AUDIT (QRIS Instant Voucher)                                          │
 │ Rp 5.000 untuk 10 kali audit (efektif Rp 500 / dokumen)                               │
 │ • Pembelian kuota instan via QRIS (mengatasi batas minimum aggregator payment gateway) │
-│ • Validasi kepatuhan 30 aturan deterministik pengadaan                                │
+│ • Validasi kepatuhan 31 aturan deterministik pengadaan                                │
 │ • Pengecekan cepat H-1 sebelum submit dokumen penawaran ke SPSE/LPSE                   │
 │ • Hasil audit cepat dengan ringkasan status kelayakan                                  │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
@@ -97,7 +97,7 @@ BidSentry diposisikan secara strategis untuk mengisi celah kritis yang tidak dil
 | Kriteria Evaluasi | 1. SPSE / LPSE LKPP (Status Quo) | 2. Platform Intelijen Tender (TenderPlus, dsb.) | 3. Enterprise Contract AI (Luminance, Kira Systems) | 4. Generic LLM Chatbot (ChatGPT, Claude) | 5. BidSentry (Micro-SaaS) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Fokus Utama** | Repositori transaksi unggah dokumen lelang | Notifikasi & agregasi peluang lelang baru | Review kontrak hukum korporasi multinasional | Asisten percakapan teks umum | **Audit kepatuhan teknis, BoQ, dan draf sanggahan** |
-| **Audit Isi KAK & Syarat Teknis** | Tidak ada (manual oleh panitia) | Tidak ada (hanya scraping judul & pagu) | Terbatas pada klausul umum non-LKPP | Rawan halusinasi pasal & salah hitung | **Otomatis, kutipan terverifikasi (30 aturan; status dasar hukum per pasal)** |
+| **Audit Isi KAK & Syarat Teknis** | Tidak ada (manual oleh panitia) | Tidak ada (hanya scraping judul & pagu) | Terbatas pada klausul umum non-LKPP | Rawan halusinasi pasal & salah hitung | **Otomatis, kutipan terverifikasi (31 aturan; status dasar hukum per pasal)** |
 | **Pembedahan Tabel BoQ (.xlsx)** | Tidak ada | Tidak ada | Jarang / Add-on enterprise mahal | Gagal membaca multi-sheet / rumus dinamis | **Bawaan (Native openpyxl) dengan simulasi defisit** |
 | **Konteks Hukum Pengadaan Indonesia** | Ya (sebagai sistem induk) | Hanya metadata pengumuman | Tidak (berorientasi US/UK Common Law) | Rendah (mencampur aturan lama/baru) | **Spesifik Perpres 16/2018 s.t.d.t.d. Perpres 46/2025 & UU 5/1999** |
 | **Deteksi Jebakan Merek & Batas Denda** | Tergantung ketelitian Pokja | Tidak tersedia | Kaku (flagging semua nama merk) | Inkonsisten | **Cerdas (Mengecualikan frasa setara & denda capped)** |

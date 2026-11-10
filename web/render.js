@@ -551,11 +551,6 @@ function renderRoleTransition(state) {
 }
 
 
-function presenterHint(state) {
-  if (state.hideHints) return "";
-  return `<div class="presenter-hint" aria-hidden="true"><kbd>P</kbd> Presentasi <span>·</span> <kbd>1</kbd> Pokja · Paket A <span>·</span> <kbd>2</kbd> Vendor · Paket B <span>·</span> <kbd>Esc</kbd> Tutup <span>·</span> <kbd>?</kbd> Sembunyikan</div>`;
-}
-
 export function renderApp(state) {
   const overview = state.overview || {};
   const distribution = overview.risk_distribution || {};
@@ -583,7 +578,6 @@ export function renderApp(state) {
 
   return `
     ${renderRoleTransition(state)}
-    ${presenterHint(state)}
     <div class="app-shell" data-role="${escapeHtml(state.session?.role || "")}">
       <aside class="sidebar">
         <a class="brand" href="/" aria-label="BidSentry beranda"><span class="brand-name"><strong>BidSentry</strong><small>INTELIJEN PENGADAAN</small></span></a>
@@ -618,11 +612,11 @@ export function renderApp(state) {
           `).join("")}
         </nav>
 
-        <div class="sidebar-bottom"><div class="engine-status"><span class="status-dot"></span><div><strong>Mesin aturan lokal</strong><small>${escapeHtml(integrationCopy(state.integrations))}</small></div></div><div class="sidebar-footer"><span>BidSentry AI</span><span>v2.2</span></div></div>
+        <div class="sidebar-bottom"><div class="engine-status"><span class="status-dot"></span><div><strong>Mesin aturan lokal</strong><small>${escapeHtml(integrationCopy(state.integrations))}</small></div></div><div class="sidebar-footer"><span>BidSentry AI</span><span>v4.2</span></div></div>
       </aside>
 
       <main class="main-content">
-        <header class="topbar"><div class="breadcrumb"><span>Proyek</span><span>/</span><strong>${selected ? escapeHtml(selected.package_name) : "Semua Pemeriksaan"}</strong></div><div class="topbar-actions"><span class="role-chip role-${escapeHtml(state.session?.role || "none")}" title="Peran ditetapkan saat login dan diperiksa server">Masuk sebagai <b>${escapeHtml(ROLE_LABELS[state.session?.role] || "—")}</b></span><button type="button" class="button button-quiet button-small" data-action="logout" title="Keluar dan ganti peran">Ganti peran</button><button type="button" class="button button-quiet button-small ${state.presentation ? "is-active" : ""}" data-action="toggle-presentation" aria-pressed="${state.presentation}" title="Perbesar seluruh teks untuk demo / proyektor">A+ Mode presentasi</button><button class="button button-quiet button-small topbar-text-action" data-action="open-settings">Koneksi & Pengaturan</button><button class="icon-button" title="Ganti tema" aria-label="Ganti tema" data-action="theme-toggle">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button><button class="icon-button" title="Muat ulang data" aria-label="Muat ulang data" data-action="refresh">${icon("refresh")}</button></div></header>
+        <header class="topbar"><div class="breadcrumb"><span>Proyek</span><span>/</span><strong>${selected ? escapeHtml(selected.package_name) : "Semua Pemeriksaan"}</strong></div><div class="topbar-actions"><span class="role-chip role-${escapeHtml(state.session?.role || "none")}" title="Peran ditetapkan saat login dan diperiksa server">Masuk sebagai <b>${escapeHtml(ROLE_LABELS[state.session?.role] || "—")}</b></span><button type="button" class="button button-quiet button-small" data-action="logout" title="Keluar dan ganti peran">Ganti peran</button><button class="button button-quiet button-small topbar-text-action" data-action="open-settings">Koneksi & Pengaturan</button><button class="icon-button" title="Ganti tema" aria-label="Ganti tema" data-action="theme-toggle">${document.documentElement.dataset.theme === "dark" ? "☀" : "☾"}</button><button class="icon-button" title="Muat ulang data" aria-label="Muat ulang data" data-action="refresh">${icon("refresh")}</button></div></header>
         <div class="page-content">
           ${renderCommandCenter(state)}
 
@@ -647,7 +641,7 @@ export function renderApp(state) {
                 <label class="filter-field">
                   <span>Verdict</span>
                   <select id="verdict-filter">
-                    <option value="ALL" ${verdictFilter === "ALL" ? "selected" : ""}>Semua Verdict</option>
+                    <option value="ALL" ${verdictFilter === "ALL" ? "selected" : ""}>Semua</option>
                     <option value="GO" ${verdictFilter === "GO" ? "selected" : ""}>GO</option>
                     <option value="NO-GO" ${verdictFilter === "NO-GO" ? "selected" : ""}>NO-GO</option>
                     <option value="BELUM CUKUP BUKTI" ${verdictFilter === "BELUM CUKUP BUKTI" ? "selected" : ""}>BELUM CUKUP BUKTI</option>
@@ -727,7 +721,6 @@ export function renderLogin(state) {
     vendor: { title: "Penyedia / Vendor", text: "Cek kesiapan berkas sebelum submit, temukan klausul bermasalah di dokumen tender, unduh draf surat ke Pokja dan BoQ Excel.", icon: "audit" },
   };
   return `
-    ${presenterHint(state)}
     <main class="login-screen">
       <section class="login-card" aria-labelledby="login-title">
         <p class="eyebrow">BIDSENTRY · INTELIJEN PENGADAAN</p>
